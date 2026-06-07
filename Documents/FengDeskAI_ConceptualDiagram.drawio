@@ -1,0 +1,199 @@
+<mxfile host="app.diagrams.net" modified="2026-05-26" agent="Claude" pages="1">
+  <diagram name="Conceptual Diagram" id="conceptual_fengdesk_ai">
+    <mxGraphModel grid="1" page="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" pageScale="1" pageWidth="1169" pageHeight="827" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- ===== TITLE ===== -->
+        <mxCell id="title" value="FengDesk AI – Conceptual Diagram" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;fontSize=20;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="284" y="18" width="600" height="42" as="geometry" />
+        </mxCell>
+
+        <!-- ===== NODES ===== -->
+
+        <!-- Customer [Blue] -->
+        <mxCell id="n_customer" value="Customer" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="55" y="370" width="155" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Feng Shui Profile [Purple] -->
+        <mxCell id="n_fengshui" value="Feng Shui Profile&#xa;(Five Elements)" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="275" y="165" width="185" height="58" as="geometry" />
+        </mxCell>
+
+        <!-- Workspace Profile [Purple] -->
+        <mxCell id="n_workspace" value="Workspace Profile" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="275" y="575" width="175" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- AI Recommendation Engine [Dark Slate] -->
+        <mxCell id="n_ai" value="AI Recommendation Engine" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#647687;strokeColor=#314354;fontColor=#ffffff;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="525" y="370" width="215" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Plant / Product [Green] -->
+        <mxCell id="n_plant" value="Plant / Product" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="815" y="235" width="158" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- 3D Model Preview [Yellow] -->
+        <mxCell id="n_3d" value="3D Model Preview" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontStyle=1;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="815" y="495" width="165" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Garden Store [Green] -->
+        <mxCell id="n_store" value="Garden Store" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="975" y="370" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Cart [Orange] -->
+        <mxCell id="n_cart" value="Cart" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="310" y="650" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Order [Orange] -->
+        <mxCell id="n_order" value="Order" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontStyle=1;fontSize=13;" vertex="1" parent="1">
+          <mxGeometry x="535" y="650" width="120" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Garden Owner [Green] -->
+        <mxCell id="n_gardenowner" value="Garden Owner" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="975" y="570" width="150" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Garden Staff [Green] -->
+        <mxCell id="n_staff" value="Garden Staff" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+          <mxGeometry x="795" y="720" width="148" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- Admin &amp; Manager [Gray] -->
+        <mxCell id="n_admin" value="Admin &amp; Manager" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#f5f5f5;strokeColor=#666666;fontStyle=1;fontSize=12;fontColor=#333333;" vertex="1" parent="1">
+          <mxGeometry x="528" y="88" width="178" height="55" as="geometry" />
+        </mxCell>
+
+        <!-- ===== EDGES ===== -->
+
+        <!-- Customer → Feng Shui Profile : has -->
+        <mxCell id="e1" value="has" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=1;entryDx=0;entryDy=0;" edge="1" source="n_customer" target="n_fengshui" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Customer → Workspace : configures -->
+        <mxCell id="e2" value="configures" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_customer" target="n_workspace" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Feng Shui Profile → AI Engine : inputs to -->
+        <mxCell id="e3" value="inputs to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;" edge="1" source="n_fengshui" target="n_ai" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Workspace → AI Engine : inputs to -->
+        <mxCell id="e4" value="inputs to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;" edge="1" source="n_workspace" target="n_ai" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- AI Engine → Plant : recommends -->
+        <mxCell id="e5" value="recommends" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=1;entryDx=0;entryDy=0;" edge="1" source="n_ai" target="n_plant" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Plant → 3D Model : has preview -->
+        <mxCell id="e6" value="has preview" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_plant" target="n_3d" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Plant → Garden Store : listed in -->
+        <mxCell id="e7" value="listed in" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=0;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_plant" target="n_store" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- AI Engine → Cart : leads to (dashed) -->
+        <mxCell id="e8" value="leads to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;dashed=1;fontSize=10;fontStyle=2;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_ai" target="n_cart" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Customer → Cart : adds to -->
+        <mxCell id="e9" value="adds to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=0;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_customer" target="n_cart" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Cart → Order : generates -->
+        <mxCell id="e10" value="generates" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" edge="1" source="n_cart" target="n_order" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Order → Garden Owner : assigned to -->
+        <mxCell id="e11" value="assigned to" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=1;entryDx=0;entryDy=0;" edge="1" source="n_order" target="n_gardenowner" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Garden Owner → Garden Store : manages -->
+        <mxCell id="e12" value="manages" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=0;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=1;entryDx=0;entryDy=0;" edge="1" source="n_gardenowner" target="n_store" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Garden Owner → Garden Staff : assigns -->
+        <mxCell id="e13" value="assigns" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=0;exitY=1;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_gardenowner" target="n_staff" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Garden Staff → Order : delivers -->
+        <mxCell id="e14" value="delivers" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=0;exitY=0;exitDx=0;exitDy=0;entryX=1;entryY=1;entryDx=0;entryDy=0;" edge="1" source="n_staff" target="n_order" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Admin → AI Engine : configures -->
+        <mxCell id="e15" value="configures" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_admin" target="n_ai" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Admin → Garden Owner : oversees -->
+        <mxCell id="e16" value="oversees" style="edgeStyle=orthogonalEdgeStyle;rounded=0;html=1;fontSize=10;fontStyle=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0;entryDx=0;entryDy=0;" edge="1" source="n_admin" target="n_gardenowner" parent="1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ===== LEGEND ===== -->
+        <mxCell id="leg_box" value="" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffffff;strokeColor=#cccccc;opacity=50;" vertex="1" parent="1">
+          <mxGeometry x="28" y="680" width="582" height="52" as="geometry" />
+        </mxCell>
+        <mxCell id="leg_title" value="Legend:" style="text;html=1;strokeColor=none;fillColor=none;align=left;fontStyle=1;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="36" y="688" width="55" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1" value="User" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="94" y="688" width="75" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg2" value="AI / Profile" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="177" y="688" width="75" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg3" value="System Core" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#647687;strokeColor=#314354;fontColor=#ffffff;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="260" y="688" width="75" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg4" value="Supply Chain" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="343" y="688" width="75" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg5" value="Commerce" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#ffe6cc;strokeColor=#d79b00;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="426" y="688" width="75" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg6" value="Visualization" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="509" y="688" width="75" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="leg1b" value="User" style="rounded=1;whiteSpace=wrap;html=1;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="94" y="714" width="75" height="10" as="geometry" />
+        </mxCell>
+
+        <!-- ===== ZONE LABELS (subtle background zones) ===== -->
+        <!-- Input Zone label -->
+        <mxCell id="zone1" value="User Input Zone" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=2;fontSize=9;fontColor=#9673a6;" vertex="1" parent="1">
+          <mxGeometry x="255" y="140" width="230" height="18" as="geometry" />
+        </mxCell>
+        <!-- Supply Zone label -->
+        <mxCell id="zone2" value="Supply &amp; Fulfillment Zone" style="text;html=1;strokeColor=none;fillColor=none;align=center;fontStyle=2;fontSize=9;fontColor=#82b366;" vertex="1" parent="1">
+          <mxGeometry x="920" y="340" width="210" height="18" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -1,0 +1,52 @@
+using FengDeskAI.Application.Interfaces.Security;
+using FengDeskAI.WebAPI.Authorization;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+
+namespace FengDeskAI.WebAPI.Controllers;
+
+/// <summary>
+/// Các endpoint demo để test authorization policies.
+/// Có thể xóa/đổi sau khi auth đã verify hoạt động.
+/// </summary>
+[ApiController]
+[Route("api/ping")]
+public class PingController : ControllerBase
+{
+    private readonly ICurrentUserService _currentUser;
+
+    public PingController(ICurrentUserService currentUser)
+    {
+        _currentUser = currentUser;
+    }
+
+    /// <summary>Không cần auth — sanity check service.</summary>
+    [HttpGet("public")]
+    [AllowAnonymous]
+    public IActionResult Public() => Ok(new { ok = true, who = "anonymous" });
+
+    /// <summary>Chỉ cần login (bất kỳ role nào).</summary>
+    [HttpGet("authenticated")]
+    [Authorize]
+    public IActionResult Authenticated() => Ok(new
+    {
+        ok = true,
+        userId = _currentUser.UserId,
+        email = _currentUser.Email,
+    });
+
+    /// <summary>Chỉ Admin được vào.</summary>
+    [HttpGet("admin")]
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    public IActionResult AdminOnly() => Ok(new { ok = true, who = "admin" });
+
+    /// <summary>Manager hoặc Admin.</summary>
+    [HttpGet("manager")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOrAdmin)]
+    public IActionResult ManagerOrAdmin() => Ok(new { ok = true, who = "manager_or_admin" });
+
+    /// <summary>Staff, Manager, hoặc Admin.</summary>
+    [HttpGet("staff")]
+    [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
+    public IActionResult StaffOrAbove() => Ok(new { ok = true, who = "staff_or_above" });
+}
