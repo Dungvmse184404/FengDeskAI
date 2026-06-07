@@ -1,55 +1,104 @@
-# Prerequisites
-*.d
+# =====================
+# Secrets — NEVER commit
+# =====================
+**/appsettings.json
+**/appsettings.*.json
+**/secrets.json
+.env
+.env.*
 
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
+# Claude Code working dir
+.claude/
+.claude-code/
 
-# Linker output
-*.ilk
-*.map
-*.exp
+# =====================
+# .NET build output
+# =====================
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+[Ll]ogs/
+publish/
+PublishProfiles/
+*.binlog
 
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
-*.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-*.su
-*.idb
+# Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
 *.pdb
+*.cache
+*.tlog
+*.lock.json
+*.nuget.props
+*.nuget.targets
 
-# Kernel Module Compile Results
-*.mod*
-*.cmd
-.tmp_versions/
-modules.order
-Module.symvers
-Mkfile.old
-dkms.conf
+# Rider / IntelliJ
+.idea/
+*.iml
 
-# debug information files
-*.dwo
+# VS Code
+.vscode/
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+
+# =====================
+# NuGet
+# =====================
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+project.lock.json
+project.assets.json
+*.nuget.dgspec.json
+
+# =====================
+# Test results / coverage
+# =====================
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
+*.trx
+*.coverage
+*.coveragexml
+coverage*.json
+coverage*.xml
+coverage*.info
+
+# =====================
+# Migrations snapshot conflicts (giữ migration code, bỏ build artifact)
+# =====================
+# (migrations vẫn commit, chỉ bỏ build output ở trên)
+
+# =====================
+# Docker
+# =====================
+.dockerignore.local
+
+# =====================
+# OS
+# =====================
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# =====================
+# Misc
+# =====================
+*.log
+*.bak
+*.swp
+*.tmp
+*~
+
+# Editor backups
+.history/
+
+# Output of legacy publish
+[Pp]ublish[Pp]rofiles/
+artifacts/

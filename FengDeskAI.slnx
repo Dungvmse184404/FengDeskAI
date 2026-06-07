@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/FengDeskAI.Application/FengDeskAI.Application.csproj" />
+    <Project Path="src/FengDeskAI.Contracts/FengDeskAI.Contracts.csproj" />
+    <Project Path="src/FengDeskAI.Domain/FengDeskAI.Domain.csproj" />
+    <Project Path="src/FengDeskAI.Infrastructure/FengDeskAI.Infrastructure.csproj" />
+    <Project Path="src/FengDeskAI.WebAPI/FengDeskAI.WebAPI.csproj" />
+  </Folder>
+</Solution>
