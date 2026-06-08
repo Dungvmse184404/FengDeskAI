@@ -1,5 +1,7 @@
 using FengDeskAI.Application.Features.Identity.Mappings;
 using FengDeskAI.Application.Features.Identity.Services;
+using FengDeskAI.Application.Features.Workspace.Mappings;
+using FengDeskAI.Application.Features.Workspace.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 
@@ -13,10 +15,12 @@ public static class DependencyInjection
         services.AddAutoMapper(cfg =>
         {
             cfg.AddProfile<IdentityProfile>();
+            cfg.AddProfile<WorkspaceProfileMappingProfile>();
         });
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRegistrationFlowService, RegistrationFlowService>();
+        services.AddScoped<IWorkspaceProfileService, WorkspaceProfileService>();
 
         return services;
     }

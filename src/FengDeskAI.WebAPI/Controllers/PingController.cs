@@ -1,5 +1,5 @@
-using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.WebAPI.Authorization;
+using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
@@ -9,17 +9,10 @@ namespace FengDeskAI.WebAPI.Controllers;
 /// Các endpoint demo để test authorization policies.
 /// Có thể xóa/đổi sau khi auth đã verify hoạt động.
 /// </summary>
-[ApiController]
-[Route("api/ping")]
-public class PingController : ControllerBase
+[Area("dev")]
+[Route("api/[area]/ping")]
+public class PingController : ApiControllerBase
 {
-    private readonly ICurrentUserService _currentUser;
-
-    public PingController(ICurrentUserService currentUser)
-    {
-        _currentUser = currentUser;
-    }
-
     /// <summary>Không cần auth — sanity check service.</summary>
     [HttpGet("public")]
     [AllowAnonymous]
@@ -31,8 +24,8 @@ public class PingController : ControllerBase
     public IActionResult Authenticated() => Ok(new
     {
         ok = true,
-        userId = _currentUser.UserId,
-        email = _currentUser.Email,
+        userId = CurrentUserId,
+        email = CurrentUser.Email,
     });
 
     /// <summary>Chỉ Admin được vào.</summary>

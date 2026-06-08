@@ -2,12 +2,16 @@ using FengDeskAI.Application;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure;
 using FengDeskAI.WebAPI.Authorization;
+using FengDeskAI.WebAPI.Common.Filters;
 using FengDeskAI.WebAPI.Services;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
-builder.Services.AddControllers();
+builder.Services.AddControllers(options =>
+{
+    options.Filters.Add<UnauthorizedExceptionFilter>();
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();
 
@@ -26,7 +30,7 @@ builder.Services.AddSwaggerGen(options =>
         Scheme = "Bearer",
         BearerFormat = "JWT",
         In = ParameterLocation.Header,
-        Description = "Nhập token: Bearer {your JWT}",
+        Description = "Mấy ông cháu paste <token> hoặc bearer <token> thôi nhá"
     });
 
     options.AddSecurityRequirement(new OpenApiSecurityRequirement
@@ -73,7 +77,11 @@ builder.Services.AddAuthorization(options =>
 var app = builder.Build();
 
 app.UseSwagger();
-app.UseSwaggerUI();
+app.UseSwaggerUI(opt =>
+{
+    // Giữ token sau khi reload Swagger UI
+    opt.EnablePersistAuthorization();
+});
 
 app.UseCors("AllowAll");
 app.UseAuthentication();

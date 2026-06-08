@@ -4,6 +4,7 @@ public interface IUnitOfWork
 {
     IUserRepository Users { get; }
     IRefreshTokenRepository RefreshTokens { get; }
+    IWorkspaceProfileRepository WorkspaceProfiles { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(

@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Entities.Workspace;
 using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Domain.Entities.Identity;
@@ -16,4 +17,5 @@ public class User : BaseEntity
     public bool IsActive { get; set; } = true;
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
+    public ICollection<WorkspaceProfile> WorkspaceProfiles { get; set; } = new List<WorkspaceProfile>();
 }
