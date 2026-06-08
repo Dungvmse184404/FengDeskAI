@@ -1,0 +1,24 @@
+using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Entities.Sales;
+
+namespace FengDeskAI.Application.Interfaces.Repositories;
+
+public interface IOrderRepository : IGenericRepository<Order>
+{
+    /// <summary>Load product items (tracked) theo danh sách id — dùng để hoàn kho khi hủy đơn.</summary>
+    Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
+
+    Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Order chi tiết (Items + Deliveries.Store + StatusLogs). Lọc theo customer nếu truyền.</summary>
+    Task<Order?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default);
+
+    /// <summary>Order kèm Deliveries + Items (tracked) — dùng cho hủy đơn / cập nhật.</summary>
+    Task<Order?> GetWithGraphAsync(Guid id, Guid? customerId, CancellationToken ct = default);
+
+    /// <summary>Delivery kèm Store + Order.Deliveries (tracked) — vendor cập nhật trạng thái + rollup.</summary>
+    Task<Delivery?> GetDeliveryWithOrderAsync(Guid deliveryId, CancellationToken ct = default);
+
+    /// <summary>Danh sách delivery của một store (kèm Order) — màn vendor.</summary>
+    Task<(List<Delivery> Items, int Total)> GetDeliveriesForStoreAsync(Guid storeId, int skip, int take, CancellationToken ct = default);
+}

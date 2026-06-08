@@ -1,6 +1,7 @@
 using FengDeskAI.Application;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure;
+using FengDeskAI.Infrastructure.Persistence.Seeding;
 using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common.Filters;
 using FengDeskAI.WebAPI.Services;
@@ -75,6 +76,14 @@ builder.Services.AddAuthorization(options =>
 });
 
 var app = builder.Build();
+
+// Chế độ "chỉ seeding": `dotnet run --project src/FengDeskAI.WebAPI -- seed`
+// → apply migrations + chạy seeder rồi thoát, KHÔNG bật web server.
+if (args.Contains("seed", StringComparer.OrdinalIgnoreCase))
+{
+    await app.Services.RunSeedersAsync();
+    return;
+}
 
 app.UseSwagger();
 app.UseSwaggerUI(opt =>

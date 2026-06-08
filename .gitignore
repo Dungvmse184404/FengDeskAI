@@ -99,6 +99,11 @@ ehthumbs.db
 # Editor backups
 .history/
 
+# draw.io autosave/backup/lock files
+.$*
+*.bkp
+*.dtmp
+
 # Output of legacy publish
 [Pp]ublish[Pp]rofiles/
 artifacts/

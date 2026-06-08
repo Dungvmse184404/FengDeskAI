@@ -11,17 +11,44 @@ public class UnitOfWork : IUnitOfWork
         AppDbContext context,
         IUserRepository users,
         IRefreshTokenRepository refreshTokens,
-        IWorkspaceProfileRepository workspaceProfiles)
+        IWorkspaceProfileRepository workspaceProfiles,
+        ILocationRepository locations,
+        IUserAddressRepository userAddresses,
+        IStoreRepository stores,
+        ICategoryRepository categories,
+        ITagRepository tags,
+        IProductRepository products,
+        ICartRepository carts,
+        IOrderRepository orders,
+        IShippingRepository shipping)
     {
         _context = context;
         Users = users;
         RefreshTokens = refreshTokens;
         WorkspaceProfiles = workspaceProfiles;
+        Locations = locations;
+        UserAddresses = userAddresses;
+        Stores = stores;
+        Categories = categories;
+        Tags = tags;
+        Products = products;
+        Carts = carts;
+        Orders = orders;
+        Shipping = shipping;
     }
 
     public IUserRepository Users { get; }
     public IRefreshTokenRepository RefreshTokens { get; }
     public IWorkspaceProfileRepository WorkspaceProfiles { get; }
+    public ILocationRepository Locations { get; }
+    public IUserAddressRepository UserAddresses { get; }
+    public IStoreRepository Stores { get; }
+    public ICategoryRepository Categories { get; }
+    public ITagRepository Tags { get; }
+    public IProductRepository Products { get; }
+    public ICartRepository Carts { get; }
+    public IOrderRepository Orders { get; }
+    public IShippingRepository Shipping { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);

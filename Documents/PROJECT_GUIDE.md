@@ -267,14 +267,15 @@ Define trong `WebAPI/Authorization/AuthorizationPolicies.cs`:
 |---|---|---|
 | ✅ | Identity (auth flow, JWT, roles) | `users`, `refresh_tokens` |
 | ✅ | Workspace Profiles | `workspace_profiles` |
-| ⏳ | Catalog | `products`, `product_items`, `product_images`, `categories`, `tags`, `product_categories`, `product_tags` |
-| ⏳ | Sales | `carts`, `cart_items`, `orders`, `order_items`, `order_status_log` |
-| ⏳ | Vendor multi-store | `garden_stores`, `garden_staff_assignments`, `stores_address` |
-| ⏳ | Geography | `provinces`, `districts`, `wards`, `user_address` |
+| ✅ | Geography | `provinces`, `districts`, `wards`, `user_address` |
+| ✅ | Vendor multi-store | `garden_stores`, `garden_staff_assignments`, `stores_address` |
+| ✅ | Catalog | `products`, `product_items`, `product_images`, `categories`, `tags`, `product_categories`, `product_tags` |
+| ✅ | Sales (multi-store → multi-delivery) | `carts`, `cart_items`, `orders`, `order_items`, `deliveries`, `order_status_log` |
+| ✅ | Shipping (webhook ingest) | `delivery_progress_logs`, `shipping_webhook` |
 | ⏳ | Customer care | `reviews`, `support_tickets`, `after_sales_requests` |
 | ⏳ | Notification | `notification` |
 | ⏳ | Recommendation (AI) | `recommendations`, `recommendation_items`, `recommendation_logs`, `feng_shui_rules` |
-| 🔒 | Shipping / Payment / 3rd-party | sẽ tính sau |
+| 🔒 | Payment / Balance / 3rd-party | sẽ tính sau |
 
 ---
 
@@ -331,6 +332,11 @@ Migrations file lưu tại `src/FengDeskAI.Infrastructure/Persistence/Migrations
 - `POST /api/auth/register/initiate | verify | finalize`
 - `POST /api/auth/login | refresh`
 - `GET  /api/dev/ping/public`
+- `GET  /api/locations/provinces | provinces/{id}/districts | districts/{id}/wards`
+- `GET  /api/stores | /api/stores/{id}` — danh sách/chi tiết cửa hàng
+- `GET  /api/categories | /api/categories/{id}` · `GET /api/tags`
+- `GET  /api/products` (filter store/category/tag + search + paging) · `GET /api/products/{id}`
+- `POST /api/shipping/webhook` — callback nhà vận chuyển (yêu cầu header `X-Webhook-Secret`)
 
 ### Authenticated (any role)
 - `GET  /api/auth/me`
@@ -343,11 +349,19 @@ Migrations file lưu tại `src/FengDeskAI.Infrastructure/Persistence/Migrations
 - `POST   /api/workspace-profiles/{id}/set-default`
 - `DELETE /api/workspace-profiles/{id}` — soft-delete
 - `GET    /api/dev/ping/authenticated`
+- **Addresses** (customer): `GET|POST /api/addresses`, `PUT|DELETE /api/addresses/{id}`, `PATCH /api/addresses/{id}/set-default`
+- **Cart** (customer): `GET /api/cart`, `POST /api/cart/items`, `PUT|DELETE /api/cart/items/{itemId}`, `DELETE /api/cart`
+- **Orders** (customer): `POST /api/orders` (checkout), `GET /api/orders` (paged), `GET /api/orders/{id}`, `POST /api/orders/{id}/cancel`
+- **Orders** (vendor): `GET /api/orders/stores/{storeId}/deliveries`, `PATCH /api/orders/deliveries/{deliveryId}/status`
+- **Shipping** (vendor): `GET /api/shipping/deliveries/{deliveryId}/progress`
 
 ### Role-restricted
 - `GET /api/dev/ping/admin` — Admin
 - `GET /api/dev/ping/manager` — Manager/Admin
 - `GET /api/dev/ping/staff` — Staff/Manager/Admin
+- **Categories/Tags** CRUD (`POST|PUT|DELETE`) — Manager/Admin
+- **Products** CRUD + items/images/category-tag links — Vendor (owner/staff của store); ownership check ở service layer
+- **Stores**: `POST /api/stores` (tạo + gán owner) — Admin; `PUT /api/stores/{id}`, `…/address`, `…/staff` — owner/admin
 
 ---
 
@@ -504,10 +518,15 @@ Khi AI (Claude, etc.) đọc tài liệu này và làm việc trên project, lư
 
 - **Workspace Profile**: hồ sơ không gian làm việc của user (lighting, desk_type, desk_orientation, feng_shui_element, ...). Là input cho AI recommendation.
 - **Feng Shui Rules**: bảng admin-managed, định nghĩa nguyên tắc phong thủy mapping với element/lighting/desk_type/work_purpose → score_weight + required_tag. AI dùng để score sản phẩm.
-- **Garden Store**: cửa hàng bán cây/sản phẩm phong thủy (multi-vendor).
+- **Garden Store**: cửa hàng bán cây/sản phẩm phong thủy (multi-vendor). Owner qua `owner_id`; nhân viên qua `garden_staff_assignments` (active).
+- **Product Item**: biến thể/SKU của `Product` — đơn vị mang **giá + tồn kho**. Cart & Order trỏ vào `product_item_id` (KHÔNG phải product).
+- **Delivery**: một order có hàng từ nhiều store → tách thành nhiều delivery (mỗi store một delivery), **không** tách sub-order. Status fulfillment ở delivery; `orders.status` là rollup. Hủy/giao xong → tự cập nhật order.
+- **Delivery Progress Log**: nhật ký mỗi lần đổi trạng thái delivery; `source_type` = Manual (vendor) / Webhook (nhà vận chuyển, kèm `raw_payload` JSONB).
 - **Registration Token**: token 32-byte tạm thời sau khi verify OTP, dùng 1 lần ở bước finalize đăng ký.
 - **BaseEntity**: abstract class chứa Id + audit fields + soft-delete flag.
 
+> **Lưu ý thiết kế (lệch nhẹ so với ERD draw.io, có chủ đích):** money thống nhất `DECIMAL(12,2)`; `product_categories`/`product_tags` là junction composite-PK (không BaseEntity); status order/delivery do dev đề xuất (State Diagram trống) — chỉnh khi chốt; thuộc tính phong thủy của product đánh dấu bằng **tags** (product không có cột feng_shui_element).
+
 ---
 
-*Last updated: 2026-06-08 — hoàn tất Identity + Workspace Profiles. Catalog/Sales pending.*
+*Last updated: 2026-06-09 — hoàn tất Geography, Vendor, Catalog, Sales (multi-delivery), Shipping (webhook). Pending: Customer care, Notification, Recommendation, Payment.*
