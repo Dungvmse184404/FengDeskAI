@@ -4,6 +4,7 @@ using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure.Authentication;
+using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.ExternalServices.Mail;
 using FengDeskAI.Infrastructure.Persistence;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -13,6 +14,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 
 namespace FengDeskAI.Infrastructure;
@@ -25,9 +27,8 @@ public static class DependencyInjection
         IConfiguration configuration,
         bool isDevelopment)
     {
-        services.Configure<JwtSettings>(configuration.GetSection(JwtSettings.SectionName));
-        var jwtSettings = configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
-            ?? throw new InvalidOperationException("JwtSettings missing in configuration.");
+        services.AddSettings<JwtSettings>(configuration);
+        var jwtSettings = configuration.GetSettings<JwtSettings>();
 
         services.AddAuthentication(options =>
         {
@@ -45,7 +46,57 @@ public static class DependencyInjection
                 ValidIssuer = jwtSettings.Issuer,
                 ValidAudience = jwtSettings.Audience,
                 IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
-                ClockSkew = TimeSpan.FromMinutes(2),
+                ClockSkew = TimeSpan.FromMinutes(5),
+            };
+
+            // Log chi tiết khi token fail — giúp debug 401
+            options.Events = new JwtBearerEvents
+            {
+                OnMessageReceived = ctx =>
+                {
+                    var raw = ctx.Request.Headers.Authorization.ToString();
+                    if (!string.IsNullOrEmpty(raw))
+                    {
+                        // Nếu client gửi "Bearer Bearer xxx" hoặc "bearer xxx" → normalize
+                        var trimmed = raw.Trim();
+                        if (trimmed.StartsWith("Bearer Bearer ", StringComparison.OrdinalIgnoreCase))
+                            ctx.Token = trimmed.Substring("Bearer Bearer ".Length).Trim();
+                        else if (trimmed.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+                            ctx.Token = trimmed.Substring("Bearer ".Length).Trim();
+                        else
+                            ctx.Token = trimmed; // raw token without prefix — accept it
+                    }
+                    return Task.CompletedTask;
+                },
+                OnAuthenticationFailed = ctx =>
+                {
+                    var logger = ctx.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("JwtBearer");
+                    logger.LogWarning(
+                        "JWT authentication failed: {ExceptionType} — {Message}",
+                        ctx.Exception.GetType().Name, ctx.Exception.Message);
+                    return Task.CompletedTask;
+                },
+                OnChallenge = ctx =>
+                {
+                    var logger = ctx.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("JwtBearer");
+                    logger.LogInformation(
+                        "JWT challenge issued. Error: {Error} | Description: {Description}",
+                        ctx.Error ?? "(none)", ctx.ErrorDescription ?? "(none)");
+                    return Task.CompletedTask;
+                },
+                OnTokenValidated = ctx =>
+                {
+                    var logger = ctx.HttpContext.RequestServices
+                        .GetRequiredService<ILoggerFactory>()
+                        .CreateLogger("JwtBearer");
+                    logger.LogDebug(
+                        "JWT validated OK for {Name}", ctx.Principal?.Identity?.Name ?? "(unknown)");
+                    return Task.CompletedTask;
+                },
             };
         });
 
@@ -64,6 +115,7 @@ public static class DependencyInjection
 
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
+        services.AddScoped<IWorkspaceProfileRepository, WorkspaceProfileRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordService, PasswordService>();
@@ -71,11 +123,11 @@ public static class DependencyInjection
 
         services.AddDistributedMemoryCache();
 
-        services.Configure<MailSettings>(configuration.GetSection(MailSettings.SectionName));
+        services.AddSettings<MailSettings>(configuration);
         services.AddScoped<IEmailSender, SmtpEmailSender>();
         services.AddSingleton<IEmailTemplateService, EmailTemplateService>();
 
-        services.Configure<OtpOptions>(configuration.GetSection(OtpOptions.SectionName));
+        services.AddSettings<OtpOptions>(configuration);
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IRegistrationTokenService, RegistrationTokenService>();
 

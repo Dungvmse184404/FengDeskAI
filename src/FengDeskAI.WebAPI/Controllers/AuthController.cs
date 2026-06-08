@@ -1,29 +1,21 @@
-using FengDeskAI.Application.Common.Constants;
-using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Identity.DTOs;
 using FengDeskAI.Application.Features.Identity.Services;
-using FengDeskAI.Application.Interfaces.Security;
+using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace FengDeskAI.WebAPI.Controllers;
 
-[ApiController]
-[Route("api/auth")]
-public class AuthController : ControllerBase
+[Route("api/[controller]")]
+public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IRegistrationFlowService _registrationFlow;
-    private readonly ICurrentUserService _currentUser;
 
-    public AuthController(
-        IAuthService authService,
-        IRegistrationFlowService registrationFlow,
-        ICurrentUserService currentUser)
+    public AuthController(IAuthService authService, IRegistrationFlowService registrationFlow)
     {
         _authService = authService;
         _registrationFlow = registrationFlow;
-        _currentUser = currentUser;
     }
 
     [HttpPost("register/initiate")]
@@ -56,24 +48,9 @@ public class AuthController : ControllerBase
     public async Task<IActionResult> Logout([FromBody] RefreshTokenRequest request, CancellationToken ct)
         => ToActionResult(await _authService.LogoutAsync(request.RefreshToken, ct));
 
-    /// <summary>
-    /// Trả về thông tin user đang đăng nhập (test JWT auth có hoạt động).
-    /// </summary>
+    /// <summary>Thông tin user đang đăng nhập (test JWT auth có hoạt động).</summary>
     [HttpGet("me")]
     [Authorize]
     public async Task<IActionResult> Me(CancellationToken ct)
-    {
-        var userId = _currentUser.UserId;
-        if (userId is null)
-            return StatusCode(ApiStatusCodes.Unauthorized,
-                ServiceResult.Failure(ApiStatusCodes.Unauthorized, "Token không hợp lệ."));
-
-        return ToActionResult(await _authService.GetMeAsync(userId.Value, ct));
-    }
-
-    private IActionResult ToActionResult(IServiceResult result)
-        => StatusCode(result.StatusCode, result);
-
-    private IActionResult ToActionResult<T>(IServiceResult<T> result)
-        => StatusCode(result.StatusCode, result);
+        => ToActionResult(await _authService.GetMeAsync(CurrentUserId, ct));
 }

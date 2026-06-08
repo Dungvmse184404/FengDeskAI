@@ -7,15 +7,21 @@ public class UnitOfWork : IUnitOfWork
 {
     private readonly AppDbContext _context;
 
-    public UnitOfWork(AppDbContext context, IUserRepository users, IRefreshTokenRepository refreshTokens)
+    public UnitOfWork(
+        AppDbContext context,
+        IUserRepository users,
+        IRefreshTokenRepository refreshTokens,
+        IWorkspaceProfileRepository workspaceProfiles)
     {
         _context = context;
         Users = users;
         RefreshTokens = refreshTokens;
+        WorkspaceProfiles = workspaceProfiles;
     }
 
     public IUserRepository Users { get; }
     public IRefreshTokenRepository RefreshTokens { get; }
+    public IWorkspaceProfileRepository WorkspaceProfiles { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);
