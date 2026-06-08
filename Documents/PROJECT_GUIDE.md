@@ -80,8 +80,7 @@ Mục tiêu: thay được EF Core bằng Dapper/MongoDB không phải sửa App
 - Enums đặt trong `Domain/Enums/<feature>/`.
 - Entities hiện tại là anemic (chỉ data) — chấp nhận cho capstone, không phải full DDD.
 
-<details>
-<summary><strong>Enum vs string — quyết định khi thêm field "controlled vocabulary"</strong> (click để mở)</summary>
+#### 5.1.1 Enum vs string — quyết định khi thêm field "controlled vocabulary"
 
 Khi gặp field thuộc tập giá trị cố định (vd `location_type`, `desk_type`, `feng_shui_element`), có 3 lựa chọn:
 
@@ -121,10 +120,7 @@ DB sẽ thấy: `desk_type = 'Standing'` thay vì `desk_type = 1`. AI service đ
 - Đổi tên enum existing (vd `Staff` → `Employee`) → data cũ trong DB vẫn là `"Staff"` → cần migration `UPDATE table SET col = 'Employee' WHERE col = 'Staff'`.
 - KHÔNG đổi enum value order (`int` underlying) khi DB đã lưu int — luôn dùng `HasConversion<string>()` để tránh rủi ro.
 
-</details>
-
-<details>
-<summary><strong>Existing Enums — controlled vocabularies đã định nghĩa</strong> (click để mở)</summary>
+#### 5.1.2 Existing Enums — controlled vocabularies đã định nghĩa
 
 Tổng hợp các enum đã có trong codebase. Dùng để:
 - Frontend sinh dropdown (`Enum.GetNames<T>()`)
@@ -132,14 +128,14 @@ Tổng hợp các enum đã có trong codebase. Dùng để:
 - Validation request DTO
 - DB human-readable khi query bằng tay (các enum string)
 
-#### Identity (`Domain/Enums/`)
+##### Identity (`Domain/Enums/`)
 
 | Enum | Values | DB type | Note |
 |---|---|---|---|
 | `Gender` | `Unspecified`, `Male`, `Female`, `Other` | `int` | Set ổn định, hiếm query bằng tay |
-| `UserRole` `[Flags]` | `None=0`, `Customer=1`, `Manager=2`, `Staff=4`, `Admin=8` | `int` (bit-mask) | 1 user có nhiều role: `Manager \| Staff = 6`. Chi tiết ở mục 6.3 |
+| `UserRole` `[Flags]` | `None=0`, `Customer=1`, `Manager=2`, `Staff=4`, `Admin=8` | `int` (bit-mask) | 1 user có nhiều role: `Manager &#124; Staff = 6`. Chi tiết ở mục 6.3 |
 
-#### Workspace (`Domain/Enums/Workspace/`)
+##### Workspace (`Domain/Enums/Workspace/`)
 
 | Enum | Values | DB type | Mô tả |
 |---|---|---|---|
@@ -151,22 +147,20 @@ Tổng hợp các enum đã có trong codebase. Dùng để:
 | `WorkPurpose` | `Office`, `Study`, `Creative`, `Reading`, `Gaming`, `Mixed`, `Other` | `varchar(30)` | Mục đích sử dụng workspace |
 | `FengShuiElement` | `Kim`, `Moc`, `Thuy`, `Hoa`, `Tho` | `varchar(10)` | Ngũ hành phong thủy — **input lõi cho AI matching** với `feng_shui_rules` |
 
-#### Application Common (`Application/Common/Enums/`)
+##### Application Common (`Application/Common/Enums/`)
 
 | Enum | Values | Note |
 |---|---|---|
 | `OtpPurpose` | `Register`, `ResetPassword`, `ChangeEmail` | Phân biệt OTP theo mục đích — cache key khác nhau, tránh OTP register bị reuse cho reset password |
 | `OtpVerifyResult` | `Success`, `Invalid`, `Expired`, `TooManyAttempts` | Result của `IOtpService.VerifyOtpAsync` |
 
-#### Quy ước khi thêm value mới
+##### Quy ước khi thêm value mới
 
 1. **Thêm value vào enum**: chú ý KHÔNG đổi thứ tự các value cũ nếu enum lưu `int` (vd `Gender`, `UserRole`). Value mới luôn append cuối.
 2. **Nếu enum dùng `HasConversion<string>()`**: check `HasMaxLength(N)` còn đủ chứa value mới không. Nếu không → migration `AlterColumn` tăng `N`.
 3. **Nếu value mới đại diện business logic phong thủy mới** (vd thêm `FengShuiElement.SuperKim`) → có thể cần seed thêm rule ở `feng_shui_rules` table để AI biết match thế nào.
 4. **Đổi tên value cũ**: cần migration `UPDATE table SET col = 'NewName' WHERE col = 'OldName'` cho các string-stored enum, hoặc data migration cho int-stored.
 5. **Xoá value**: chỉ làm khi chắc chắn không còn row nào trong DB dùng value đó (check bằng `SELECT DISTINCT col FROM table`). Tốt nhất deprecate trước, xoá sau 1-2 release.
-
-</details>
 
 ### 5.2 Application Layer
 
