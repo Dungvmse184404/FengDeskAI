@@ -1,0 +1,70 @@
+[
+  {
+    "name": "Thành phố Hà Nội",
+    "code": 1,
+    "districts": [
+      {
+        "name": "Quận Ba Đình",
+        "code": 1,
+        "wards": [
+          { "name": "Phường Phúc Xá", "code": 1 },
+          { "name": "Phường Trúc Bạch", "code": 4 },
+          { "name": "Phường Vĩnh Phúc", "code": 6 }
+        ]
+      },
+      {
+        "name": "Quận Hoàn Kiếm",
+        "code": 2,
+        "wards": [
+          { "name": "Phường Phúc Tân", "code": 37 },
+          { "name": "Phường Hàng Bạc", "code": 40 }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Thành phố Đà Nẵng",
+    "code": 48,
+    "districts": [
+      {
+        "name": "Quận Hải Châu",
+        "code": 490,
+        "wards": [
+          { "name": "Phường Thanh Bình", "code": 20194 },
+          { "name": "Phường Thạch Thang", "code": 20197 }
+        ]
+      },
+      {
+        "name": "Quận Thanh Khê",
+        "code": 491,
+        "wards": [
+          { "name": "Phường Tam Thuận", "code": 20251 },
+          { "name": "Phường Xuân Hà", "code": 20257 }
+        ]
+      }
+    ]
+  },
+  {
+    "name": "Thành phố Hồ Chí Minh",
+    "code": 79,
+    "districts": [
+      {
+        "name": "Quận 1",
+        "code": 760,
+        "wards": [
+          { "name": "Phường Bến Nghé", "code": 26740 },
+          { "name": "Phường Bến Thành", "code": 26743 },
+          { "name": "Phường Đa Kao", "code": 26737 }
+        ]
+      },
+      {
+        "name": "Quận 3",
+        "code": 770,
+        "wards": [
+          { "name": "Phường Võ Thị Sáu", "code": 26926 },
+          { "name": "Phường 1", "code": 26917 }
+        ]
+      }
+    ]
+  }
+]

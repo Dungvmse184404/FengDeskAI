@@ -6,9 +6,11 @@ using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure.Authentication;
 using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.ExternalServices.Mail;
+using FengDeskAI.Infrastructure.ExternalServices.Shipping;
 using FengDeskAI.Infrastructure.Persistence;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using FengDeskAI.Infrastructure.Persistence.Repositories;
+using FengDeskAI.Infrastructure.Persistence.Seeding;
 using FengDeskAI.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -116,6 +118,15 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IWorkspaceProfileRepository, WorkspaceProfileRepository>();
+        services.AddScoped<ILocationRepository, LocationRepository>();
+        services.AddScoped<IUserAddressRepository, UserAddressRepository>();
+        services.AddScoped<IStoreRepository, StoreRepository>();
+        services.AddScoped<ICategoryRepository, CategoryRepository>();
+        services.AddScoped<ITagRepository, TagRepository>();
+        services.AddScoped<IProductRepository, ProductRepository>();
+        services.AddScoped<ICartRepository, CartRepository>();
+        services.AddScoped<IOrderRepository, OrderRepository>();
+        services.AddScoped<IShippingRepository, ShippingRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordService, PasswordService>();
@@ -130,6 +141,10 @@ public static class DependencyInjection
         services.AddSettings<OtpOptions>(configuration);
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IRegistrationTokenService, RegistrationTokenService>();
+
+        services.AddSettings<ShippingWebhookSettings>(configuration);
+
+        services.AddScoped<IDataSeeder, GeographySeeder>();
 
         return services;
     }

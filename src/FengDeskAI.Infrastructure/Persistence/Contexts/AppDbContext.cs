@@ -1,6 +1,10 @@
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Entities.Sales;
+using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Entities.Vendor;
 using Microsoft.EntityFrameworkCore;
 
 namespace FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -17,6 +21,29 @@ public class AppDbContext : DbContext
 
     public DbSet<User> Users => Set<User>();
     public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
+
+    // Geography
+    public DbSet<Province> Provinces => Set<Province>();
+    public DbSet<District> Districts => Set<District>();
+    public DbSet<Ward> Wards => Set<Ward>();
+    public DbSet<UserAddress> UserAddresses => Set<UserAddress>();
+
+    // Vendor
+    public DbSet<GardenStore> GardenStores => Set<GardenStore>();
+    public DbSet<StoreAddress> StoreAddresses => Set<StoreAddress>();
+    public DbSet<GardenStaffAssignment> GardenStaffAssignments => Set<GardenStaffAssignment>();
+
+    // Sales
+    public DbSet<Cart> Carts => Set<Cart>();
+    public DbSet<CartItem> CartItems => Set<CartItem>();
+    public DbSet<Order> Orders => Set<Order>();
+    public DbSet<OrderItem> OrderItems => Set<OrderItem>();
+    public DbSet<Delivery> Deliveries => Set<Delivery>();
+    public DbSet<OrderStatusLog> OrderStatusLogs => Set<OrderStatusLog>();
+
+    // Shipping
+    public DbSet<DeliveryProgressLog> DeliveryProgressLogs => Set<DeliveryProgressLog>();
+    public DbSet<ShippingWebhook> ShippingWebhooks => Set<ShippingWebhook>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

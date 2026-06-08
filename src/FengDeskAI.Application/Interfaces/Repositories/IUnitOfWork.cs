@@ -6,6 +6,25 @@ public interface IUnitOfWork
     IRefreshTokenRepository RefreshTokens { get; }
     IWorkspaceProfileRepository WorkspaceProfiles { get; }
 
+    // Geography
+    ILocationRepository Locations { get; }
+    IUserAddressRepository UserAddresses { get; }
+
+    // Vendor
+    IStoreRepository Stores { get; }
+
+    // Sales
+    ICartRepository Carts { get; }
+    IOrderRepository Orders { get; }
+
+    // Catalog
+    ICategoryRepository Categories { get; }
+    ITagRepository Tags { get; }
+    IProductRepository Products { get; }
+
+    // Shipping
+    IShippingRepository Shipping { get; }
+
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default);

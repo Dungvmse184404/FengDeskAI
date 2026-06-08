@@ -1,3 +1,13 @@
+using FengDeskAI.Application.Features.Catalog.Mappings;
+using FengDeskAI.Application.Features.Catalog.Services;
+using FengDeskAI.Application.Features.Geography.Mappings;
+using FengDeskAI.Application.Features.Geography.Services;
+using FengDeskAI.Application.Features.Sales.Mappings;
+using FengDeskAI.Application.Features.Sales.Services;
+using FengDeskAI.Application.Features.Shipping.Mappings;
+using FengDeskAI.Application.Features.Shipping.Services;
+using FengDeskAI.Application.Features.Vendor.Mappings;
+using FengDeskAI.Application.Features.Vendor.Services;
 using FengDeskAI.Application.Features.Identity.Mappings;
 using FengDeskAI.Application.Features.Identity.Services;
 using FengDeskAI.Application.Features.Workspace.Mappings;
@@ -16,11 +26,30 @@ public static class DependencyInjection
         {
             cfg.AddProfile<IdentityProfile>();
             cfg.AddProfile<WorkspaceProfileMappingProfile>();
+            cfg.AddProfile<GeographyMappingProfile>();
+            cfg.AddProfile<VendorMappingProfile>();
+            cfg.AddProfile<CatalogMappingProfile>();
+            cfg.AddProfile<SalesMappingProfile>();
+            cfg.AddProfile<ShippingMappingProfile>();
         });
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRegistrationFlowService, RegistrationFlowService>();
         services.AddScoped<IWorkspaceProfileService, WorkspaceProfileService>();
+
+        services.AddScoped<ILocationService, LocationService>();
+        services.AddScoped<IUserAddressService, UserAddressService>();
+
+        services.AddScoped<IStoreService, StoreService>();
+
+        services.AddScoped<ICategoryService, CategoryService>();
+        services.AddScoped<ITagService, TagService>();
+        services.AddScoped<IProductService, ProductService>();
+
+        services.AddScoped<ICartService, CartService>();
+        services.AddScoped<IOrderService, OrderService>();
+
+        services.AddScoped<IShippingService, ShippingService>();
 
         return services;
     }
