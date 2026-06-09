@@ -72,10 +72,33 @@ public class PayOsPaymentGateway : IPaymentGateway
             QrCode: data.TryGetProperty("qrCode", out var qr) ? qr.GetString() : null);
     }
 
-    public async Task CancelPaymentLinkAsync(long orderCode, string? reason, CancellationToken ct = default)
+    //public async Task CancelPaymentLinkAsync(long orderCode, string? reason, CancellationToken ct = default)
+    //{
+    //    var body = new { cancellationReason = string.IsNullOrWhiteSpace(reason) ? "Khách hủy thanh toán" : reason };
+    //    using var resp = await _http.PostAsJsonAsync($"/v2/payment-requests/{orderCode}/cancel", body, ct);
+    //    var json = await resp.Content.ReadAsStringAsync(ct);
+    //    using var doc = JsonDocument.Parse(json);
+    //    var root = doc.RootElement;
+
+    //    var code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
+    //    if (code != "00")
+    //    {
+    //        var desc = root.TryGetProperty("desc", out var d) ? d.GetString() : "unknown";
+    //        throw new InvalidOperationException($"PayOS cancel payment link failed: {code} {desc}");
+    //    }
+    //}
+
+    public async Task CancelPaymentLinkAsync(long orderCode, string? reason = null, CancellationToken ct = default)
     {
-        var body = new { cancellationReason = string.IsNullOrWhiteSpace(reason) ? "Khách hủy thanh toán" : reason };
-        using var resp = await _http.PostAsJsonAsync($"/v2/payment-requests/{orderCode}/cancel", body, ct);
+        string endpoint = string.Format(CANCEL_PAYMENT_URL, orderCode);
+        var body = new
+        {
+            cancellationReason = string.IsNullOrWhiteSpace(reason)
+                ? "Khách hủy thanh toán"
+                : reason
+        };
+        using var resp = await _http.PostAsJsonAsync(endpoint, body, ct);
+
         var json = await resp.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -83,8 +106,8 @@ public class PayOsPaymentGateway : IPaymentGateway
         var code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
         if (code != "00")
         {
-            var desc = root.TryGetProperty("desc", out var d) ? d.GetString() : "unknown";
-            throw new InvalidOperationException($"PayOS cancel payment link failed: {code} {desc}");
+            var desc = root.TryGetProperty("desc", out var d) ? d.GetString() : "Lỗi không xác định từ PayOS";
+            throw new InvalidOperationException($"Không thể hủy giao dịch PayOS. Mã lỗi: {code} - Chi tiết: {desc}");
         }
     }
 
