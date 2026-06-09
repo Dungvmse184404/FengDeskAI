@@ -124,24 +124,22 @@ POST /api/products
 
 ## 6. Orders — `api/orders` (🔑)
 
-### Đặt đơn (checkout) — 2 chế độ
+### Đặt đơn (checkout)
 ```jsonc
 POST /api/orders
 {
-  "shippingAddressId": "<addr-id>",        // bỏ trống thì dùng địa chỉ mặc định của user
+  // optional — bỏ trống/Guid.Empty thì dùng địa chỉ mặc định của user.
+  // Có gửi mà id không thuộc user → lỗi "Địa chỉ giao hàng không hợp lệ".
+  "shippingAddressId": "<addr-id>",
   "note": "giao giờ hành chính",
 
-  // CHẾ ĐỘ A — mua ngay (ưu tiên nếu có): đặt thẳng theo product item,
-  // KHÔNG cần có trong giỏ. Món nào trùng giỏ thì bị xóa khỏi giỏ sau khi đặt.
-  "items": [ { "productItemId": "<id>", "quantity": 2 } ],
-
-  // CHẾ ĐỘ B — từ giỏ (chỉ dùng khi items trống):
-  //   cartItemIds có → chỉ đặt các dòng giỏ đó; bỏ trống → đặt cả giỏ.
-  "cartItemIds": ["<cartItem-1>", "<cartItem-2>"]
+  // optional — đặt theo danh sách product item (mua ngay), KHÔNG cần có trong giỏ.
+  // Bỏ trống → đặt TOÀN BỘ giỏ hàng.
+  "items": [ { "productItemId": "<id>", "quantity": 2 } ]
 }
 ```
-- **`items` có giá trị** → mua ngay theo danh sách (kể cả sản phẩm chưa thêm vào giỏ). Sau khi đặt, **dòng giỏ trùng `productItemId` sẽ bị xóa**, món không có trong giỏ thì thôi.
-- **`items` trống** → lấy từ giỏ: `cartItemIds` có → đặt chọn lọc; bỏ trống → đặt **cả giỏ**.
+- **`items` có giá trị** → đặt đúng danh sách đó (kể cả sản phẩm chưa thêm vào giỏ). Sau khi đặt, **dòng giỏ trùng `productItemId` bị xóa khỏi giỏ**; món không có trong giỏ thì thôi. *(Muốn mua một phần giỏ: gửi đúng các món đó trong `items`.)*
+- **`items` trống** → đặt **cả giỏ**.
 - Server: validate tồn kho → **gom theo store, mỗi store 1 delivery** → snapshot giá vào `order_items` → trừ kho → dọn giỏ → trả `OrderDetailResponse` (status `Pending`).
 
 | Method | Path | Quyền | Việc |
