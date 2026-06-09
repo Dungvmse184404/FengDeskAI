@@ -104,6 +104,9 @@ ehthumbs.db
 *.bkp
 *.dtmp
 
+# codegraph local index
+.codegraph/
+
 # Output of legacy publish
 [Pp]ublish[Pp]rofiles/
 artifacts/
