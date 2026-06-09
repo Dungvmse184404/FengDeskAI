@@ -97,12 +97,17 @@ public class PaymentService : IPaymentService
             return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Webhook không hợp lệ.");
         }
 
+        _logger.LogInformation("[Webhook] Nhận PayOS: orderCode={OrderCode} success={Success} code={Code} ref={Ref}",
+            result.OrderCode, result.Success, result.Code, result.ProviderReference);
+
         var txn = await _uow.Transactions.GetByOrderCodeAsync(result.OrderCode, ct);
         if (txn is null)
         {
-            _logger.LogWarning("Webhook PayOS orderCode {OrderCode} không khớp giao dịch nào.", result.OrderCode);
+            _logger.LogWarning("[Webhook] orderCode {OrderCode} không khớp giao dịch nào.", result.OrderCode);
             return ServiceResult.Success("Đã nhận webhook (không khớp giao dịch).");
         }
+        _logger.LogInformation("[Webhook] Khớp transaction {TxnId} (status {Status}) của order {OrderId} (status {OrderStatus}).",
+            txn.Id, txn.Status, txn.OrderId, txn.Order?.Status);
         if (txn.Status == PaymentStatus.Paid)
             return ServiceResult.Success("Giao dịch đã được xử lý trước đó.");
 
@@ -156,6 +161,8 @@ public class PaymentService : IPaymentService
             return null;
         }, ct);
 
+        _logger.LogInformation("[Webhook] Đã xử lý xong orderCode {OrderCode}: transaction={TxnStatus}, order={OrderStatus}.",
+            result.OrderCode, txn.Status, txn.Order?.Status);
         return ServiceResult.Success("Đã xử lý webhook thanh toán.");
     }
 
