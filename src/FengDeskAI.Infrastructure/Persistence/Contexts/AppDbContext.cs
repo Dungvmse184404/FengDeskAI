@@ -2,6 +2,7 @@ using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Common;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Entities.Vendor;
@@ -44,6 +45,9 @@ public class AppDbContext : DbContext
     // Shipping
     public DbSet<DeliveryProgressLog> DeliveryProgressLogs => Set<DeliveryProgressLog>();
     public DbSet<ShippingWebhook> ShippingWebhooks => Set<ShippingWebhook>();
+
+    // Payment
+    public DbSet<Transaction> Transactions => Set<Transaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

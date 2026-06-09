@@ -1,4 +1,5 @@
 using FengDeskAI.Application.Common.Models;
+using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.WebAPI.Authorization;
@@ -17,8 +18,13 @@ namespace FengDeskAI.WebAPI.Controllers;
 public class OrdersController : ApiControllerBase
 {
     private readonly IOrderService _service;
+    private readonly IPaymentService _payment;
 
-    public OrdersController(IOrderService service) => _service = service;
+    public OrdersController(IOrderService service, IPaymentService payment)
+    {
+        _service = service;
+        _payment = payment;
+    }
 
     private bool IsAdmin => User.IsInRole(Roles.Admin);
 
@@ -37,6 +43,16 @@ public class OrdersController : ApiControllerBase
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
         => ToActionResult(await _service.CancelAsync(id, CurrentUserId, ct));
+
+    /// <summary>Tạo link thanh toán PayOS cho đơn hàng (trả checkoutUrl).</summary>
+    [HttpPost("{id:guid}/payment")]
+    public async Task<IActionResult> CreatePayment(Guid id, CancellationToken ct)
+        => ToActionResult(await _payment.CreatePaymentAsync(id, CurrentUserId, ct));
+
+    /// <summary>Trạng thái thanh toán của đơn hàng.</summary>
+    [HttpGet("{id:guid}/payment")]
+    public async Task<IActionResult> GetPayment(Guid id, CancellationToken ct)
+        => ToActionResult(await _payment.GetStatusAsync(id, CurrentUserId, ct));
 
     /// <summary>Danh sách delivery của một store (màn vendor). Yêu cầu owner/staff store đó hoặc admin.</summary>
     [HttpGet("stores/{storeId:guid}/deliveries")]

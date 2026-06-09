@@ -2,6 +2,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Infrastructure.ExternalServices.Payment;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure.Authentication;
 using FengDeskAI.Infrastructure.Common;
@@ -127,6 +128,7 @@ public static class DependencyInjection
         services.AddScoped<ICartRepository, CartRepository>();
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IShippingRepository, ShippingRepository>();
+        services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordService, PasswordService>();
@@ -143,6 +145,11 @@ public static class DependencyInjection
         services.AddScoped<IRegistrationTokenService, RegistrationTokenService>();
 
         services.AddSettings<ShippingWebhookSettings>(configuration);
+
+        // Payment (PayOS) + Shipping provider (mock — thay impl thật khi có credential)
+        services.AddSettings<PayOsSettings>(configuration);
+        services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>();
+        services.AddScoped<IShippingProvider, MockShopeeShippingProvider>();
 
         services.AddScoped<IDataSeeder, GeographySeeder>();
         services.AddScoped<IDataSeeder, CatalogDemoSeeder>();
