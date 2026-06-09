@@ -2,14 +2,27 @@ using FengDeskAI.Domain.Enums.Sales;
 
 namespace FengDeskAI.Application.Features.Sales.DTOs;
 
+public class CheckoutItemRequest
+{
+    public Guid ProductItemId { get; set; }
+    public int Quantity { get; set; } = 1;
+}
+
 public class CheckoutRequest
 {
     public Guid ShippingAddressId { get; set; }
     public string? Note { get; set; }
 
     /// <summary>
-    /// Id các dòng giỏ (cart item) muốn đặt. Bỏ trống/null = đặt toàn bộ giỏ.
-    /// Chỉ những dòng được chọn mới thành đơn và bị xóa khỏi giỏ.
+    /// Đặt trực tiếp theo product item (mua ngay) — KHÔNG cần có sẵn trong giỏ.
+    /// Nếu trùng món đang có trong giỏ thì dòng giỏ đó sẽ bị xóa sau khi đặt.
+    /// Có giá trị thì ưu tiên dùng cái này (bỏ qua CartItemIds).
+    /// </summary>
+    public List<CheckoutItemRequest>? Items { get; set; }
+
+    /// <summary>
+    /// (Chế độ giỏ) Id các dòng giỏ muốn đặt. Bỏ trống = đặt toàn bộ giỏ.
+    /// Chỉ dùng khi <see cref="Items"/> trống.
     /// </summary>
     public List<Guid>? CartItemIds { get; set; }
 }

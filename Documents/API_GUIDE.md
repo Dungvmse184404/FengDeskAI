@@ -124,17 +124,25 @@ POST /api/products
 
 ## 6. Orders — `api/orders` (🔑)
 
-### Đặt đơn (checkout) — đọc **giỏ hàng** để tạo đơn
+### Đặt đơn (checkout) — 2 chế độ
 ```jsonc
 POST /api/orders
 {
-  "shippingAddressId": "<addr-id>",
+  "shippingAddressId": "<addr-id>",        // bỏ trống thì dùng địa chỉ mặc định của user
   "note": "giao giờ hành chính",
-  "cartItemIds": ["<cartItem-1>", "<cartItem-2>"]   // optional: chỉ mua các dòng này
+
+  // CHẾ ĐỘ A — mua ngay (ưu tiên nếu có): đặt thẳng theo product item,
+  // KHÔNG cần có trong giỏ. Món nào trùng giỏ thì bị xóa khỏi giỏ sau khi đặt.
+  "items": [ { "productItemId": "<id>", "quantity": 2 } ],
+
+  // CHẾ ĐỘ B — từ giỏ (chỉ dùng khi items trống):
+  //   cartItemIds có → chỉ đặt các dòng giỏ đó; bỏ trống → đặt cả giỏ.
+  "cartItemIds": ["<cartItem-1>", "<cartItem-2>"]
 }
 ```
-- **`cartItemIds` bỏ trống** → đặt **cả giỏ**. **Có** → chỉ đặt các dòng đó, phần còn lại **giữ trong giỏ**.
-- Server: validate tồn kho → **gom theo store, mỗi store 1 delivery** → snapshot giá vào `order_items` → trừ kho → xóa dòng đã đặt → trả `OrderDetailResponse` (status `Pending`).
+- **`items` có giá trị** → mua ngay theo danh sách (kể cả sản phẩm chưa thêm vào giỏ). Sau khi đặt, **dòng giỏ trùng `productItemId` sẽ bị xóa**, món không có trong giỏ thì thôi.
+- **`items` trống** → lấy từ giỏ: `cartItemIds` có → đặt chọn lọc; bỏ trống → đặt **cả giỏ**.
+- Server: validate tồn kho → **gom theo store, mỗi store 1 delivery** → snapshot giá vào `order_items` → trừ kho → dọn giỏ → trả `OrderDetailResponse` (status `Pending`).
 
 | Method | Path | Quyền | Việc |
 |---|---|---|---|

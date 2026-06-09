@@ -41,4 +41,9 @@ public class CartRepository : GenericRepository<Cart>, ICartRepository
     public Task<ProductItem?> GetProductItemAsync(Guid productItemId, CancellationToken ct = default)
         => _context.Set<ProductItem>().Include(pi => pi.Product)
                .FirstOrDefaultAsync(pi => pi.Id == productItemId, ct);
+
+    public Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> productItemIds, CancellationToken ct = default)
+        => _context.Set<ProductItem>().Include(pi => pi.Product)
+               .Where(pi => productItemIds.Contains(pi.Id))
+               .ToListAsync(ct);
 }
