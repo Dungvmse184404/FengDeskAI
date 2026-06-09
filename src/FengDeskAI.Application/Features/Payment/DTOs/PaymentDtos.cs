@@ -14,6 +14,11 @@ public class CreatePaymentResponse
     public PaymentStatus Status { get; set; }
 }
 
+public class CancelPaymentRequest
+{
+    public string? Reason { get; set; }
+}
+
 public class PaymentStatusResponse
 {
     public Guid OrderId { get; set; }

@@ -159,6 +159,70 @@ public class PaymentService : IPaymentService
         return ServiceResult.Success("Đã xử lý webhook thanh toán.");
     }
 
+    public async Task<IServiceResult<PaymentStatusResponse>> CancelPaymentAsync(Guid orderId, Guid userId, string? reason, CancellationToken ct = default)
+    {
+        var order = await _uow.Orders.GetWithGraphAsync(orderId, userId, ct);
+        if (order is null)
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+        if (order.Status != OrderStatus.Pending)
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Chỉ hủy được khi đơn đang chờ thanh toán.");
+
+        var txn = await _uow.Transactions.GetLatestByOrderAsync(orderId, ct);
+        if (txn is null)
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn chưa có giao dịch thanh toán để hủy.");
+        if (txn.Status == PaymentStatus.Paid)
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn đã thanh toán, không thể hủy thanh toán.");
+
+        // Hủy link bên PayOS — best-effort (vd link đã hết hạn vẫn cho hủy đơn ở local).
+        try
+        {
+            await _gateway.CancelPaymentLinkAsync(txn.OrderCode, reason, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Hủy link PayOS thất bại cho orderCode {OrderCode} — vẫn hủy ở local.", txn.OrderCode);
+        }
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            var now = DateTime.UtcNow;
+            txn.Status = PaymentStatus.Cancelled;
+
+            var from = order.Status;
+            order.Status = OrderStatus.Cancelled;
+            foreach (var delivery in order.Deliveries)
+                delivery.Status = DeliveryStatus.Cancelled;
+
+            // Hoàn kho
+            var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
+            var byId = productItems.ToDictionary(p => p.Id);
+            foreach (var item in order.Items)
+                if (byId.TryGetValue(item.ProductItemId, out var pi))
+                    pi.Stock += item.Quantity;
+
+            order.StatusLogs.Add(new OrderStatusLog
+            {
+                FromStatus = from.ToString(),
+                ToStatus = OrderStatus.Cancelled.ToString(),
+                ChangedBy = userId,
+                ChangedAt = now,
+                Note = string.IsNullOrWhiteSpace(reason) ? "Hủy thanh toán" : $"Hủy thanh toán: {reason}",
+            });
+            return null;
+        }, ct);
+
+        return ServiceResult<PaymentStatusResponse>.Success(new PaymentStatusResponse
+        {
+            OrderId = orderId,
+            OrderStatus = OrderStatus.Cancelled,
+            OrderCode = txn.OrderCode,
+            PaymentStatus = PaymentStatus.Cancelled,
+            Amount = txn.Amount,
+            ProviderTransactionId = txn.ProviderTransactionId,
+            PaidAt = txn.PaidAt,
+        }, "Đã hủy thanh toán và hủy đơn hàng.");
+    }
+
     public async Task<IServiceResult<PaymentStatusResponse>> GetStatusAsync(Guid orderId, Guid userId, CancellationToken ct = default)
     {
         var order = await _uow.Orders.GetDetailAsync(orderId, userId, ct);
