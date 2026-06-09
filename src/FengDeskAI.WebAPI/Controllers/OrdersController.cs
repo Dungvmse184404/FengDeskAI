@@ -1,4 +1,5 @@
 using FengDeskAI.Application.Common.Models;
+using FengDeskAI.Application.Features.Payment.DTOs;
 using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
@@ -53,6 +54,11 @@ public class OrdersController : ApiControllerBase
     [HttpGet("{id:guid}/payment")]
     public async Task<IActionResult> GetPayment(Guid id, CancellationToken ct)
         => ToActionResult(await _payment.GetStatusAsync(id, CurrentUserId, ct));
+
+    /// <summary>Hủy thanh toán: hủy link PayOS + chuyển order/deliveries/transaction sang Cancelled + hoàn kho.</summary>
+    [HttpPost("{id:guid}/payment/cancel")]
+    public async Task<IActionResult> CancelPayment(Guid id, [FromBody] CancelPaymentRequest? request, CancellationToken ct)
+        => ToActionResult(await _payment.CancelPaymentAsync(id, CurrentUserId, request?.Reason, ct));
 
     /// <summary>Danh sách delivery của một store (màn vendor). Yêu cầu owner/staff store đó hoặc admin.</summary>
     [HttpGet("stores/{storeId:guid}/deliveries")]

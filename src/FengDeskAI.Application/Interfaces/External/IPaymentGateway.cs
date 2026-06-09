@@ -17,6 +17,9 @@ public interface IPaymentGateway
 
     Task<PaymentLinkResult> CreatePaymentLinkAsync(PaymentLinkRequest request, CancellationToken ct = default);
 
+    /// <summary>Hủy link thanh toán phía provider (PayOS). Ném nếu provider trả lỗi.</summary>
+    Task CancelPaymentLinkAsync(long orderCode, string? reason, CancellationToken ct = default);
+
     /// <summary>Parse body webhook (JSON thô) + verify chữ ký. Ném nếu chữ ký không hợp lệ.</summary>
     PaymentWebhookResult VerifyWebhook(string rawJsonBody);
 }

@@ -17,6 +17,10 @@ public class PayOsPaymentGateway : IPaymentGateway
     private readonly HttpClient _http;
     private readonly PayOsSettings _settings;
 
+    private const string CREATE_PAYMENT_URL = "/v2/payment-requests";
+    private const string GET_PAYMENT_URL = "/v2/payment-requests/{0}";
+    private const string CANCEL_PAYMENT_URL = "/v2/payment-requests/{0}/cancel";
+
     public PayOsPaymentGateway(HttpClient http, IOptions<PayOsSettings> options)
     {
         _settings = options.Value;
@@ -49,7 +53,7 @@ public class PayOsPaymentGateway : IPaymentGateway
             signature,
         };
 
-        using var resp = await _http.PostAsJsonAsync("/v2/payment-requests", body, ct);
+        using var resp = await _http.PostAsJsonAsync(CREATE_PAYMENT_URL, body, ct);
         var json = await resp.Content.ReadAsStringAsync(ct);
         using var doc = JsonDocument.Parse(json);
         var root = doc.RootElement;
@@ -66,6 +70,22 @@ public class PayOsPaymentGateway : IPaymentGateway
             PaymentLinkId: data.GetProperty("paymentLinkId").GetString()!,
             OrderCode: data.GetProperty("orderCode").GetInt64(),
             QrCode: data.TryGetProperty("qrCode", out var qr) ? qr.GetString() : null);
+    }
+
+    public async Task CancelPaymentLinkAsync(long orderCode, string? reason, CancellationToken ct = default)
+    {
+        var body = new { cancellationReason = string.IsNullOrWhiteSpace(reason) ? "Khách hủy thanh toán" : reason };
+        using var resp = await _http.PostAsJsonAsync($"/v2/payment-requests/{orderCode}/cancel", body, ct);
+        var json = await resp.Content.ReadAsStringAsync(ct);
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        var code = root.TryGetProperty("code", out var c) ? c.GetString() : null;
+        if (code != "00")
+        {
+            var desc = root.TryGetProperty("desc", out var d) ? d.GetString() : "unknown";
+            throw new InvalidOperationException($"PayOS cancel payment link failed: {code} {desc}");
+        }
     }
 
     public PaymentWebhookResult VerifyWebhook(string rawJsonBody)

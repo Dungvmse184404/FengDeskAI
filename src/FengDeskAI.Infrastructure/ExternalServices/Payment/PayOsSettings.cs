@@ -2,7 +2,7 @@ namespace FengDeskAI.Infrastructure.ExternalServices.Payment;
 
 public class PayOsSettings
 {
-    public const string SectionName = "PayOS";
+    public const string SectionName = "PayOSSettings";
 
     public string BaseUrl { get; set; } = "https://api-merchant.payos.vn";
     public string ClientId { get; set; } = null!;
