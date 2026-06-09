@@ -2,6 +2,7 @@ using FengDeskAI.Application.Features.Catalog.Mappings;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Features.Geography.Mappings;
 using FengDeskAI.Application.Features.Geography.Services;
+using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Sales.Mappings;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.Mappings;
@@ -50,6 +51,8 @@ public static class DependencyInjection
         services.AddScoped<IOrderService, OrderService>();
 
         services.AddScoped<IShippingService, ShippingService>();
+
+        services.AddScoped<IPaymentService, PaymentService>();
 
         return services;
     }

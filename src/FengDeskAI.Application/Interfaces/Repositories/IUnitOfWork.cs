@@ -25,6 +25,9 @@ public interface IUnitOfWork
     // Shipping
     IShippingRepository Shipping { get; }
 
+    // Payment
+    ITransactionRepository Transactions { get; }
+
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default);
