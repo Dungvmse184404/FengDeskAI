@@ -145,6 +145,7 @@ public static class DependencyInjection
         services.AddSettings<ShippingWebhookSettings>(configuration);
 
         services.AddScoped<IDataSeeder, GeographySeeder>();
+        services.AddScoped<IDataSeeder, CatalogDemoSeeder>();
 
         return services;
     }
