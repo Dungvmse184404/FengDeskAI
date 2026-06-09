@@ -10,21 +10,16 @@ public class CheckoutItemRequest
 
 public class CheckoutRequest
 {
-    public Guid ShippingAddressId { get; set; }
+    /// <summary>Địa chỉ giao. Bỏ trống / Guid.Empty = dùng địa chỉ mặc định của user.</summary>
+    public Guid? ShippingAddressId { get; set; }
+
     public string? Note { get; set; }
 
     /// <summary>
-    /// Đặt trực tiếp theo product item (mua ngay) — KHÔNG cần có sẵn trong giỏ.
-    /// Nếu trùng món đang có trong giỏ thì dòng giỏ đó sẽ bị xóa sau khi đặt.
-    /// Có giá trị thì ưu tiên dùng cái này (bỏ qua CartItemIds).
+    /// Sản phẩm cần đặt (productItemId + quantity). Bỏ trống = đặt toàn bộ giỏ hàng.
+    /// Món trùng giỏ sẽ bị xóa khỏi giỏ sau khi đặt; món không có trong giỏ vẫn đặt được.
     /// </summary>
     public List<CheckoutItemRequest>? Items { get; set; }
-
-    /// <summary>
-    /// (Chế độ giỏ) Id các dòng giỏ muốn đặt. Bỏ trống = đặt toàn bộ giỏ.
-    /// Chỉ dùng khi <see cref="Items"/> trống.
-    /// </summary>
-    public List<Guid>? CartItemIds { get; set; }
 }
 
 public class OrderItemResponse

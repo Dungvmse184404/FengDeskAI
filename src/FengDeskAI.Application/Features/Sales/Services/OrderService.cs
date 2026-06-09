@@ -5,6 +5,7 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Enums.Sales;
@@ -27,17 +28,24 @@ public class OrderService : IOrderService
     {
         var cart = await _uow.Carts.GetByCustomerAsync(userId, ct);
 
-        var address = await _uow.UserAddresses.GetByIdForUserAsync(request.ShippingAddressId, userId, ct);
-        if (address is null)
+        // Địa chỉ: có gửi id thì phải hợp lệ (thuộc user); không gửi thì dùng địa chỉ mặc định.
+        UserAddress? address;
+        if (request.ShippingAddressId is { } addressId && addressId != Guid.Empty)
+        {
+            address = await _uow.UserAddresses.GetByIdForUserAsync(addressId, userId, ct);
+            if (address is null)
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Địa chỉ giao hàng không hợp lệ.");
+        }
+        else
         {
             address = await _uow.UserAddresses.GetDefaultForUserAsync(userId, ct);
             if (address is null)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa có địa chỉ giao hàng.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa có địa chỉ giao hàng. Vui lòng thêm địa chỉ hoặc đặt một địa chỉ mặc định.");
         }
 
         // Xác định danh sách dòng cần đặt:
         //  - request.Items (productItemId + quantity): mua ngay, KHÔNG cần có trong giỏ.
-        //  - không có Items: lấy từ giỏ (CartItemIds chọn lọc, hoặc cả giỏ).
+        //  - Items trống: đặt toàn bộ giỏ hàng.
         List<(ProductItem Pi, int Quantity)> lines;
 
         if (request.Items is { Count: > 0 })
@@ -59,15 +67,7 @@ public class OrderService : IOrderService
             if (cart is null || cart.Items.Count == 0)
                 return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Giỏ hàng trống.");
 
-            var cartItems = cart.Items.ToList();
-            if (request.CartItemIds is { Count: > 0 })
-            {
-                var ids = request.CartItemIds.ToHashSet();
-                cartItems = cart.Items.Where(i => ids.Contains(i.Id)).ToList();
-                if (cartItems.Count != ids.Count)
-                    return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Một số sản phẩm được chọn không có trong giỏ hàng.");
-            }
-            lines = cartItems.Select(ci => (ci.ProductItem, ci.Quantity)).ToList();
+            lines = cart.Items.Select(ci => (ci.ProductItem, ci.Quantity)).ToList();
         }
 
         if (lines.Count == 0)
