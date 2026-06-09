@@ -32,8 +32,24 @@ public class OrderService : IOrderService
         if (address is null)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Địa chỉ giao hàng không hợp lệ.");
 
+        // Chọn lọc: client gửi CartItemIds → chỉ đặt các dòng đó; bỏ trống → đặt cả giỏ.
+        List<CartItem> items;
+        if (request.CartItemIds is { Count: > 0 })
+        {
+            var ids = request.CartItemIds.ToHashSet();
+            items = cart.Items.Where(i => ids.Contains(i.Id)).ToList();
+            if (items.Count != ids.Count)
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Một số sản phẩm được chọn không có trong giỏ hàng.");
+        }
+        else
+        {
+            items = cart.Items.ToList();
+        }
+        if (items.Count == 0)
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa chọn sản phẩm nào để đặt.");
+
         // Validate từng dòng
-        foreach (var item in cart.Items)
+        foreach (var item in items)
         {
             var pi = item.ProductItem;
             if (pi?.Product is null || !pi.Product.IsActive)
@@ -53,7 +69,7 @@ public class OrderService : IOrderService
             };
 
             // Mỗi store một delivery
-            foreach (var group in cart.Items.GroupBy(i => i.ProductItem.Product.GardenStoreId))
+            foreach (var group in items.GroupBy(i => i.ProductItem.Product.GardenStoreId))
             {
                 var delivery = new Delivery
                 {
@@ -96,7 +112,7 @@ public class OrderService : IOrderService
             });
 
             await _uow.Orders.AddAsync(order, ct);
-            _uow.Carts.RemoveItems(cart.Items);
+            _uow.Carts.RemoveItems(items); // chỉ xóa các dòng đã đặt, giữ phần còn lại trong giỏ
             return order.Id;
         }, ct);
 

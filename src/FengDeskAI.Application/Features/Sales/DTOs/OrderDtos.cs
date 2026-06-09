@@ -6,6 +6,12 @@ public class CheckoutRequest
 {
     public Guid ShippingAddressId { get; set; }
     public string? Note { get; set; }
+
+    /// <summary>
+    /// Id các dòng giỏ (cart item) muốn đặt. Bỏ trống/null = đặt toàn bộ giỏ.
+    /// Chỉ những dòng được chọn mới thành đơn và bị xóa khỏi giỏ.
+    /// </summary>
+    public List<Guid>? CartItemIds { get; set; }
 }
 
 public class OrderItemResponse
