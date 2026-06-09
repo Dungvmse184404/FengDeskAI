@@ -19,4 +19,7 @@ public interface ICartRepository : IGenericRepository<Cart>
 
     /// <summary>ProductItem kèm Product (lấy giá/tồn/IsActive/store) để validate.</summary>
     Task<ProductItem?> GetProductItemAsync(Guid productItemId, CancellationToken ct = default);
+
+    /// <summary>Nhiều ProductItem (tracked) kèm Product — dùng cho checkout mua-ngay theo danh sách.</summary>
+    Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> productItemIds, CancellationToken ct = default);
 }

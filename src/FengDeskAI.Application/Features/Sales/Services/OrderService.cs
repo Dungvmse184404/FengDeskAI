@@ -4,6 +4,7 @@ using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Enums.Sales;
@@ -25,38 +26,63 @@ public class OrderService : IOrderService
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
     {
         var cart = await _uow.Carts.GetByCustomerAsync(userId, ct);
-        if (cart is null || cart.Items.Count == 0)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Giỏ hàng trống.");
 
         var address = await _uow.UserAddresses.GetByIdForUserAsync(request.ShippingAddressId, userId, ct);
         if (address is null)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Địa chỉ giao hàng không hợp lệ.");
-
-        // Chọn lọc: client gửi CartItemIds → chỉ đặt các dòng đó; bỏ trống → đặt cả giỏ.
-        List<CartItem> items;
-        if (request.CartItemIds is { Count: > 0 })
         {
-            var ids = request.CartItemIds.ToHashSet();
-            items = cart.Items.Where(i => ids.Contains(i.Id)).ToList();
-            if (items.Count != ids.Count)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Một số sản phẩm được chọn không có trong giỏ hàng.");
+            address = await _uow.UserAddresses.GetDefaultForUserAsync(userId, ct);
+            if (address is null)
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa có địa chỉ giao hàng.");
+        }
+
+        // Xác định danh sách dòng cần đặt:
+        //  - request.Items (productItemId + quantity): mua ngay, KHÔNG cần có trong giỏ.
+        //  - không có Items: lấy từ giỏ (CartItemIds chọn lọc, hoặc cả giỏ).
+        List<(ProductItem Pi, int Quantity)> lines;
+
+        if (request.Items is { Count: > 0 })
+        {
+            var qtyById = request.Items
+                .GroupBy(x => x.ProductItemId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
+            if (qtyById.Values.Any(q => q <= 0))
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Số lượng phải lớn hơn 0.");
+
+            var productItems = await _uow.Carts.GetProductItemsAsync(qtyById.Keys, ct);
+            if (productItems.Count != qtyById.Count)
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Một số sản phẩm không tồn tại.");
+
+            lines = productItems.Select(pi => (pi, qtyById[pi.Id])).ToList();
         }
         else
         {
-            items = cart.Items.ToList();
+            if (cart is null || cart.Items.Count == 0)
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Giỏ hàng trống.");
+
+            var cartItems = cart.Items.ToList();
+            if (request.CartItemIds is { Count: > 0 })
+            {
+                var ids = request.CartItemIds.ToHashSet();
+                cartItems = cart.Items.Where(i => ids.Contains(i.Id)).ToList();
+                if (cartItems.Count != ids.Count)
+                    return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Một số sản phẩm được chọn không có trong giỏ hàng.");
+            }
+            lines = cartItems.Select(ci => (ci.ProductItem, ci.Quantity)).ToList();
         }
-        if (items.Count == 0)
+
+        if (lines.Count == 0)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa chọn sản phẩm nào để đặt.");
 
-        // Validate từng dòng
-        foreach (var item in items)
+        // Validate active + tồn kho
+        foreach (var (pi, qty) in lines)
         {
-            var pi = item.ProductItem;
             if (pi?.Product is null || !pi.Product.IsActive)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Trong giỏ có sản phẩm đã ngừng bán. Vui lòng cập nhật giỏ.");
-            if (item.Quantity > pi.Stock)
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Có sản phẩm đã ngừng bán. Vui lòng kiểm tra lại.");
+            if (qty > pi.Stock)
                 return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, $"Sản phẩm '{pi.Product.Name}' không đủ tồn kho (còn {pi.Stock}).");
         }
+
+        var orderedProductItemIds = lines.Select(l => l.Pi.Id).ToHashSet();
 
         var orderId = await _uow.ExecuteInTransactionAsync(async _ =>
         {
@@ -69,7 +95,7 @@ public class OrderService : IOrderService
             };
 
             // Mỗi store một delivery
-            foreach (var group in items.GroupBy(i => i.ProductItem.Product.GardenStoreId))
+            foreach (var group in lines.GroupBy(l => l.Pi.Product.GardenStoreId))
             {
                 var delivery = new Delivery
                 {
@@ -79,21 +105,20 @@ public class OrderService : IOrderService
                 };
 
                 decimal deliverySubtotal = 0m;
-                foreach (var item in group)
+                foreach (var (pi, qty) in group)
                 {
-                    var pi = item.ProductItem;
                     var line = new OrderItem
                     {
                         ProductItemId = pi.Id,
                         ProductName = pi.Name is null ? pi.Product.Name : $"{pi.Product.Name} - {pi.Name}",
                         UnitPrice = pi.Price,
-                        Quantity = item.Quantity,
+                        Quantity = qty,
                     };
                     order.Items.Add(line);
                     delivery.Items.Add(line);
-                    deliverySubtotal += pi.Price * item.Quantity;
+                    deliverySubtotal += pi.Price * qty;
 
-                    pi.Stock -= item.Quantity; // trừ kho (entity đang tracked)
+                    pi.Stock -= qty; // trừ kho (entity đang tracked)
                 }
 
                 delivery.Subtotal = deliverySubtotal;
@@ -112,7 +137,15 @@ public class OrderService : IOrderService
             });
 
             await _uow.Orders.AddAsync(order, ct);
-            _uow.Carts.RemoveItems(items); // chỉ xóa các dòng đã đặt, giữ phần còn lại trong giỏ
+
+            // Món có trong giỏ thì xóa khỏi giỏ; món không có thì thôi.
+            if (cart is not null)
+            {
+                var toRemove = cart.Items.Where(ci => orderedProductItemIds.Contains(ci.ProductItemId)).ToList();
+                if (toRemove.Count > 0)
+                    _uow.Carts.RemoveItems(toRemove);
+            }
+
             return order.Id;
         }, ct);
 
