@@ -71,8 +71,9 @@ public class UnitOfWork : IUnitOfWork
             // Khi đã sẵn sàng ghi: KHÔNG để request bị hủy (vd provider webhook timeout / client
             // disconnect làm HttpContext.RequestAborted cancel ct) khiến commit dở dang → rollback.
             // Dùng CancellationToken.None để save + commit chạy trọn vẹn.
-            await _context.SaveChangesAsync(CancellationToken.None);
+            var saved = await _context.SaveChangesAsync(CancellationToken.None);
             await tx.CommitAsync(CancellationToken.None);
+            _logger.LogInformation("ExecuteInTransactionAsync committed: {Count} thay đổi đã lưu.", saved);
             return result;
         }
         catch (Exception ex)
