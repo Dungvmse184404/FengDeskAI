@@ -1,14 +1,17 @@
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
+using Microsoft.Extensions.Logging;
 
 namespace FengDeskAI.Infrastructure.Persistence;
 
 public class UnitOfWork : IUnitOfWork
 {
     private readonly AppDbContext _context;
+    private readonly ILogger<UnitOfWork> _logger;
 
     public UnitOfWork(
         AppDbContext context,
+        ILogger<UnitOfWork> logger,
         IUserRepository users,
         IRefreshTokenRepository refreshTokens,
         IWorkspaceProfileRepository workspaceProfiles,
@@ -24,6 +27,7 @@ public class UnitOfWork : IUnitOfWork
         ITransactionRepository transactions)
     {
         _context = context;
+        _logger = logger;
         Users = users;
         RefreshTokens = refreshTokens;
         WorkspaceProfiles = workspaceProfiles;
@@ -63,13 +67,18 @@ public class UnitOfWork : IUnitOfWork
         try
         {
             var result = await action(ct);
-            await _context.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
+
+            // Khi đã sẵn sàng ghi: KHÔNG để request bị hủy (vd provider webhook timeout / client
+            // disconnect làm HttpContext.RequestAborted cancel ct) khiến commit dở dang → rollback.
+            // Dùng CancellationToken.None để save + commit chạy trọn vẹn.
+            await _context.SaveChangesAsync(CancellationToken.None);
+            await tx.CommitAsync(CancellationToken.None);
             return result;
         }
-        catch
+        catch (Exception ex)
         {
-            await tx.RollbackAsync(ct);
+            _logger.LogError(ex, "ExecuteInTransactionAsync rollback do exception: {Message}", ex.Message);
+            await tx.RollbackAsync(CancellationToken.None);
             throw;
         }
     }
