@@ -18,4 +18,7 @@ public interface IPaymentService
     Task<IServiceResult<PaymentStatusResponse>> CancelPaymentAsync(Guid orderId, Guid userId, string? reason, CancellationToken ct = default);
 
     Task<IServiceResult<PaymentStatusResponse>> GetStatusAsync(Guid orderId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>[DEV only] Giả lập thanh toán thành công (bỏ qua PayOS) để test luồng sau thanh toán.</summary>
+    Task<IServiceResult<PaymentStatusResponse>> SimulatePaidAsync(Guid orderId, Guid userId, CancellationToken ct = default);
 }

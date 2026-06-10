@@ -18,6 +18,11 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     public Task AddDeliveriesAsync(IEnumerable<Delivery> deliveries, CancellationToken ct = default)
         => _context.Set<Delivery>().AddRangeAsync(deliveries, ct);
 
+    public Task<Order?> GetForPaymentAsync(Guid id, Guid customerId, CancellationToken ct = default)
+        => _set.Include(o => o.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product)
+               .Include(o => o.Deliveries)
+               .FirstOrDefaultAsync(o => o.Id == id && o.CustomerId == customerId, ct);
+
     public async Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking().Where(o => o.CustomerId == customerId);
