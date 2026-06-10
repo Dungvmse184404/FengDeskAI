@@ -1,3 +1,4 @@
+using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 
 namespace FengDeskAI.Application.Features.Sales.DTOs;
@@ -20,13 +21,19 @@ public class CheckoutRequest
     /// Món trùng giỏ sẽ bị xóa khỏi giỏ sau khi đặt; món không có trong giỏ vẫn đặt được.
     /// </summary>
     public List<CheckoutItemRequest>? Items { get; set; }
+
+    /// <summary>PayOS (mặc định): thanh toán online, quá 15' không trả tiền đơn sẽ hết hạn.
+    /// COD: thanh toán khi nhận hàng, delivery tạo ngay khi đặt.</summary>
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.PayOS;
 }
 
 public class OrderItemResponse
 {
     public Guid Id { get; set; }
     public Guid ProductItemId { get; set; }
-    public Guid DeliveryId { get; set; }
+
+    /// <summary>Null khi đơn online chưa thanh toán (delivery chưa được tạo).</summary>
+    public Guid? DeliveryId { get; set; }
     public string ProductName { get; set; } = null!;
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; }
@@ -60,6 +67,7 @@ public class OrderListItemResponse
 {
     public Guid Id { get; set; }
     public OrderStatus Status { get; set; }
+    public PaymentMethod PaymentMethod { get; set; }
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }
     public decimal TotalAmount { get; set; }
@@ -73,6 +81,7 @@ public class OrderDetailResponse
     public Guid CustomerId { get; set; }
     public Guid ShippingAddressId { get; set; }
     public OrderStatus Status { get; set; }
+    public PaymentMethod PaymentMethod { get; set; }
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }
     public decimal TotalAmount { get; set; }

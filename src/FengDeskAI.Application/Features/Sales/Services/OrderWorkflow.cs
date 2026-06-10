@@ -1,10 +1,36 @@
+using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Enums.Sales;
 
 namespace FengDeskAI.Application.Features.Sales.Services;
 
-/// <summary>Quy tắc trạng thái dùng chung cho OrderService + ShippingService (webhook).</summary>
+/// <summary>Quy tắc trạng thái dùng chung cho OrderService + PaymentService + ShippingService (webhook).</summary>
 public static class OrderWorkflow
 {
+    /// <summary>
+    /// Gom order.Items theo store thành các delivery (mỗi store một delivery, status Pending).
+    /// Yêu cầu mỗi item đã nạp ProductItem.Product (để biết GardenStoreId).
+    /// Gọi lúc checkout với đơn COD; với đơn online gọi khi webhook báo đã thanh toán.
+    /// </summary>
+    public static void GroupItemsIntoDeliveries(Order order)
+    {
+        foreach (var group in order.Items.GroupBy(i => i.ProductItem.Product.GardenStoreId))
+        {
+            var delivery = new Delivery
+            {
+                GardenStoreId = group.Key,
+                Status = DeliveryStatus.Pending,
+                ShippingFee = 0m,
+                Subtotal = group.Sum(i => i.UnitPrice * i.Quantity),
+            };
+            foreach (var item in group)
+            {
+                item.Delivery = delivery;
+                delivery.Items.Add(item);
+            }
+            order.Deliveries.Add(delivery);
+        }
+    }
+
     /// <summary>Suy ra trạng thái order tổng từ trạng thái các delivery (rollup).</summary>
     public static OrderStatus ComputeOrderStatus(IReadOnlyCollection<DeliveryStatus> deliveryStatuses)
     {

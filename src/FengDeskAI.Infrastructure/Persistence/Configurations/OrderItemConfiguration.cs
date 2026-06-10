@@ -15,7 +15,8 @@ public class OrderItemConfiguration : IEntityTypeConfiguration<OrderItem>
         builder.Property(i => i.Id).HasColumnName("id");
         builder.Property(i => i.OrderId).HasColumnName("order_id").IsRequired();
         builder.Property(i => i.ProductItemId).HasColumnName("product_item_id").IsRequired();
-        builder.Property(i => i.DeliveryId).HasColumnName("delivery_id").IsRequired();
+        // Null khi đơn online chưa thanh toán — delivery chỉ tạo sau khi đã trả tiền (COD tạo ngay).
+        builder.Property(i => i.DeliveryId).HasColumnName("delivery_id");
 
         builder.Property(i => i.ProductName).HasColumnName("product_name").HasMaxLength(255).IsRequired();
         builder.Property(i => i.UnitPrice).HasColumnName("unit_price").HasPrecision(12, 2);

@@ -1,6 +1,7 @@
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Sales;
+using FengDeskAI.Domain.Enums.Payment;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -18,6 +19,9 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.ShippingAddressId).HasColumnName("shipping_address_id").IsRequired();
 
         builder.Property(o => o.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(50);
+        // Default 'PayOS' để các đơn tạo trước khi có cột này vẫn đọc được.
+        builder.Property(o => o.PaymentMethod).HasColumnName("payment_method").HasConversion<string>().HasMaxLength(30)
+            .HasDefaultValue(PaymentMethod.PayOS);
         builder.Property(o => o.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2);
         builder.Property(o => o.TotalShippingFee).HasColumnName("total_shipping_fee").HasPrecision(12, 2);
         builder.Property(o => o.TotalAmount).HasColumnName("total_amount").HasPrecision(12, 2);

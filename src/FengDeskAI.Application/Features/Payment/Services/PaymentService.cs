@@ -19,13 +19,16 @@ public class PaymentService : IPaymentService
     private readonly IUnitOfWork _uow;
     private readonly IPaymentGateway _gateway;
     private readonly IShippingProvider _shipping;
+    private readonly IOrderCancellationService _cancellation;
     private readonly ILogger<PaymentService> _logger;
 
-    public PaymentService(IUnitOfWork uow, IPaymentGateway gateway, IShippingProvider shipping, ILogger<PaymentService> logger)
+    public PaymentService(IUnitOfWork uow, IPaymentGateway gateway, IShippingProvider shipping,
+        IOrderCancellationService cancellation, ILogger<PaymentService> logger)
     {
         _uow = uow;
         _gateway = gateway;
         _shipping = shipping;
+        _cancellation = cancellation;
         _logger = logger;
     }
 
@@ -36,8 +39,25 @@ public class PaymentService : IPaymentService
             return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
         if (order.Status != OrderStatus.Pending)
             return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn hàng không ở trạng thái chờ thanh toán.");
+        if (order.PaymentMethod == PaymentMethod.COD)
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn COD thanh toán khi nhận hàng, không cần thanh toán online.");
         if (await _uow.Transactions.HasPaidAsync(orderId, ct))
             return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn hàng đã được thanh toán.");
+
+        // Vô hiệu các link cũ còn treo để một đơn không thể bị trả tiền 2 lần qua link khác nhau.
+        var staleTxns = await _uow.Transactions.GetPendingByOrderAsync(orderId, ct);
+        foreach (var stale in staleTxns)
+        {
+            try
+            {
+                await _gateway.CancelPaymentLinkAsync(stale.OrderCode, "Tạo link thanh toán mới", ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Hủy link PayOS cũ thất bại cho orderCode {OrderCode}.", stale.OrderCode);
+            }
+            stale.Status = PaymentStatus.Expired;
+        }
 
         var amount = (int)Math.Round(order.TotalAmount, MidpointRounding.AwayFromZero);
         if (amount <= 0)
@@ -138,6 +158,10 @@ public class PaymentService : IPaymentService
                     Note = "Thanh toán PayOS thành công",
                 });
 
+                // Đơn online: delivery chỉ được tạo sau khi đã thanh toán.
+                if (order.Deliveries.Count == 0)
+                    OrderWorkflow.GroupItemsIntoDeliveries(order);
+
                 await CreateShipmentsAsync(order, now, ct);
 
                 var rolled = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
@@ -152,6 +176,12 @@ public class PaymentService : IPaymentService
                     });
                     order.Status = rolled;
                 }
+            }
+            else if (order.Status is OrderStatus.Expired or OrderStatus.Cancelled)
+            {
+                // Trả tiền sau khi đơn đã hết hạn/hủy (kho đã hoàn) — không revive đơn, cần đối soát hoàn tiền thủ công.
+                _logger.LogError("Nhận thanh toán cho order {OrderId} đã {Status} — cần hoàn tiền thủ công cho giao dịch {OrderCode}.",
+                    order.Id, order.Status, txn.OrderCode);
             }
             else
             {
@@ -177,46 +207,13 @@ public class PaymentService : IPaymentService
         var txn = await _uow.Transactions.GetLatestByOrderAsync(orderId, ct);
         if (txn is null)
             return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn chưa có giao dịch thanh toán để hủy.");
-        if (txn.Status == PaymentStatus.Paid)
+        if (await _uow.Transactions.HasPaidAsync(orderId, ct))
             return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn đã thanh toán, không thể hủy thanh toán.");
 
-        // Hủy link bên PayOS — best-effort (vd link đã hết hạn vẫn cho hủy đơn ở local).
-        try
-        {
-            await _gateway.CancelPaymentLinkAsync(txn.OrderCode, reason, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Hủy link PayOS thất bại cho orderCode {OrderCode} — vẫn hủy ở local.", txn.OrderCode);
-        }
-
-        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
-        {
-            var now = DateTime.UtcNow;
-            txn.Status = PaymentStatus.Cancelled;
-
-            var from = order.Status;
-            order.Status = OrderStatus.Cancelled;
-            foreach (var delivery in order.Deliveries)
-                delivery.Status = DeliveryStatus.Cancelled;
-
-            // Hoàn kho
-            var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
-            var byId = productItems.ToDictionary(p => p.Id);
-            foreach (var item in order.Items)
-                if (byId.TryGetValue(item.ProductItemId, out var pi))
-                    pi.Stock += item.Quantity;
-
-            order.StatusLogs.Add(new OrderStatusLog
-            {
-                FromStatus = from.ToString(),
-                ToStatus = OrderStatus.Cancelled.ToString(),
-                ChangedBy = userId,
-                ChangedAt = now,
-                Note = string.IsNullOrWhiteSpace(reason) ? "Hủy thanh toán" : $"Hủy thanh toán: {reason}",
-            });
-            return null;
-        }, ct);
+        // Hủy mọi link/giao dịch còn treo + đơn + hoàn kho — dùng chung lõi hủy với OrderService.
+        await _cancellation.CancelAsync(order, userId,
+            string.IsNullOrWhiteSpace(reason) ? "Hủy thanh toán" : $"Hủy thanh toán: {reason}",
+            expired: false, ct);
 
         return ServiceResult<PaymentStatusResponse>.Success(new PaymentStatusResponse
         {

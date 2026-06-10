@@ -4,4 +4,5 @@ namespace FengDeskAI.Domain.Enums.Payment;
 public enum PaymentMethod
 {
     PayOS,
+    COD, // thanh toán khi nhận hàng — không qua cổng thanh toán
 }

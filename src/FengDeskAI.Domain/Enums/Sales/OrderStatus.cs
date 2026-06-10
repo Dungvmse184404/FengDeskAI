@@ -11,4 +11,5 @@ public enum OrderStatus
     Processing, // các nhà vườn đang chuẩn bị/giao
     Completed,  // tất cả delivery đã giao
     Cancelled,  // đã hủy
+    Expired,    // quá hạn thanh toán (đơn online không trả tiền trong thời hạn)
 }
