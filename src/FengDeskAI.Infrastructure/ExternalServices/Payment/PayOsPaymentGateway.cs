@@ -16,6 +16,7 @@ public class PayOsPaymentGateway : IPaymentGateway
 {
     private readonly HttpClient _http;
     private readonly PayOsSettings _settings;
+    public string Provider => "PayOS";
 
     private const string CREATE_PAYMENT_URL = "/v2/payment-requests";
     private const string GET_PAYMENT_URL = "/v2/payment-requests/{0}";
@@ -33,7 +34,7 @@ public class PayOsPaymentGateway : IPaymentGateway
             _http.DefaultRequestHeaders.Add("x-api-key", _settings.ApiKey);
     }
 
-    public string Provider => "PayOS";
+    
 
     public async Task<PaymentLinkResult> CreatePaymentLinkAsync(PaymentLinkRequest request, CancellationToken ct = default)
     {
