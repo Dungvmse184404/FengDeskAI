@@ -4,6 +4,7 @@ using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Hosting;
 
 namespace FengDeskAI.WebAPI.Controllers;
 
@@ -16,8 +17,13 @@ namespace FengDeskAI.WebAPI.Controllers;
 public class PaymentsController : ApiControllerBase
 {
     private readonly IPaymentService _payment;
+    private readonly IHostEnvironment _env;
 
-    public PaymentsController(IPaymentService payment) => _payment = payment;
+    public PaymentsController(IPaymentService payment, IHostEnvironment env)
+    {
+        _payment = payment;
+        _env = env;
+    }
 
     /// <summary>Tạo link thanh toán PayOS cho một order Pending (trả checkoutUrl + qrCode).</summary>
     [HttpPost("{orderId:guid}")]
@@ -38,6 +44,18 @@ public class PaymentsController : ApiControllerBase
     [HttpPost("payos/webhook")]
     [AllowAnonymous]
     public async Task<IActionResult> PayOsWebhook([FromBody] JsonElement payload, CancellationToken ct)
-        => 
-        ToActionResult(await _payment.HandleWebhookAsync(payload.GetRawText(), ct));
+        =>
+       ToActionResult(await _payment.HandleWebhookAsync(payload.GetRawText(), ct));
+
+    /// <summary>
+    /// [CHỈ DEVELOPMENT] Giả lập thanh toán thành công cho đơn (bỏ qua PayOS) — test luồng sau
+    /// thanh toán: order→Paid/Processing, tạo delivery + shipment. Production trả 404.
+    /// </summary>
+    [HttpPost("{orderId:guid}/dev/mark-paid")]
+    public async Task<IActionResult> SimulatePaid(Guid orderId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment())
+            return NotFound();
+        return ToActionResult(await _payment.SimulatePaidAsync(orderId, CurrentUserId, ct));
+    }
 }
