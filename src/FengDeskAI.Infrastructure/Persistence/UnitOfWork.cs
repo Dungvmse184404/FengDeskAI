@@ -60,6 +60,9 @@ public class UnitOfWork : IUnitOfWork
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);
 
+    public Task ReloadEntityAsync<TEntity>(TEntity entity) where TEntity : class
+        => _context.Entry(entity).ReloadAsync();
+
     public async Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default)
     {
@@ -71,6 +74,10 @@ public class UnitOfWork : IUnitOfWork
             // Khi đã sẵn sàng ghi: KHÔNG để request bị hủy (vd provider webhook timeout / client
             // disconnect làm HttpContext.RequestAborted cancel ct) khiến commit dở dang → rollback.
             // Dùng CancellationToken.None để save + commit chạy trọn vẹn.
+
+
+            /// Lưu ý: nếu action có gọi SaveChangesAsync rồi thì sẽ save 2 lần (lần đầu trong action, lần thứ 2 ở đây trước commit). Cân nhắc refactor để tránh save thừa nếu cần.
+            /// sửa phát cuối ko đc thì sủi
             var saved = await _context.SaveChangesAsync(CancellationToken.None);
             await tx.CommitAsync(CancellationToken.None);
             _logger.LogInformation("ExecuteInTransactionAsync committed: {Count} thay đổi đã lưu.", saved);

@@ -72,6 +72,8 @@ public class AppDbContext : DbContext
         var now = DateTime.UtcNow;
         var userId = _currentUser?.UserId;
 
+        var orderStatusChanges = new List<OrderStatusLog>();
+
         foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {
             switch (entry.State)
@@ -90,6 +92,26 @@ public class AppDbContext : DbContext
                     if (userId.HasValue) entry.Entity.UpdatedBy = userId;
                     entry.Property(nameof(BaseEntity.CreatedAt)).IsModified = false;
                     entry.Property(nameof(BaseEntity.CreatedBy)).IsModified = false;
+
+                    if (entry.Entity is Order order && entry.Property(nameof(Order.Status)).IsModified)
+                    {
+                        var oldStatus = entry.Property(nameof(Order.Status)).OriginalValue?.ToString();
+                        var newStatus = entry.Property(nameof(Order.Status)).CurrentValue?.ToString();
+
+                        if (oldStatus != newStatus)
+                        {
+                            orderStatusChanges.Add(new OrderStatusLog
+                            {
+                                OrderId = order.Id,
+                                FromStatus = oldStatus ?? string.Empty,
+                                ToStatus = newStatus ?? string.Empty,
+                                ChangedAt = now,
+                                ChangedBy = userId,
+                                Note = order.StatusChangeNote
+                            });
+                        }
+                    }
+
                     break;
                 case EntityState.Deleted:
                     // Soft delete
@@ -99,6 +121,22 @@ public class AppDbContext : DbContext
                     if (userId.HasValue) entry.Entity.UpdatedBy = userId;
                     break;
             }
+        }
+
+        if (orderStatusChanges.Any())
+        {
+            // Set audit cho log tự sinh (chúng được thêm SAU vòng lặp audit nên không tự có CreatedAt).
+            foreach (var log in orderStatusChanges)
+            {
+                log.CreatedAt = now;
+                log.UpdatedAt = now;
+                if (userId.HasValue)
+                {
+                    log.CreatedBy = userId;
+                    log.UpdatedBy = userId;
+                }
+            }
+            this.AddRange(orderStatusChanges);
         }
     }
 }
