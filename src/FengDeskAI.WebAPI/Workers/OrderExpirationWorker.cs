@@ -6,38 +6,48 @@ namespace FengDeskAI.WebAPI.Workers;
 /// <summary>
 /// Quét định kỳ các đơn online còn Pending quá hạn thanh toán và chuyển sang Expired
 /// (kèm transaction → Expired, hủy link PayOS, hoàn kho, ghi OrderStatusLog).
+/// Dùng IOptionsMonitor để đọc lại IsActive mỗi tick — cho phép bật/tắt qua appsettings
+/// mà không cần restart app.
 /// </summary>
 public sealed class OrderExpirationWorker : BackgroundService
 {
     private readonly IServiceScopeFactory _scopeFactory;
-    private readonly OrderExpirationOptions _options;
+    private readonly IOptionsMonitor<OrderExpirationOptions> _optionsMonitor;
     private readonly ILogger<OrderExpirationWorker> _logger;
 
     public OrderExpirationWorker(
         IServiceScopeFactory scopeFactory,
-        IOptions<OrderExpirationOptions> options,
+        IOptionsMonitor<OrderExpirationOptions> optionsMonitor,
         ILogger<OrderExpirationWorker> logger)
     {
         _scopeFactory = scopeFactory;
-        _options = options.Value;
+        _optionsMonitor = optionsMonitor;
         _logger = logger;
     }
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        var timeout = TimeSpan.FromMinutes(_options.PendingTimeoutMinutes);
-        var interval = TimeSpan.FromSeconds(_options.ScanIntervalSeconds);
-        _logger.LogInformation("OrderExpirationWorker chạy: đơn quá {Timeout} phút chưa thanh toán sẽ hết hạn, quét mỗi {Interval}s.",
-            timeout.TotalMinutes, interval.TotalSeconds);
+        var opts = _optionsMonitor.CurrentValue;
+        var interval = TimeSpan.FromSeconds(opts.ScanIntervalSeconds);
+        _logger.LogInformation(
+            "OrderExpirationWorker chạy: đơn quá {Timeout} phút chưa thanh toán sẽ hết hạn, quét mỗi {Interval}s. IsActive={IsActive}",
+            opts.PendingTimeoutMinutes, interval.TotalSeconds, opts.IsActive);
 
         using var timer = new PeriodicTimer(interval);
         try
         {
             do
             {
+                var current = _optionsMonitor.CurrentValue;
+                if (!current.IsActive)
+                {
+                    _logger.LogDebug("OrderExpirationWorker tạm tắt (IsActive=false), bỏ qua lượt quét.");
+                    continue;
+                }
+
                 try
                 {
-                    // Scope mới mỗi lượt — IUnitOfWork/DbContext là scoped.
+                    var timeout = TimeSpan.FromMinutes(current.PendingTimeoutMinutes);
                     await using var scope = _scopeFactory.CreateAsyncScope();
                     var expiration = scope.ServiceProvider.GetRequiredService<IOrderExpirationService>();
                     await expiration.ExpireOverdueOrdersAsync(timeout, stoppingToken);
@@ -59,3 +69,4 @@ public sealed class OrderExpirationWorker : BackgroundService
         }
     }
 }
+
