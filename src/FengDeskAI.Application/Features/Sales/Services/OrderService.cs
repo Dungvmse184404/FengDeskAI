@@ -8,6 +8,7 @@ using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 
@@ -17,11 +18,13 @@ public class OrderService : IOrderService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly IOrderCancellationService _cancellation;
 
-    public OrderService(IUnitOfWork uow, IMapper mapper)
+    public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation)
     {
         _uow = uow;
         _mapper = mapper;
+        _cancellation = cancellation;
     }
 
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
@@ -73,6 +76,9 @@ public class OrderService : IOrderService
         if (lines.Count == 0)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa chọn sản phẩm nào để đặt.");
 
+        if (request.PaymentMethod is not (PaymentMethod.PayOS or PaymentMethod.COD))
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Phương thức thanh toán không hợp lệ.");
+
         // Validate active + tồn kho
         foreach (var (pi, qty) in lines)
         {
@@ -91,41 +97,29 @@ public class OrderService : IOrderService
                 CustomerId = userId,
                 ShippingAddressId = address.Id,
                 Status = OrderStatus.Pending,
+                PaymentMethod = request.PaymentMethod,
                 Note = request.Note,
             };
 
-            // Mỗi store một delivery
-            foreach (var group in lines.GroupBy(l => l.Pi.Product.GardenStoreId))
+            foreach (var (pi, qty) in lines)
             {
-                var delivery = new Delivery
+                order.Items.Add(new OrderItem
                 {
-                    GardenStoreId = group.Key,
-                    Status = DeliveryStatus.Pending,
-                    ShippingFee = 0m,
-                };
+                    ProductItemId = pi.Id,
+                    ProductItem = pi,
+                    ProductName = pi.Name is null ? pi.Product.Name : $"{pi.Product.Name} - {pi.Name}",
+                    UnitPrice = pi.Price,
+                    Quantity = qty,
+                });
 
-                decimal deliverySubtotal = 0m;
-                foreach (var (pi, qty) in group)
-                {
-                    var line = new OrderItem
-                    {
-                        ProductItemId = pi.Id,
-                        ProductName = pi.Name is null ? pi.Product.Name : $"{pi.Product.Name} - {pi.Name}",
-                        UnitPrice = pi.Price,
-                        Quantity = qty,
-                    };
-                    order.Items.Add(line);
-                    delivery.Items.Add(line);
-                    deliverySubtotal += pi.Price * qty;
-
-                    pi.Stock -= qty; // trừ kho (entity đang tracked)
-                }
-
-                delivery.Subtotal = deliverySubtotal;
-                order.Deliveries.Add(delivery);
+                pi.Stock -= qty; // trừ kho (entity đang tracked)
             }
 
-            order.Subtotal = order.Deliveries.Sum(d => d.Subtotal);
+            // Delivery: COD tạo ngay khi đặt; đơn online chỉ tạo khi webhook báo đã thanh toán.
+            if (request.PaymentMethod == PaymentMethod.COD)
+                OrderWorkflow.GroupItemsIntoDeliveries(order);
+
+            order.Subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
             order.TotalShippingFee = order.Deliveries.Sum(d => d.ShippingFee);
             order.TotalAmount = order.Subtotal + order.TotalShippingFee;
             order.StatusLogs.Add(new OrderStatusLog
@@ -175,31 +169,11 @@ public class OrderService : IOrderService
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
         if (order.Status != OrderStatus.Pending)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chỉ có thể hủy đơn ở trạng thái chờ xử lý.");
+        if (await _uow.Transactions.HasPaidAsync(id, ct))
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn đã thanh toán, không thể hủy trực tiếp.");
 
-        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
-        {
-            var from = order.Status;
-            order.Status = OrderStatus.Cancelled;
-            foreach (var delivery in order.Deliveries)
-                delivery.Status = DeliveryStatus.Cancelled;
-
-            // Hoàn kho
-            var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
-            var byId = productItems.ToDictionary(p => p.Id);
-            foreach (var item in order.Items)
-                if (byId.TryGetValue(item.ProductItemId, out var pi))
-                    pi.Stock += item.Quantity;
-
-            order.StatusLogs.Add(new OrderStatusLog
-            {
-                FromStatus = from.ToString(),
-                ToStatus = OrderStatus.Cancelled.ToString(),
-                ChangedBy = userId,
-                ChangedAt = DateTime.UtcNow,
-                Note = "Khách hàng hủy đơn",
-            });
-            return null;
-        }, ct);
+        // Hủy cả giao dịch thanh toán còn treo + link PayOS (nếu có) — tránh đơn đã hủy mà vẫn trả tiền được.
+        await _cancellation.CancelAsync(order, userId, "Khách hàng hủy đơn", expired: false, ct);
 
         return await GetByIdAsync(id, userId, ct);
     }

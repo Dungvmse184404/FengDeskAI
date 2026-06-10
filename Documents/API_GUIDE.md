@@ -135,19 +135,26 @@ POST /api/orders
 
   // optional — đặt theo danh sách product item (mua ngay), KHÔNG cần có trong giỏ.
   // Bỏ trống → đặt TOÀN BỘ giỏ hàng.
-  "items": [ { "productItemId": "<id>", "quantity": 2 } ]
+  "items": [ { "productItemId": "<id>", "quantity": 2 } ],
+
+  // optional — 0 = PayOS (mặc định, thanh toán online), 1 = COD (trả khi nhận hàng)
+  "paymentMethod": 0
 }
 ```
 - **`items` có giá trị** → đặt đúng danh sách đó (kể cả sản phẩm chưa thêm vào giỏ). Sau khi đặt, **dòng giỏ trùng `productItemId` bị xóa khỏi giỏ**; món không có trong giỏ thì thôi. *(Muốn mua một phần giỏ: gửi đúng các món đó trong `items`.)*
 - **`items` trống** → đặt **cả giỏ**.
-- Server: validate tồn kho → **gom theo store, mỗi store 1 delivery** → snapshot giá vào `order_items` → trừ kho → dọn giỏ → trả `OrderDetailResponse` (status `Pending`).
+- Server: validate tồn kho → snapshot giá vào `order_items` → trừ kho → dọn giỏ → trả `OrderDetailResponse` (status `Pending`).
+- **Delivery (gom theo store, mỗi store 1 delivery)**:
+  - **COD** → tạo delivery **ngay khi đặt** (vendor thấy và xác nhận được luôn).
+  - **PayOS** → delivery **chỉ tạo khi webhook báo đã thanh toán** (trước đó `order_items.deliveryId = null`).
+- **Hết hạn thanh toán**: đơn PayOS quá **15 phút** chưa trả tiền sẽ bị worker chuyển `Expired` (transaction → `Expired`, hủy link PayOS, hoàn kho, ghi statusLog). COD không bị hết hạn. Cấu hình ở `OrderExpiration` trong `appsettings.json`.
 
 | Method | Path | Quyền | Việc |
 |---|---|---|---|
 | POST | `/api/orders` | 🔑 customer | checkout (trên) |
 | GET | `/api/orders?page=&pageSize=` | 🔑 customer | đơn của tôi (paged) |
 | GET | `/api/orders/{id}` | 🔑 customer | chi tiết: items + deliveries + statusLogs |
-| POST | `/api/orders/{id}/cancel` | 🔑 customer | hủy đơn (chỉ khi `Pending`) → hoàn kho |
+| POST | `/api/orders/{id}/cancel` | 🔑 customer | hủy đơn (chỉ khi `Pending`, chưa thanh toán) → hủy cả link PayOS/transaction còn treo + hoàn kho |
 | GET | `/api/orders/stores/{storeId}/deliveries?page=&pageSize=` | 🏪 vendor | delivery của store mình |
 | PATCH | `/api/orders/deliveries/{deliveryId}/status` | 🏪 vendor | `{ "status":"Shipped", "trackingCode":"...", "shippingProvider":"...", "note":"..." }` |
 
@@ -159,10 +166,10 @@ Chuyển trạng thái delivery hợp lệ: `Pending→Confirmed→Preparing→S
 
 | Method | Path | Quyền | Việc |
 |---|---|---|---|
-| POST | `/api/payments/{orderId}` | 🔑 customer | tạo link PayOS → `{ checkoutUrl, qrCode, orderCode, amount }` (order phải `Pending`) |
+| POST | `/api/payments/{orderId}` | 🔑 customer | tạo link PayOS → `{ checkoutUrl, qrCode, orderCode, amount }` (order phải `Pending`, không phải COD; link Pending cũ bị vô hiệu) |
 | GET | `/api/payments/{orderId}` | 🔑 customer | trạng thái thanh toán |
-| POST | `/api/payments/{orderId}/cancel` | 🔑 customer | `{ "reason":"đổi ý" }` → hủy link PayOS + order/deliveries/transaction → `Cancelled` + hoàn kho |
-| POST | `/api/payments/payos/webhook` | 🟢 PayOS gọi | verify chữ ký → order `Paid` + **tự tạo shipment** mỗi delivery |
+| POST | `/api/payments/{orderId}/cancel` | 🔑 customer | `{ "reason":"đổi ý" }` → hủy **mọi** link/transaction còn treo + order/deliveries → `Cancelled` + hoàn kho |
+| POST | `/api/payments/payos/webhook` | 🟢 PayOS gọi | verify chữ ký → order `Paid` + **tạo delivery theo store** + **tự tạo shipment** mỗi delivery |
 
 **Cấu hình** (trong `appsettings.json`, đang `.gitignore`):
 ```jsonc
@@ -217,12 +224,12 @@ GET  /api/cart                                 → xem giỏ, lấy cartItem id
 GET  /api/locations/provinces → .../districts → .../wards    → wardId
 POST /api/addresses                           { wardId, streetAddress, recipientName, recipientPhone }
 
-# 4. Đặt đơn (cả giỏ hoặc chọn lọc bằng cartItemIds)
-POST /api/orders                              { shippingAddressId, note, cartItemIds? }   → orderId
+# 4. Đặt đơn (cả giỏ hoặc chọn lọc bằng items; paymentMethod: 0=PayOS, 1=COD)
+POST /api/orders                              { shippingAddressId, note, items?, paymentMethod? }   → orderId
 
-# 5. Thanh toán
-POST /api/payments/{orderId}                  → checkoutUrl → khách trả tiền
-   PayOS → POST /api/payments/payos/webhook   → order Paid + tự tạo shipment (delivery Confirmed)
+# 5. Thanh toán (đơn PayOS; COD bỏ qua bước này — delivery đã tạo sẵn từ lúc đặt)
+POST /api/payments/{orderId}                  → checkoutUrl → khách trả tiền (trong 15 phút, quá hạn đơn → Expired)
+   PayOS → POST /api/payments/payos/webhook   → order Paid + tạo delivery theo store + tự tạo shipment (delivery Confirmed)
 
 # 6. Vendor xử lý giao hàng
 GET   /api/orders/stores/{storeId}/deliveries
@@ -245,12 +252,13 @@ Chạy `dotnet run --project src/FengDeskAI.WebAPI -- seed` (idempotent):
 
 | Enum | Giá trị |
 |---|---|
-| **OrderStatus** | `Pending` → `Paid` → `Processing` → `Completed` · `Cancelled` |
+| **OrderStatus** | `Pending` → `Paid` → `Processing` → `Completed` · `Cancelled` · `Expired` (PayOS quá 15' chưa trả) |
 | **DeliveryStatus** | `Pending` → `Confirmed` → `Preparing` → `Shipped` → `Delivered` · `Cancelled` · `Returned` |
 | **PaymentStatus** | `Pending` → `Paid` · `Cancelled` · `Failed` · `Expired` |
+| **PaymentMethod** | `PayOS` (0) · `COD` (1) |
 
 > Status order/delivery là đề xuất (State Diagram chưa chốt) — điều chỉnh khi cần.
 
 ---
 
-*Cập nhật: 2026-06-09. Pending chưa làm: Customer care (reviews/support/after-sales), Notification, Recommendation (AI).*
+*Cập nhật: 2026-06-10. Pending chưa làm: Customer care (reviews/support/after-sales), Notification, Recommendation (AI).*

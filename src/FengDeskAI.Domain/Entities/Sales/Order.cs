@@ -1,5 +1,6 @@
 using FengDeskAI.Domain.Common;
 using FengDeskAI.Domain.Entities.Geography;
+using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 
 namespace FengDeskAI.Domain.Entities.Sales;
@@ -14,6 +15,10 @@ public class Order : BaseEntity
     public Guid ShippingAddressId { get; set; }
 
     public OrderStatus Status { get; set; } = OrderStatus.Pending;
+
+    /// <summary>Phương thức thanh toán chọn lúc checkout — quyết định thời điểm tạo delivery
+    /// (COD: ngay khi đặt; online: khi webhook báo đã thanh toán) và đơn có bị hết hạn không.</summary>
+    public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.PayOS;
 
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }

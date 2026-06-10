@@ -1,6 +1,8 @@
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Sales;
+using FengDeskAI.Domain.Enums.Payment;
+using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,6 +47,16 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
         if (customerId.HasValue) query = query.Where(o => o.CustomerId == customerId.Value);
         return query.FirstOrDefaultAsync(o => o.Id == id, ct);
     }
+
+    public Task<List<Order>> GetOverduePendingAsync(DateTime cutoffUtc, int take, CancellationToken ct = default)
+        => _set.Include(o => o.Items)
+               .Include(o => o.Deliveries)
+               .Where(o => o.Status == OrderStatus.Pending
+                        && o.PaymentMethod != PaymentMethod.COD
+                        && o.CreatedAt < cutoffUtc)
+               .OrderBy(o => o.CreatedAt)
+               .Take(take)
+               .ToListAsync(ct);
 
     public Task<Delivery?> GetDeliveryWithOrderAsync(Guid deliveryId, CancellationToken ct = default)
         => _context.Set<Delivery>()

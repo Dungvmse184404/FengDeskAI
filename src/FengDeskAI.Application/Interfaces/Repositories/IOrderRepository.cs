@@ -16,6 +16,9 @@ public interface IOrderRepository : IGenericRepository<Order>
     /// <summary>Order kèm Deliveries + Items (tracked) — dùng cho hủy đơn / cập nhật.</summary>
     Task<Order?> GetWithGraphAsync(Guid id, Guid? customerId, CancellationToken ct = default);
 
+    /// <summary>Đơn online (không COD) còn Pending tạo trước <paramref name="cutoffUtc"/>, tracked kèm Items + Deliveries — quét hết hạn thanh toán.</summary>
+    Task<List<Order>> GetOverduePendingAsync(DateTime cutoffUtc, int take, CancellationToken ct = default);
+
     /// <summary>Delivery kèm Store + Order.Deliveries (tracked) — vendor cập nhật trạng thái + rollup.</summary>
     Task<Delivery?> GetDeliveryWithOrderAsync(Guid deliveryId, CancellationToken ct = default);
 

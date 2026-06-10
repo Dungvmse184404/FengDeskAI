@@ -1,10 +1,12 @@
 using FengDeskAI.Application;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure;
+using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.Persistence.Seeding;
 using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common.Filters;
 using FengDeskAI.WebAPI.Services;
+using FengDeskAI.WebAPI.Workers;
 using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -62,6 +64,10 @@ builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddApplication();
+
+// Worker chuyển đơn online quá hạn thanh toán sang Expired
+builder.Services.AddSettings<OrderExpirationOptions>(builder.Configuration);
+builder.Services.AddHostedService<OrderExpirationWorker>();
 
 builder.Services.AddAuthorization(options =>
 {
