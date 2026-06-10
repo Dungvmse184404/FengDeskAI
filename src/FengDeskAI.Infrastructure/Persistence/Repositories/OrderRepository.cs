@@ -15,6 +15,9 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     public Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
         => _context.Set<ProductItem>().Where(pi => ids.Contains(pi.Id)).ToListAsync(ct);
 
+    public Task AddDeliveriesAsync(IEnumerable<Delivery> deliveries, CancellationToken ct = default)
+        => _context.Set<Delivery>().AddRangeAsync(deliveries, ct);
+
     public async Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking().Where(o => o.CustomerId == customerId);

@@ -11,7 +11,6 @@ using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 using Microsoft.Extensions.Logging;
-using Microsoft.EntityFrameworkCore;
 
 namespace FengDeskAI.Application.Features.Payment.Services;
 
@@ -132,109 +131,82 @@ public class PaymentService : IPaymentService
         if (txn.Status == PaymentStatus.Paid)
             return ServiceResult.Success("Giao dịch đã được xử lý trước đó.");
 
-        const int maxRetries = 2;
-        int delayMs = 1000;
-
-        for (int retry = 0; retry <= maxRetries; retry++)
+        // Một transaction duy nhất. KHÔNG retry trên cùng context: nếu transaction rollback,
+        // EF change tracker không reset → retry sẽ phát UPDATE cho entity chưa tồn tại (0 rows).
+        // Lỗi thật → trả lỗi để PayOS gọi lại (request mới = context sạch); idempotent nhờ check
+        // txn.Status == Paid ở trên.
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            try
+            var now = DateTime.UtcNow;
+
+            if (!result.Success)
             {
-                await _uow.ExecuteInTransactionAsync<object?>(async _ =>
-                {
-                    var now = DateTime.UtcNow;
-
-                    if (!result.Success)
-                    {
-                        txn.Status = PaymentStatus.Failed;
-                        _logger.LogInformation("Giao dịch {OrderCode} thất bại: {Code} {Desc}", result.OrderCode, result.Code, result.Description);
-                        return null;
-                    }
-
-                    txn.Status = PaymentStatus.Paid;
-                    txn.ProviderTransactionId = result.ProviderReference;
-                    txn.PaidAt = now;
-
-                    var order = txn.Order;
-                    if (order.Status == OrderStatus.Pending || order.Status == OrderStatus.Expired)
-                    {
-                        if (order.Status == OrderStatus.Expired)
-                        {
-                            // Đơn đã bị job chuyển thành Expired, mình cần revert lại kho đã bị hoàn khi expire
-                            var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
-                            var byId = productItems.ToDictionary(p => p.Id);
-                            foreach (var item in order.Items)
-                                if (byId.TryGetValue(item.ProductItemId, out var pi))
-                                    pi.Stock -= item.Quantity; // Tru lai kho
-                        }
-
-                        order.Status = OrderStatus.Paid;
-                        order.StatusChangeNote = "Thanh toán PayOS thành công";
-
-                        // Đơn online: delivery chỉ được tạo sau khi đã thanh toán.
-                        // LƯU delivery TRƯỚC rồi mới gắn order_items.delivery_id để tránh
-                        // FK_order_items_deliveries_delivery_id (delivery chưa tồn tại lúc update item).
-                        if (order.Deliveries.Count == 0)
-                            await CreateAndLinkDeliveriesAsync(order, ct);
-
-                        // Khôi phục delivery status nếu đã tự khuyên thành Cancelled nãy (khi expired -> huỷ các delivery)
-                        foreach (var delivery in order.Deliveries.Where(d => d.Status == DeliveryStatus.Cancelled))
-                        {
-                            delivery.Status = DeliveryStatus.Pending;
-                            delivery.ProgressLogs.Add(new DeliveryProgressLog
-                            {
-                                DeliveryId = delivery.Id,
-                                SourceType = DeliverySource.System,
-                                FromStatus = DeliveryStatus.Cancelled.ToString(),
-                                ToStatus = DeliveryStatus.Pending.ToString(),
-                                Note = "Khôi phục giao hàng do nhận thanh toán trễ",
-                                LoggedAt = now,
-                            });
-                        }
-
-                        await CreateShipmentsAsync(order, now, ct);
-
-                        var rolled = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
-                        if (rolled != order.Status)
-                        {
-                            order.Status = rolled;
-                            order.StatusChangeNote = "Đã tạo vận đơn cho các nhà vườn";
-                        }
-                    }
-                    else if (order.Status == OrderStatus.Cancelled)
-                    {
-                        // Trả tiền sau khi đơn đã hết hạn/hủy (kho đã hoàn) — không revive đơn, cần đối soát hoàn tiền thủ công.
-                        _logger.LogError("Nhận thanh toán cho order {OrderId} đã {Status} — cần hoàn tiền thủ công cho giao dịch {OrderCode}.",
-                            order.Id, order.Status, txn.OrderCode);
-                    }
-                    else
-                    {
-                        _logger.LogWarning("Order {OrderId} không ở trạng thái Pending khi nhận thanh toán ({Status}).", order.Id, order.Status);
-                    }
-
-                    return null;
-                }, ct);
-
-                break; // Thành công thì loop break
+                txn.Status = PaymentStatus.Failed;
+                _logger.LogInformation("Giao dịch {OrderCode} thất bại: {Code} {Desc}", result.OrderCode, result.Code, result.Description);
+                return null;
             }
-            catch (DbUpdateConcurrencyException ex)
+
+            txn.Status = PaymentStatus.Paid;
+            txn.ProviderTransactionId = result.ProviderReference;
+            txn.PaidAt = now;
+
+            var order = txn.Order;
+            if (order.Status == OrderStatus.Pending || order.Status == OrderStatus.Expired)
             {
-                if (retry == maxRetries)
+                if (order.Status == OrderStatus.Expired)
                 {
-                    _logger.LogError(ex, "Lỗi đồng bộ dữ liệu khi xử lý Webhook thanh toán PayOS orderCode {OrderCode} sau {MaxRetries} lần thử.", result.OrderCode, maxRetries);
-                    throw;
+                    // Đơn đã bị job chuyển Expired (kho đã hoàn) — trừ lại kho vì nhận được thanh toán.
+                    var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
+                    var byId = productItems.ToDictionary(p => p.Id);
+                    foreach (var item in order.Items)
+                        if (byId.TryGetValue(item.ProductItemId, out var pi))
+                            pi.Stock -= item.Quantity;
                 }
 
-                _logger.LogWarning(ex, "Xung đột dữ liệu webhook OrderCode {OrderCode}. Thử lại lần {Retry}/{MaxRetries} trong {Delay}ms.", result.OrderCode, retry + 1, maxRetries, delayMs);
+                order.Status = OrderStatus.Paid;
+                order.StatusChangeNote = "Thanh toán PayOS thành công";
 
-                await Task.Delay(delayMs, ct);
+                // Đơn online: delivery chỉ tạo sau khi đã thanh toán — lưu delivery trước, gắn item sau.
+                if (order.Deliveries.Count == 0)
+                    await CreateAndLinkDeliveriesAsync(order, ct);
 
-                // Tải lại entites từ db context để lấy giá trị mới nhất rồi retry
-                await _uow.ReloadEntityAsync(txn);
-                if (txn.Order != null) {
-                    await _uow.ReloadEntityAsync(txn.Order);
+                // Khôi phục delivery nếu đã bị huỷ lúc expire.
+                foreach (var delivery in order.Deliveries.Where(d => d.Status == DeliveryStatus.Cancelled))
+                {
+                    delivery.Status = DeliveryStatus.Pending;
+                    delivery.ProgressLogs.Add(new DeliveryProgressLog
+                    {
+                        DeliveryId = delivery.Id,
+                        SourceType = DeliverySource.System,
+                        FromStatus = DeliveryStatus.Cancelled.ToString(),
+                        ToStatus = DeliveryStatus.Pending.ToString(),
+                        Note = "Khôi phục giao hàng do nhận thanh toán trễ",
+                        LoggedAt = now,
+                    });
+                }
+
+                await CreateShipmentsAsync(order, now, ct);
+
+                var rolled = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
+                if (rolled != order.Status)
+                {
+                    order.Status = rolled;
+                    order.StatusChangeNote = "Đã tạo vận đơn cho các nhà vườn";
                 }
             }
-        }
+            else if (order.Status == OrderStatus.Cancelled)
+            {
+                // Trả tiền sau khi đơn đã hết hạn/hủy (kho đã hoàn) — không revive, cần đối soát hoàn tiền thủ công.
+                _logger.LogError("Nhận thanh toán cho order {OrderId} đã {Status} — cần hoàn tiền thủ công cho giao dịch {OrderCode}.",
+                    order.Id, order.Status, txn.OrderCode);
+            }
+            else
+            {
+                _logger.LogWarning("Order {OrderId} không ở trạng thái Pending khi nhận thanh toán ({Status}).", order.Id, order.Status);
+            }
+
+            return null;
+        }, ct);
 
         _logger.LogInformation("[Webhook] Đã xử lý xong orderCode {OrderCode}: transaction={TxnStatus}, order={OrderStatus}.",
             result.OrderCode, txn.Status, txn.Order?.Status);
@@ -309,11 +281,13 @@ public class PaymentService : IPaymentService
                 Status = DeliveryStatus.Pending,
                 ShippingFee = 0m,
             };
-            order.Deliveries.Add(delivery);
             byStore[storeId] = delivery;
+            order.Deliveries.Add(delivery);
         }
 
-        // Pha 1: INSERT deliveries (chưa đụng tới order_items)
+        // Pha 1: Add tường minh qua DbSet (chắc chắn Added) + LƯU NGAY để INSERT deliveries
+        // trước khi order_items tham chiếu — tránh FK + tránh EF phát nhầm UPDATE (0 rows).
+        await _uow.Orders.AddDeliveriesAsync(byStore.Values, ct);
         await _uow.SaveChangesAsync(ct);
 
         // Pha 2: gắn item vào delivery theo store + cộng subtotal (deliveries đã tồn tại trong transaction)
@@ -321,6 +295,7 @@ public class PaymentService : IPaymentService
         {
             var delivery = byStore[item.ProductItem.Product.GardenStoreId];
             item.DeliveryId = delivery.Id;
+            item.Delivery = delivery;
             delivery.Subtotal += item.UnitPrice * item.Quantity;
         }
     }

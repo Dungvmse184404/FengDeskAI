@@ -8,6 +8,9 @@ public interface IOrderRepository : IGenericRepository<Order>
     /// <summary>Load product items (tracked) theo danh sách id — dùng để hoàn kho khi hủy đơn.</summary>
     Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> ids, CancellationToken ct = default);
 
+    /// <summary>Thêm deliveries tường minh vào context (đảm bảo trạng thái Added → INSERT).</summary>
+    Task AddDeliveriesAsync(IEnumerable<Delivery> deliveries, CancellationToken ct = default);
+
     Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>Order chi tiết (Items + Deliveries.Store + StatusLogs). Lọc theo customer nếu truyền.</summary>
