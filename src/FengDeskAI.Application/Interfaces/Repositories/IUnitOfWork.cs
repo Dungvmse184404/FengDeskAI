@@ -31,4 +31,6 @@ public interface IUnitOfWork
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default);
+
+    Task ReloadEntityAsync<TEntity>(TEntity entity) where TEntity : class;
 }

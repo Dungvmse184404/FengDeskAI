@@ -29,4 +29,7 @@ public class Order : BaseEntity
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
     public ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
     public ICollection<OrderStatusLog> StatusLogs { get; set; } = new List<OrderStatusLog>();
+
+    [System.ComponentModel.DataAnnotations.Schema.NotMapped]
+    public string? StatusChangeNote { get; set; }
 }

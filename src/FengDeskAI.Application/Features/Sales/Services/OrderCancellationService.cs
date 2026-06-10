@@ -74,14 +74,7 @@ public class OrderCancellationService : IOrderCancellationService
                 if (byId.TryGetValue(item.ProductItemId, out var pi))
                     pi.Stock += item.Quantity;
 
-            order.StatusLogs.Add(new OrderStatusLog
-            {
-                FromStatus = from.ToString(),
-                ToStatus = toOrderStatus.ToString(),
-                ChangedBy = actorId,
-                ChangedAt = now,
-                Note = note,
-            });
+            order.StatusChangeNote = note;
             return null;
         }, ct);
     }
