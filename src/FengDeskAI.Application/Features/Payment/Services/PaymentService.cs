@@ -7,10 +7,12 @@ using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 using Microsoft.Extensions.Logging;
+using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
 
 namespace FengDeskAI.Application.Features.Payment.Services;
 
@@ -313,6 +315,17 @@ public class PaymentService : IPaymentService
                 order.Status = rolled;
                 order.StatusChangeNote = "Đã tạo vận đơn cho các nhà vườn";
             }
+
+            await _uow.Notifications.AddAsync(new NotificationEntity
+            {
+                UserId = order.CustomerId,
+                Type = NotificationType.OrderPaid,
+                Title = "Thanh toán thành công",
+                Message = "Đơn hàng của bạn đã được thanh toán. Đang chuẩn bị giao hàng.",
+                ReferenceId = order.Id,
+                ReferenceType = "Order",
+                IsRead = false,
+            }, ct);
         }
         else if (order.Status == OrderStatus.Cancelled)
         {

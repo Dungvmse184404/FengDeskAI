@@ -2,10 +2,12 @@ using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 using Microsoft.Extensions.Logging;
+using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
 
 namespace FengDeskAI.Application.Features.Sales.Services;
 
@@ -75,6 +77,20 @@ public class OrderCancellationService : IOrderCancellationService
                     pi.Stock += item.Quantity;
 
             order.StatusChangeNote = note;
+
+            await _uow.Notifications.AddAsync(new NotificationEntity
+            {
+                UserId = order.CustomerId,
+                Type = NotificationType.OrderCancelled,
+                Title = expired ? "Đơn hàng hết hạn thanh toán" : "Đơn hàng đã hủy",
+                Message = expired
+                    ? "Đơn hàng của bạn đã hết hạn do chưa thanh toán đúng hạn."
+                    : "Đơn hàng của bạn đã bị hủy.",
+                ReferenceId = order.Id,
+                ReferenceType = "Order",
+                IsRead = false,
+            }, ct);
+
             return null;
         }, ct);
     }
