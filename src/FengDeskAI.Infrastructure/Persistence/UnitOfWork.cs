@@ -24,7 +24,8 @@ public class UnitOfWork : IUnitOfWork
         ICartRepository carts,
         IOrderRepository orders,
         IShippingRepository shipping,
-        ITransactionRepository transactions)
+        ITransactionRepository transactions,
+        INotificationRepository notifications)
     {
         _context = context;
         _logger = logger;
@@ -41,6 +42,7 @@ public class UnitOfWork : IUnitOfWork
         Orders = orders;
         Shipping = shipping;
         Transactions = transactions;
+        Notifications = notifications;
     }
 
     public IUserRepository Users { get; }
@@ -56,6 +58,7 @@ public class UnitOfWork : IUnitOfWork
     public IOrderRepository Orders { get; }
     public IShippingRepository Shipping { get; }
     public ITransactionRepository Transactions { get; }
+    public INotificationRepository Notifications { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);
