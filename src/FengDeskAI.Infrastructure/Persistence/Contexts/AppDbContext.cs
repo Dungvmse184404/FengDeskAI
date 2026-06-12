@@ -1,5 +1,6 @@
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Entities.Chat;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Notification;
@@ -52,6 +53,10 @@ public class AppDbContext : DbContext
 
     // Notification
     public DbSet<Notification> Notifications => Set<Notification>();
+
+    // Chat
+    public DbSet<Chatbox> Chatboxes => Set<Chatbox>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

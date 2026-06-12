@@ -1,5 +1,7 @@
 using FengDeskAI.Application.Features.Catalog.Mappings;
 using FengDeskAI.Application.Features.Catalog.Services;
+using FengDeskAI.Application.Features.Chat.Mappings;
+using FengDeskAI.Application.Features.Chat.Services;
 using FengDeskAI.Application.Features.Geography.Mappings;
 using FengDeskAI.Application.Features.Geography.Services;
 using FengDeskAI.Application.Features.Notification.Mappings;
@@ -35,6 +37,7 @@ public static class DependencyInjection
             cfg.AddProfile<SalesMappingProfile>();
             cfg.AddProfile<ShippingMappingProfile>();
             cfg.AddProfile<NotificationMappingProfile>();
+            cfg.AddProfile<ChatMappingProfile>();
         });
 
         services.AddScoped<IAuthService, AuthService>();
@@ -60,6 +63,8 @@ public static class DependencyInjection
         services.AddScoped<IPaymentService, PaymentService>();
 
         services.AddScoped<INotificationService, NotificationService>();
+
+        services.AddScoped<IChatService, ChatService>();
 
         return services;
     }

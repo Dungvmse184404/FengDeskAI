@@ -5,6 +5,7 @@ using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.Persistence.Seeding;
 using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common.Filters;
+using FengDeskAI.WebAPI.Hubs;
 using FengDeskAI.WebAPI.Services;
 using FengDeskAI.WebAPI.Workers;
 using Microsoft.OpenApi.Models;
@@ -62,6 +63,8 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 
+builder.Services.AddSignalR();
+
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddApplication();
 
@@ -103,5 +106,6 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
