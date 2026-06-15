@@ -25,4 +25,16 @@ public interface IChatService
 
     /// <summary>Đánh dấu tất cả message chưa đọc trong chatbox là đã đọc.</summary>
     Task<IServiceResult> MarkChatboxAsReadAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
+
+    /// <summary>Kiểm tra user có quyền truy cập chatbox không.</summary>
+    Task<IServiceResult> ValidateChatboxAccessAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
+
+    /// <summary>Lấy message với thông tin chatbox (dùng cho realtime broadcast).</summary>
+    Task<ChatMessageWithChatboxResponse?> GetMessageWithChatboxAsync(Guid messageId, CancellationToken ct = default);
+
+    /// <summary>Ghi nhận connection của user (tracking online status).</summary>
+    void RecordUserConnection(Guid userId, string connectionId);
+
+    /// <summary>Xoá connection của user.</summary>
+    void RemoveUserConnection(Guid userId, string connectionId);
 }

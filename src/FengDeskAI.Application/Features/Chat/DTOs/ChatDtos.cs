@@ -36,3 +36,14 @@ public class ChatboxListResponse
     public int TotalCount { get; set; }
     public int TotalPages { get; set; }
 }
+
+public class ChatMessageWithChatboxResponse
+{
+    public Guid Id { get; set; }
+    public Guid ChatboxId { get; set; }
+    public Guid SenderUserId { get; set; }
+    public string Content { get; set; } = null!;
+    public bool IsRead { get; set; }
+    public DateTime? ReadAt { get; set; }
+    public DateTime CreatedAt { get; set; }
+}
