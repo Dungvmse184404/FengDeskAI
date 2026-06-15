@@ -27,18 +27,18 @@ public class CartService : ICartService
     public async Task<IServiceResult<CartResponse>> AddItemAsync(Guid userId, AddCartItemRequest request, CancellationToken ct = default)
     {
         if (request.Quantity <= 0)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, "Số lượng phải lớn hơn 0.");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Cart.QuantityInvalid);
 
         var productItem = await _uow.Carts.GetProductItemAsync(request.ProductItemId, ct);
         if (productItem is null || productItem.Product is null || !productItem.Product.IsActive)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, "Sản phẩm không tồn tại hoặc ngừng bán.");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Cart.ProductUnavailable);
 
         var cart = await _uow.Carts.GetOrCreateAsync(userId, ct);
         var existing = await _uow.Carts.GetItemAsync(cart.Id, request.ProductItemId, ct);
         var newQuantity = (existing?.Quantity ?? 0) + request.Quantity;
 
         if (newQuantity > productItem.Stock)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, $"Không đủ tồn kho (còn {productItem.Stock}).");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Cart.OutOfStockFormat, productItem.Stock));
 
         if (existing is null)
         {
@@ -63,11 +63,11 @@ public class CartService : ICartService
     {
         var cart = await _uow.Carts.GetByCustomerAsync(userId, ct);
         if (cart is null)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, "Giỏ hàng trống.");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Cart.Empty);
 
         var item = await _uow.Carts.GetItemByIdAsync(cart.Id, itemId, ct);
         if (item is null)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy dòng hàng trong giỏ.");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Cart.ItemNotFound);
 
         if (request.Quantity <= 0)
         {
@@ -77,7 +77,7 @@ public class CartService : ICartService
         {
             var productItem = await _uow.Carts.GetProductItemAsync(item.ProductItemId, ct);
             if (productItem is not null && request.Quantity > productItem.Stock)
-                return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, $"Không đủ tồn kho (còn {productItem.Stock}).");
+                return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Cart.OutOfStockFormat, productItem.Stock));
             item.Quantity = request.Quantity;
         }
 
@@ -89,11 +89,11 @@ public class CartService : ICartService
     {
         var cart = await _uow.Carts.GetByCustomerAsync(userId, ct);
         if (cart is null)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, "Giỏ hàng trống.");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Cart.Empty);
 
         var item = await _uow.Carts.GetItemByIdAsync(cart.Id, itemId, ct);
         if (item is null)
-            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy dòng hàng trong giỏ.");
+            return ServiceResult<CartResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Cart.ItemNotFound);
 
         _uow.Carts.RemoveItem(item);
         await _uow.SaveChangesAsync(ct);
@@ -108,7 +108,7 @@ public class CartService : ICartService
             _uow.Carts.RemoveItems(cart.Items);
             await _uow.SaveChangesAsync(ct);
         }
-        return ServiceResult.Success("Đã xóa toàn bộ giỏ hàng.");
+        return ServiceResult.Success(ApiStatusMessages.Cart.Cleared);
     }
 
     private CartResponse BuildResponse(Guid userId, Cart? cart)

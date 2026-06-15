@@ -37,26 +37,26 @@ public class AuthService : IAuthService
         var user = await _uow.Users.GetByEmailAsync(email, ct);
 
         if (user is null || !_passwordService.Verify(request.Password, user.PasswordHash))
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, "Email hoặc mật khẩu không đúng.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, ApiStatusMessages.Auth.InvalidCredentials);
 
         if (!user.IsActive)
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Forbidden, "Tài khoản đã bị vô hiệu hóa.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Auth.AccountDisabled);
 
         var response = await IssueTokensAsync(user, ct);
         await _uow.SaveChangesAsync(ct);
 
-        return ServiceResult<AuthResponse>.Success(response, "Đăng nhập thành công.");
+        return ServiceResult<AuthResponse>.Success(response, ApiStatusMessages.Auth.LoginSuccess);
     }
 
     public async Task<IServiceResult<AuthResponse>> RefreshAsync(RefreshTokenRequest request, CancellationToken ct = default)
     {
         var existing = await _uow.RefreshTokens.GetByTokenAsync(request.RefreshToken, ct);
         if (existing is null || !existing.IsActive)
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, "Refresh token không hợp lệ hoặc đã hết hạn.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, ApiStatusMessages.Auth.InvalidRefreshToken);
 
         var user = await _uow.Users.GetByIdAsync(existing.UserId, ct);
         if (user is null || !user.IsActive)
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, "Tài khoản không khả dụng.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, ApiStatusMessages.Auth.AccountUnavailable);
 
         existing.IsRevoked = true;
         existing.RevokedAt = DateTime.UtcNow;
@@ -65,14 +65,14 @@ public class AuthService : IAuthService
         var response = await IssueTokensAsync(user, ct, existing);
         await _uow.SaveChangesAsync(ct);
 
-        return ServiceResult<AuthResponse>.Success(response, "Làm mới token thành công.");
+        return ServiceResult<AuthResponse>.Success(response, ApiStatusMessages.Auth.RefreshSuccess);
     }
 
     public async Task<IServiceResult> LogoutAsync(string refreshToken, CancellationToken ct = default)
     {
         var existing = await _uow.RefreshTokens.GetByTokenAsync(refreshToken, ct);
         if (existing is null)
-            return ServiceResult.Success("Đã đăng xuất.");
+            return ServiceResult.Success(ApiStatusMessages.Auth.LoggedOut);
 
         if (!existing.IsRevoked)
         {
@@ -82,16 +82,16 @@ public class AuthService : IAuthService
             await _uow.SaveChangesAsync(ct);
         }
 
-        return ServiceResult.Success("Đã đăng xuất.");
+        return ServiceResult.Success(ApiStatusMessages.Auth.LoggedOut);
     }
 
     public async Task<IServiceResult<UserSummary>> GetMeAsync(Guid userId, CancellationToken ct = default)
     {
         var user = await _uow.Users.GetByIdAsync(userId, ct);
         if (user is null)
-            return ServiceResult<UserSummary>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy người dùng.");
+            return ServiceResult<UserSummary>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Auth.UserNotFound);
         if (!user.IsActive)
-            return ServiceResult<UserSummary>.Failure(ApiStatusCodes.Forbidden, "Tài khoản đã bị vô hiệu hóa.");
+            return ServiceResult<UserSummary>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Auth.AccountDisabled);
 
         return ServiceResult<UserSummary>.Success(_mapper.Map<UserSummary>(user));
     }
