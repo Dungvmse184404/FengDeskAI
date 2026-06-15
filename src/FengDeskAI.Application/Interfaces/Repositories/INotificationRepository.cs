@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
 

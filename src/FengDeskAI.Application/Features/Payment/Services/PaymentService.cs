@@ -12,7 +12,7 @@ using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 using Microsoft.Extensions.Logging;
-using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Features.Payment.Services;
 
@@ -316,7 +316,7 @@ public class PaymentService : IPaymentService
                 order.StatusChangeNote = "Đã tạo vận đơn cho các nhà vườn";
             }
 
-            await _uow.Notifications.AddAsync(new NotificationEntity
+            await _uow.Notifications.AddAsync(new Notification
             {
                 UserId = order.CustomerId,
                 Type = NotificationType.OrderPaid,

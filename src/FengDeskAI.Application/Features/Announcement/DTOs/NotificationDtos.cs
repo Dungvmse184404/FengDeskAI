@@ -1,6 +1,6 @@
 using FengDeskAI.Domain.Enums.Notification;
 
-namespace FengDeskAI.Application.Features.Notification.DTOs;
+namespace FengDeskAI.Application.Features.Announcement.DTOs;
 
 public class NotificationResponse
 {

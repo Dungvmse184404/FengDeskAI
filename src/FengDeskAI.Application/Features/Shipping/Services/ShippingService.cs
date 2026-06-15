@@ -10,7 +10,7 @@ using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
-using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Features.Shipping.Services;
 
@@ -77,7 +77,7 @@ public class ShippingService : IShippingService
             if (delivery.Order is not null)
             {
                 var (nType, nTitle, nMsg) = MapDeliveryNotification(request.NewStatus);
-                await _uow.Notifications.AddAsync(new NotificationEntity
+                await _uow.Notifications.AddAsync(new Notification
                 {
                     UserId = delivery.Order.CustomerId,
                     Type = nType,
@@ -89,7 +89,7 @@ public class ShippingService : IShippingService
                 }, ct);
 
                 if (delivery.Order.Status == OrderStatus.Completed && preRollup != OrderStatus.Completed)
-                    await _uow.Notifications.AddAsync(new NotificationEntity
+                    await _uow.Notifications.AddAsync(new Notification
                     {
                         UserId = delivery.Order.CustomerId,
                         Type = NotificationType.OrderCompleted,

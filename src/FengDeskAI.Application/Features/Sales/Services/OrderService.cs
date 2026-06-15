@@ -12,7 +12,7 @@ using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
-using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Features.Sales.Services;
 
@@ -142,7 +142,7 @@ public class OrderService : IOrderService
                     _uow.Carts.RemoveItems(toRemove);
             }
 
-            await _uow.Notifications.AddAsync(new NotificationEntity
+            await _uow.Notifications.AddAsync(new Notification
             {
                 UserId = userId,
                 Type = NotificationType.OrderPlaced,
@@ -243,7 +243,7 @@ public class OrderService : IOrderService
             RecomputeOrderStatus(delivery.Order, userId);
 
             var (nType, nTitle, nMsg) = MapDeliveryNotification(request.Status);
-            await _uow.Notifications.AddAsync(new NotificationEntity
+            await _uow.Notifications.AddAsync(new Notification
             {
                 UserId = delivery.Order.CustomerId,
                 Type = nType,
@@ -255,7 +255,7 @@ public class OrderService : IOrderService
             }, ct);
 
             if (delivery.Order.Status == OrderStatus.Completed && preRollupStatus != OrderStatus.Completed)
-                await _uow.Notifications.AddAsync(new NotificationEntity
+                await _uow.Notifications.AddAsync(new Notification
                 {
                     UserId = delivery.Order.CustomerId,
                     Type = NotificationType.OrderCompleted,

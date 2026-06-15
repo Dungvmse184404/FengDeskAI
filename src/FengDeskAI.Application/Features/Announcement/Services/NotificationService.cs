@@ -2,11 +2,11 @@ using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
-using FengDeskAI.Application.Features.Notification.DTOs;
+using FengDeskAI.Application.Features.Announcement.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
-using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 
-namespace FengDeskAI.Application.Features.Notification.Services;
+namespace FengDeskAI.Application.Features.Announcement.Services;
 
 public class NotificationService : INotificationService
 {
@@ -21,7 +21,7 @@ public class NotificationService : INotificationService
 
     public async Task CreateAsync(CreateNotificationRequest request, CancellationToken ct = default)
     {
-        var notification = new NotificationEntity
+        var noti = new Notification
         {
             UserId = request.UserId,
             Type = request.Type,
@@ -31,7 +31,7 @@ public class NotificationService : INotificationService
             ReferenceType = request.ReferenceType,
             IsRead = false,
         };
-        await _uow.Notifications.AddAsync(notification, ct);
+        await _uow.Notifications.AddAsync(noti, ct);
         await _uow.SaveChangesAsync(ct);
     }
 
