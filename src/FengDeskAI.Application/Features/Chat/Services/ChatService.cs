@@ -4,7 +4,7 @@ using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Chat.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
-using ChatboxEntity = FengDeskAI.Domain.Entities.Chat.Chatbox;
+using System.Collections.Concurrent;
 using ChatMessageEntity = FengDeskAI.Domain.Entities.Chat.ChatMessage;
 
 namespace FengDeskAI.Application.Features.Chat.Services;
@@ -13,6 +13,7 @@ public class ChatService : IChatService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private static readonly ConcurrentDictionary<Guid, HashSet<string>> _userConnections = new();
 
     public ChatService(IUnitOfWork uow, IMapper mapper)
     {
@@ -135,5 +136,57 @@ public class ChatService : IChatService
 
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success($"Đã đánh dấu {unread.Count} tin nhắn là đã đọc.");
+    }
+
+    public async Task<IServiceResult> ValidateChatboxAccessAsync(Guid userId, Guid chatboxId, CancellationToken ct = default)
+    {
+        var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
+        if (chatbox is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy chatbox.");
+
+        if (chatbox.SenderUserId != userId && chatbox.RecipientUserId != userId)
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền truy cập chatbox này.");
+
+        return ServiceResult.Success();
+    }
+
+    public async Task<ChatMessageWithChatboxResponse?> GetMessageWithChatboxAsync(Guid messageId, CancellationToken ct = default)
+    {
+        var message = await _uow.ChatMessages.GetByIdAsync(messageId, ct);
+        if (message is null)
+            return null;
+
+        return new ChatMessageWithChatboxResponse
+        {
+            Id = message.Id,
+            ChatboxId = message.ChatboxId,
+            SenderUserId = message.SenderUserId,
+            Content = message.Content,
+            IsRead = message.IsRead,
+            ReadAt = message.ReadAt,
+            CreatedAt = message.CreatedAt,
+        };
+    }
+
+    public void RecordUserConnection(Guid userId, string connectionId)
+    {
+        _userConnections.AddOrUpdate(
+            userId,
+            new HashSet<string> { connectionId },
+            (_, connections) =>
+            {
+                connections.Add(connectionId);
+                return connections;
+            });
+    }
+
+    public void RemoveUserConnection(Guid userId, string connectionId)
+    {
+        if (_userConnections.TryGetValue(userId, out var connections))
+        {
+            connections.Remove(connectionId);
+            if (connections.Count == 0)
+                _userConnections.TryRemove(userId, out _);
+        }
     }
 }

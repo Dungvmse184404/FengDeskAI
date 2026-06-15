@@ -22,12 +22,22 @@ public class ChatHub : Hub
     public override async Task OnConnectedAsync()
     {
         var userId = _currentUser.UserId;
-        if (userId != Guid.Empty)
+        if (userId.HasValue && userId.Value != Guid.Empty)
         {
-            // Thêm user vào group "user-{userId}" để receive notifications
-            await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{userId}");
+            _chatService.RecordUserConnection(userId.Value, Context.ConnectionId);
+            await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{userId.Value}");
         }
         await base.OnConnectedAsync();
+    }
+
+    public override async Task OnDisconnectedAsync(Exception? exception)
+    {
+        var userId = _currentUser.UserId;
+        if (userId.HasValue && userId.Value != Guid.Empty)
+        {
+            _chatService.RemoveUserConnection(userId.Value, Context.ConnectionId);
+        }
+        await base.OnDisconnectedAsync(exception);
     }
 
     /// <summary>
@@ -42,7 +52,7 @@ public class ChatHub : Hub
             return;
         }
 
-        var result = await _chatService.SendMessageAsync(userId.Value, chatboxId, new SendMessageRequest { Content = content });
+        var result = await _chatService.SendMessageAsync(userId.Value, chatboxId, new SendMessageRequest { Content = content }, CancellationToken.None);
         if (!result.IsSuccess)
         {
             await Clients.Caller.SendAsync("error", result.Message);
@@ -51,15 +61,18 @@ public class ChatHub : Hub
 
         // Broadcast message đến tất cả clients trong chatbox
         var message = result.Data;
-        await Clients.Group($"chat-{chatboxId}").SendAsync("messageReceived", new
+        if (message is not null)
         {
-            message.Id,
-            message.ChatboxId,
-            message.SenderUserId,
-            message.Content,
-            message.IsRead,
-            message.CreatedAt,
-        });
+            await Clients.Group($"chat-{chatboxId}").SendAsync("messageReceived", new
+            {
+                message.Id,
+                message.ChatboxId,
+                message.SenderUserId,
+                message.Content,
+                message.IsRead,
+                message.CreatedAt,
+            });
+        }
     }
 
     /// <summary>
@@ -81,8 +94,11 @@ public class ChatHub : Hub
             return;
         }
 
-        // Broadcast read receipt
-        await Clients.All.SendAsync("messageMarkedAsRead", new { messageId });
+        var message = await _chatService.GetMessageWithChatboxAsync(messageId, CancellationToken.None);
+        if (message is not null)
+        {
+            await Clients.Group($"chat-{message.ChatboxId}").SendAsync("messageMarkedAsRead", new { messageId });
+        }
     }
 
     /// <summary>
@@ -94,6 +110,13 @@ public class ChatHub : Hub
         if (!userId.HasValue || userId.Value == Guid.Empty)
         {
             await Clients.Caller.SendAsync("error", "Bạn chưa đăng nhập.");
+            return;
+        }
+
+        var result = await _chatService.ValidateChatboxAccessAsync(userId.Value, chatboxId, CancellationToken.None);
+        if (!result.IsSuccess)
+        {
+            await Clients.Caller.SendAsync("error", result.Message);
             return;
         }
 
