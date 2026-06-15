@@ -45,14 +45,14 @@ public class ShippingService : IShippingService
 
             var delivery = await ResolveDeliveryAsync(request, ct);
             if (delivery is null)
-                return ServiceResult.Success("Đã nhận webhook nhưng chưa khớp delivery (lưu để đối soát sau).", ApiStatusCodes.Accepted);
+                return ServiceResult.Success(ApiStatusMessages.Shipping.WebhookUnmatched, ApiStatusCodes.Accepted);
 
             if (!OrderWorkflow.IsValidDeliveryTransition(delivery.Status, request.NewStatus))
             {
                 await _uow.Shipping.AddProgressLogAsync(BuildLog(delivery, delivery.Status, request, payloadJson,
                     note: $"Webhook bị bỏ qua: chuyển trạng thái không hợp lệ {delivery.Status} → {request.NewStatus}"), ct);
                 webhook.IsProcessed = true;
-                return ServiceResult.Failure(ApiStatusCodes.Conflict, $"Trạng thái webhook không hợp lệ với delivery hiện tại ({delivery.Status}).");
+                return ServiceResult.Failure(ApiStatusCodes.Conflict, string.Format(ApiStatusMessages.Shipping.WebhookInvalidStatusFormat, delivery.Status));
             }
 
             var from = delivery.Status;
@@ -84,7 +84,7 @@ public class ShippingService : IShippingService
                     Title = nTitle,
                     Message = nMsg,
                     ReferenceId = delivery.Id,
-                    ReferenceType = "Delivery",
+                    ReferenceType = ReferenceType.Delivery,
                     IsRead = false,
                 }, ct);
 
@@ -96,12 +96,11 @@ public class ShippingService : IShippingService
                         Title = "Hoàn thành đơn hàng",
                         Message = "Đơn hàng của bạn đã hoàn thành. Cảm ơn bạn đã mua sắm!",
                         ReferenceId = delivery.Order.Id,
-                        ReferenceType = "Order",
+                        ReferenceType = ReferenceType.Order,
                         IsRead = false,
                     }, ct);
             }
-
-            return ServiceResult.Success("Đã xử lý webhook và cập nhật trạng thái giao hàng.");
+            return ServiceResult.Success(ApiStatusMessages.Shipping.WebhookProcessed);
         }, ct);
     }
 
@@ -109,9 +108,9 @@ public class ShippingService : IShippingService
     {
         var delivery = await _uow.Shipping.GetDeliveryByIdAsync(deliveryId, ct);
         if (delivery is null)
-            return ServiceResult<List<DeliveryProgressLogResponse>>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy delivery.");
+            return ServiceResult<List<DeliveryProgressLogResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Shipping.DeliveryNotFound);
         if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
-            return ServiceResult<List<DeliveryProgressLogResponse>>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem tiến trình giao hàng này.");
+            return ServiceResult<List<DeliveryProgressLogResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Shipping.ViewProgressForbidden);
 
         var logs = await _uow.Shipping.GetProgressLogsAsync(deliveryId, ct);
         return ServiceResult<List<DeliveryProgressLogResponse>>.Success(_mapper.Map<List<DeliveryProgressLogResponse>>(logs));

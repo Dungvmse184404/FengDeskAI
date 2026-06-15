@@ -28,7 +28,7 @@ public class UserAddressService : IUserAddressService
     {
         var address = await _uow.UserAddresses.GetByIdForUserAsync(id, userId, ct);
         if (address is null)
-            return ServiceResult<UserAddressResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy địa chỉ.");
+            return ServiceResult<UserAddressResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Address.NotFound);
         return ServiceResult<UserAddressResponse>.Success(_mapper.Map<UserAddressResponse>(address));
     }
 
@@ -52,14 +52,14 @@ public class UserAddressService : IUserAddressService
         await _uow.SaveChangesAsync(ct);
 
         return ServiceResult<UserAddressResponse>.Success(
-            _mapper.Map<UserAddressResponse>(entity), "Thêm địa chỉ thành công.", ApiStatusCodes.Created);
+            _mapper.Map<UserAddressResponse>(entity), ApiStatusMessages.Address.Created, ApiStatusCodes.Created);
     }
 
     public async Task<IServiceResult<UserAddressResponse>> UpdateAsync(Guid id, Guid userId, UpdateUserAddressRequest request, CancellationToken ct = default)
     {
         var address = await _uow.UserAddresses.GetByIdForUserAsync(id, userId, ct);
         if (address is null)
-            return ServiceResult<UserAddressResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy địa chỉ.");
+            return ServiceResult<UserAddressResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Address.NotFound);
 
         var validation = await ValidateAsync(request.WardId, request.RecipientName, request.RecipientPhone, request.StreetAddress, ct);
         if (validation is not null)
@@ -69,21 +69,21 @@ public class UserAddressService : IUserAddressService
         _uow.UserAddresses.Update(address);
         await _uow.SaveChangesAsync(ct);
 
-        return ServiceResult<UserAddressResponse>.Success(_mapper.Map<UserAddressResponse>(address), "Cập nhật địa chỉ thành công.");
+        return ServiceResult<UserAddressResponse>.Success(_mapper.Map<UserAddressResponse>(address), ApiStatusMessages.Address.Updated);
     }
 
     public async Task<IServiceResult<UserAddressResponse>> SetDefaultAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         var address = await _uow.UserAddresses.GetByIdForUserAsync(id, userId, ct);
         if (address is null)
-            return ServiceResult<UserAddressResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy địa chỉ.");
+            return ServiceResult<UserAddressResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Address.NotFound);
 
         return await _uow.ExecuteInTransactionAsync(async _ =>
         {
             await _uow.UserAddresses.ClearDefaultsForUserAsync(userId, ct);
             address.IsDefault = true;
             _uow.UserAddresses.Update(address);
-            return ServiceResult<UserAddressResponse>.Success(_mapper.Map<UserAddressResponse>(address), "Đã đặt làm địa chỉ mặc định.");
+            return ServiceResult<UserAddressResponse>.Success(_mapper.Map<UserAddressResponse>(address), ApiStatusMessages.Address.SetDefault);
         }, ct);
     }
 
@@ -91,19 +91,19 @@ public class UserAddressService : IUserAddressService
     {
         var address = await _uow.UserAddresses.GetByIdForUserAsync(id, userId, ct);
         if (address is null)
-            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy địa chỉ.");
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Address.NotFound);
 
         _uow.UserAddresses.Remove(address);
         await _uow.SaveChangesAsync(ct);
-        return ServiceResult.Success("Đã xóa địa chỉ.");
+        return ServiceResult.Success(ApiStatusMessages.Address.Deleted);
     }
 
     private async Task<string?> ValidateAsync(Guid wardId, string recipientName, string recipientPhone, string street, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(recipientName)) return "Tên người nhận không được để trống.";
-        if (string.IsNullOrWhiteSpace(recipientPhone)) return "Số điện thoại người nhận không được để trống.";
-        if (string.IsNullOrWhiteSpace(street)) return "Địa chỉ chi tiết không được để trống.";
-        if (!await _uow.Locations.WardExistsAsync(wardId, ct)) return "Phường/xã không hợp lệ.";
+        if (string.IsNullOrWhiteSpace(recipientName)) return ApiStatusMessages.Address.RecipientNameRequired;
+        if (string.IsNullOrWhiteSpace(recipientPhone)) return ApiStatusMessages.Address.RecipientPhoneRequired;
+        if (string.IsNullOrWhiteSpace(street)) return ApiStatusMessages.Address.StreetRequired;
+        if (!await _uow.Locations.WardExistsAsync(wardId, ct)) return ApiStatusMessages.Address.WardInvalid;
         return null;
     }
 }

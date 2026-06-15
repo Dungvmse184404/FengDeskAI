@@ -39,13 +39,13 @@ public class OrderService : IOrderService
         {
             address = await _uow.UserAddresses.GetByIdForUserAsync(addressId, userId, ct);
             if (address is null)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Địa chỉ giao hàng không hợp lệ.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.ShippingAddressInvalid);
         }
         else
         {
             address = await _uow.UserAddresses.GetDefaultForUserAsync(userId, ct);
             if (address is null)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa có địa chỉ giao hàng. Vui lòng thêm địa chỉ hoặc đặt một địa chỉ mặc định.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.NoShippingAddress);
         }
 
         // Xác định danh sách dòng cần đặt:
@@ -59,35 +59,35 @@ public class OrderService : IOrderService
                 .GroupBy(x => x.ProductItemId)
                 .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
             if (qtyById.Values.Any(q => q <= 0))
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Số lượng phải lớn hơn 0.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.QuantityInvalid);
 
             var productItems = await _uow.Carts.GetProductItemsAsync(qtyById.Keys, ct);
             if (productItems.Count != qtyById.Count)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Một số sản phẩm không tồn tại.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsNotExist);
 
             lines = productItems.Select(pi => (pi, qtyById[pi.Id])).ToList();
         }
         else
         {
             if (cart is null || cart.Items.Count == 0)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Giỏ hàng trống.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.CartEmpty);
 
             lines = cart.Items.Select(ci => (ci.ProductItem, ci.Quantity)).ToList();
         }
 
         if (lines.Count == 0)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa chọn sản phẩm nào để đặt.");
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.NoProductsSelected);
 
         if (request.PaymentMethod is not (PaymentMethod.PayOS or PaymentMethod.COD))
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Phương thức thanh toán không hợp lệ.");
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.PaymentMethodInvalid);
 
         // Validate active + tồn kho
         foreach (var (pi, qty) in lines)
         {
             if (pi?.Product is null || !pi.Product.IsActive)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Có sản phẩm đã ngừng bán. Vui lòng kiểm tra lại.");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsDiscontinued);
             if (qty > pi.Stock)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, $"Sản phẩm '{pi.Product.Name}' không đủ tồn kho (còn {pi.Stock}).");
+                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Order.ProductOutOfStockFormat, pi.Product.Name, pi.Stock));
         }
 
         var orderedProductItemIds = lines.Select(l => l.Pi.Id).ToHashSet();
@@ -151,7 +151,7 @@ public class OrderService : IOrderService
                     ? "Đơn hàng của bạn đã được đặt. Vui lòng chờ xác nhận từ cửa hàng."
                     : "Đơn hàng của bạn đã được đặt. Vui lòng thanh toán để xác nhận đơn hàng.",
                 ReferenceId = order.Id,
-                ReferenceType = "Order",
+                ReferenceType = ReferenceType.Order,
                 IsRead = false,
             }, ct);
 
@@ -173,7 +173,7 @@ public class OrderService : IOrderService
     {
         var order = await _uow.Orders.GetDetailAsync(id, userId, ct);
         if (order is null)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
         return ServiceResult<OrderDetailResponse>.Success(_mapper.Map<OrderDetailResponse>(order));
     }
 
@@ -181,11 +181,11 @@ public class OrderService : IOrderService
     {
         var order = await _uow.Orders.GetWithGraphAsync(id, userId, ct);
         if (order is null)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
         if (order.Status != OrderStatus.Pending)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Chỉ có thể hủy đơn ở trạng thái chờ xử lý.");
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.CancelOnlyPending);
         if (await _uow.Transactions.HasPaidAsync(id, ct))
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn đã thanh toán, không thể hủy trực tiếp.");
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.CancelPaidNotAllowed);
 
         // Hủy cả giao dịch thanh toán còn treo + link PayOS (nếu có) — tránh đơn đã hủy mà vẫn trả tiền được.
         await _cancellation.CancelAsync(order, userId, "Khách hàng hủy đơn", expired: false, ct);
@@ -196,7 +196,7 @@ public class OrderService : IOrderService
     public async Task<IServiceResult<PagedResult<StoreDeliveryResponse>>> GetStoreDeliveriesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default)
     {
         if (!isAdmin && !await _uow.Stores.CanManageAsync(storeId, userId, ct))
-            return ServiceResult<PagedResult<StoreDeliveryResponse>>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem đơn giao của cửa hàng này.");
+            return ServiceResult<PagedResult<StoreDeliveryResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
         var (deliveries, total) = await _uow.Orders.GetDeliveriesForStoreAsync(storeId, page.Skip, page.PageSize, ct);
         var items = _mapper.Map<List<StoreDeliveryResponse>>(deliveries);
@@ -208,11 +208,11 @@ public class OrderService : IOrderService
     {
         var delivery = await _uow.Orders.GetDeliveryWithOrderAsync(deliveryId, ct);
         if (delivery is null)
-            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn giao.");
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
         if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
-            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền cập nhật đơn giao này.");
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.UpdateDeliveryForbidden);
         if (!OrderWorkflow.IsValidDeliveryTransition(delivery.Status, request.Status))
-            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, $"Không thể chuyển trạng thái từ {delivery.Status} sang {request.Status}.");
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Order.DeliveryStatusTransitionFormat, delivery.Status, request.Status));
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
@@ -250,7 +250,7 @@ public class OrderService : IOrderService
                 Title = nTitle,
                 Message = nMsg,
                 ReferenceId = delivery.Id,
-                ReferenceType = "Delivery",
+                ReferenceType = ReferenceType.Delivery,
                 IsRead = false,
             }, ct);
 
@@ -262,7 +262,7 @@ public class OrderService : IOrderService
                     Title = "Hoàn thành đơn hàng",
                     Message = "Đơn hàng của bạn đã hoàn thành. Cảm ơn bạn đã mua sắm!",
                     ReferenceId = delivery.Order.Id,
-                    ReferenceType = "Order",
+                    ReferenceType = ReferenceType.Order,
                     IsRead = false,
                 }, ct);
 
@@ -270,7 +270,7 @@ public class OrderService : IOrderService
             return null;
         }, ct);
 
-        return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), "Cập nhật trạng thái giao hàng thành công.");
+        return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
     }
 
     private static (NotificationType Type, string Title, string Message) MapDeliveryNotification(DeliveryStatus status)

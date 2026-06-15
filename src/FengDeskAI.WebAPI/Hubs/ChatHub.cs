@@ -52,7 +52,7 @@ public class ChatHub : Hub
             return;
         }
 
-        var result = await _chatService.SendMessageAsync(userId.Value, chatboxId, new SendMessageRequest { Content = content }, CancellationToken.None);
+        var result = await _chatService.SendMessageAsync(userId.Value, chatboxId, new SendMessageRequest { Content = content }, Context.ConnectionAborted);
         if (!result.IsSuccess)
         {
             await Clients.Caller.SendAsync("error", result.Message);
@@ -94,7 +94,7 @@ public class ChatHub : Hub
             return;
         }
 
-        var message = await _chatService.GetMessageWithChatboxAsync(messageId, CancellationToken.None);
+        var message = await _chatService.GetMessageWithChatboxAsync(messageId, Context.ConnectionAborted);
         if (message is not null)
         {
             await Clients.Group($"chat-{message.ChatboxId}").SendAsync("messageMarkedAsRead", new { messageId });
@@ -113,7 +113,7 @@ public class ChatHub : Hub
             return;
         }
 
-        var result = await _chatService.ValidateChatboxAccessAsync(userId.Value, chatboxId, CancellationToken.None);
+        var result = await _chatService.ValidateChatboxAccessAsync(userId.Value, chatboxId, Context.ConnectionAborted);
         if (!result.IsSuccess)
         {
             await Clients.Caller.SendAsync("error", result.Message);

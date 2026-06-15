@@ -31,7 +31,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
     {
         var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
         if (profile is null)
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy workspace profile.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
         return ServiceResult<WorkspaceProfileResponse>.Success(_mapper.Map<WorkspaceProfileResponse>(profile));
     }
@@ -40,7 +40,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
     {
         var profile = await _uow.WorkspaceProfiles.GetDefaultByUserIdAsync(userId, ct);
         if (profile is null)
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, "Bạn chưa có workspace profile mặc định.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NoDefault);
 
         return ServiceResult<WorkspaceProfileResponse>.Success(_mapper.Map<WorkspaceProfileResponse>(profile));
     }
@@ -48,9 +48,9 @@ public class WorkspaceProfileService : IWorkspaceProfileService
     public async Task<IServiceResult<WorkspaceProfileResponse>> CreateAsync(Guid userId, CreateWorkspaceProfileRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, "Tên không được để trống.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.NameRequired);
         if (request.DeskArea <= 0)
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, "Diện tích mặt bàn phải > 0.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.SurfaceAreaInvalid);
 
         var entity = _mapper.Map<Domain.Entities.Workspace.WorkspaceProfile>(request);
         entity.UserId = userId;
@@ -70,7 +70,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         _logger.LogInformation("Workspace profile created: {ProfileId} for user {UserId}", entity.Id, userId);
         return ServiceResult<WorkspaceProfileResponse>.Success(
             _mapper.Map<WorkspaceProfileResponse>(entity),
-            "Tạo workspace profile thành công.",
+            ApiStatusMessages.WorkspaceProfile.Created,
             ApiStatusCodes.Created);
     }
 
@@ -78,12 +78,12 @@ public class WorkspaceProfileService : IWorkspaceProfileService
     {
         var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
         if (profile is null)
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy workspace profile.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
         if (string.IsNullOrWhiteSpace(request.Name))
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, "Tên không được để trống.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.NameRequired);
         if (request.DeskArea <= 0)
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, "Diện tích mặt bàn phải > 0.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.SurfaceAreaInvalid);
 
         _mapper.Map(request, profile);
         profile.Name = request.Name.Trim();
@@ -92,14 +92,14 @@ public class WorkspaceProfileService : IWorkspaceProfileService
 
         return ServiceResult<WorkspaceProfileResponse>.Success(
             _mapper.Map<WorkspaceProfileResponse>(profile),
-            "Cập nhật thành công.");
+            ApiStatusMessages.WorkspaceProfile.Updated);
     }
 
     public async Task<IServiceResult<WorkspaceProfileResponse>> SetDefaultAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
         if (profile is null)
-            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy workspace profile.");
+            return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
         return await _uow.ExecuteInTransactionAsync(async _ =>
         {
@@ -108,7 +108,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             _uow.WorkspaceProfiles.Update(profile);
             return ServiceResult<WorkspaceProfileResponse>.Success(
                 _mapper.Map<WorkspaceProfileResponse>(profile),
-                "Đã đặt làm mặc định.");
+                ApiStatusMessages.WorkspaceProfile.SetDefault);
         }, ct);
     }
 
@@ -116,11 +116,11 @@ public class WorkspaceProfileService : IWorkspaceProfileService
     {
         var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
         if (profile is null)
-            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy workspace profile.");
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
         _uow.WorkspaceProfiles.Remove(profile); // SaveChangesAsync biến thành soft-delete
         await _uow.SaveChangesAsync(ct);
 
-        return ServiceResult.Success("Đã xóa workspace profile.");
+        return ServiceResult.Success(ApiStatusMessages.WorkspaceProfile.Deleted);
     }
 }

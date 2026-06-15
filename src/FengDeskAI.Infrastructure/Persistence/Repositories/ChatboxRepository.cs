@@ -35,10 +35,15 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
         if (existing != null)
             return existing;
 
+        // Lưu cặp người dùng theo thứ tự chuẩn hoá (id nhỏ hơn luôn là SenderUserId) để chỉ mục
+        // unique (SenderUserId, RecipientUserId) đại diện cho cặp KHÔNG có thứ tự. Nhờ vậy hai request
+        // đồng thời tạo A→B và B→A sẽ sinh ra cùng một bộ khoá và bị unique index chặn bản ghi trùng.
+        var (first, second) = userId1.CompareTo(userId2) <= 0 ? (userId1, userId2) : (userId2, userId1);
+
         var chatbox = new Chatbox
         {
-            SenderUserId = userId1,
-            RecipientUserId = userId2,
+            SenderUserId = first,
+            RecipientUserId = second,
         };
         await _set.AddAsync(chatbox, ct);
         return chatbox;
