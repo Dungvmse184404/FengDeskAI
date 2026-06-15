@@ -27,7 +27,8 @@ public class UnitOfWork : IUnitOfWork
         ITransactionRepository transactions,
         INotificationRepository notifications,
         IChatboxRepository chatboxes,
-        IChatMessageRepository chatMessages)
+        IChatMessageRepository chatMessages,
+        IReviewRepository reviews)
     {
         _context = context;
         _logger = logger;
@@ -47,6 +48,7 @@ public class UnitOfWork : IUnitOfWork
         Notifications = notifications;
         Chatboxes = chatboxes;
         ChatMessages = chatMessages;
+        Reviews = reviews;
     }
 
     public IUserRepository Users { get; }
@@ -65,6 +67,7 @@ public class UnitOfWork : IUnitOfWork
     public INotificationRepository Notifications { get; }
     public IChatboxRepository Chatboxes { get; }
     public IChatMessageRepository ChatMessages { get; }
+    public IReviewRepository Reviews { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);

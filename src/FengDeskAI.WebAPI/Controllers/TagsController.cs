@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FengDeskAI.WebAPI.Controllers;
 
-/// <summary>Tag sản phẩm (gồm cả thuộc tính phong thủy). Đọc public; CRUD cho Manager/Admin.</summary>
+/// <summary>Tag sản phẩm (gồm cả thuộc tính phong thủy). Đọc public; CRUD cho Manager trở lên.</summary>
 [Route("api/tags")]
-[Authorize(Policy = AuthorizationPolicies.ManagerOrAdmin)]
+
 public class TagsController : ApiControllerBase
 {
     private readonly ITagService _service;

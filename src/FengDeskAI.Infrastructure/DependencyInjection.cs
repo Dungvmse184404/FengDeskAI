@@ -129,6 +129,7 @@ public static class DependencyInjection
         services.AddScoped<IOrderRepository, OrderRepository>();
         services.AddScoped<IShippingRepository, ShippingRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
+        services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
         services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
