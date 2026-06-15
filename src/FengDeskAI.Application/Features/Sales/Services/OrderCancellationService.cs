@@ -87,7 +87,7 @@ public class OrderCancellationService : IOrderCancellationService
                     ? "Đơn hàng của bạn đã hết hạn do chưa thanh toán đúng hạn."
                     : "Đơn hàng của bạn đã bị hủy.",
                 ReferenceId = order.Id,
-                ReferenceType = "Order",
+                ReferenceType = ReferenceType.Order,
                 IsRead = false,
             }, ct);
 

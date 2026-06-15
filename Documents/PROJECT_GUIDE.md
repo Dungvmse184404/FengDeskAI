@@ -246,7 +246,9 @@ public enum UserRole
 }
 ```
 
-1 user có nhiều role: `Manager | Staff = 6`. JWT có 1 `role` claim per flag → `RequireRole("Manager", "Admin")` hoạt động đúng.
+1 user có nhiều role: `Manager | Staff = 6`. JWT có 1 `role` claim per flag → `RequireRole("Staff", "Admin")` hoạt động đúng.
+
+Thứ tự quyền (thấp → cao): **Customer < Manager < Staff < Admin**. Policy `...OrAbove` gồm role đó + mọi role cao hơn.
 
 ### 6.4 Authorization policies
 
@@ -255,8 +257,8 @@ Define trong `WebAPI/Authorization/AuthorizationPolicies.cs`:
 | Policy | Cho phép |
 |---|---|
 | `AdminOnly` | Admin |
-| `ManagerOrAdmin` | Manager, Admin |
-| `StaffOrAbove` | Staff, Manager, Admin |
+| `StaffOrAbove` | Staff, Admin |
+| `ManagerOrAbove` | Manager, Staff, Admin |
 | `CustomerOnly` | Customer |
 
 ---

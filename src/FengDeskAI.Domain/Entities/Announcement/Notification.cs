@@ -21,8 +21,8 @@ namespace FengDeskAI.Domain.Entities.Announcement
             /// <summary>Id của đối tượng liên quan (orderId, deliveryId…) — để client deep-link.</summary>
             public Guid? ReferenceId { get; set; }
 
-            /// <summary>Tên loại đối tượng liên quan ("Order", "Delivery"…).</summary>
-            public string? ReferenceType { get; set; }
+            /// <summary>Loại đối tượng liên quan (Order, Delivery…) — để client deep-link.</summary>
+            public ReferenceType? ReferenceType { get; set; }
         
 
     }

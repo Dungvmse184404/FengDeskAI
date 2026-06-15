@@ -25,7 +25,10 @@ public class NotificationConfiguration : IEntityTypeConfiguration<Notification>
         builder.Property(n => n.IsRead).HasColumnName("is_read").HasDefaultValue(false);
         builder.Property(n => n.ReadAt).HasColumnName("read_at");
         builder.Property(n => n.ReferenceId).HasColumnName("reference_id");
-        builder.Property(n => n.ReferenceType).HasColumnName("reference_type").HasMaxLength(50);
+        builder.Property(n => n.ReferenceType)
+            .HasColumnName("reference_type")
+            .HasConversion<string>()
+            .HasMaxLength(30);
 
         builder.Property(n => n.CreatedAt).HasColumnName("created_at");
         builder.Property(n => n.UpdatedAt).HasColumnName("updated_at");

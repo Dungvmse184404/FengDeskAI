@@ -46,12 +46,12 @@ public class RegistrationFlowService : IRegistrationFlowService
         var email = Normalize(request.Email);
 
         if (await _uow.Users.EmailExistsAsync(email, ct))
-            return ServiceResult.Failure(ApiStatusCodes.Conflict, "Email đã được sử dụng.");
+            return ServiceResult.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Registration.EmailInUse);
 
         var sendResult = await _otpService.SendOtpAsync(email, OtpPurpose.Register, ct);
         if (!sendResult.IsSuccess) return sendResult;
 
-        return ServiceResult.Success("Đã gửi mã OTP đến email. Vui lòng kiểm tra hộp thư.");
+        return ServiceResult.Success(ApiStatusMessages.Registration.OtpSent);
     }
 
     public async Task<IServiceResult<VerifyRegisterResponse>> VerifyAsync(VerifyRegisterRequest request, CancellationToken ct = default)
@@ -62,11 +62,11 @@ public class RegistrationFlowService : IRegistrationFlowService
         switch (verifyResult)
         {
             case OtpVerifyResult.Invalid:
-                return ServiceResult<VerifyRegisterResponse>.Failure(ApiStatusCodes.BadRequest, "Mã OTP không đúng.");
+                return ServiceResult<VerifyRegisterResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Registration.OtpIncorrect);
             case OtpVerifyResult.Expired:
-                return ServiceResult<VerifyRegisterResponse>.Failure(ApiStatusCodes.BadRequest, "Mã OTP đã hết hạn. Vui lòng yêu cầu gửi lại.");
+                return ServiceResult<VerifyRegisterResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Registration.OtpExpired);
             case OtpVerifyResult.TooManyAttempts:
-                return ServiceResult<VerifyRegisterResponse>.Failure(ApiStatusCodes.BadRequest, "Bạn đã nhập sai quá nhiều lần. Vui lòng yêu cầu gửi lại.");
+                return ServiceResult<VerifyRegisterResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Registration.OtpTooManyAttempts);
         }
 
         var token = await _registrationTokenService.IssueAsync(email, RegistrationTokenTtl, ct);
@@ -76,20 +76,20 @@ public class RegistrationFlowService : IRegistrationFlowService
             ExpiresAt = DateTime.UtcNow.Add(RegistrationTokenTtl),
         };
 
-        return ServiceResult<VerifyRegisterResponse>.Success(response, "Xác thực thành công.");
+        return ServiceResult<VerifyRegisterResponse>.Success(response, ApiStatusMessages.Registration.VerifySuccess);
     }
 
     public async Task<IServiceResult<AuthResponse>> FinalizeAsync(FinalizeRegisterRequest request, CancellationToken ct = default)
     {
         var email = await _registrationTokenService.ConsumeAsync(request.RegistrationToken, ct);
         if (email is null)
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, "Phiên đăng ký không hợp lệ hoặc đã hết hạn. Vui lòng xác thực lại.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, ApiStatusMessages.Registration.InvalidSession);
 
         if (await _uow.Users.EmailExistsAsync(email, ct))
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Conflict, "Email đã được sử dụng.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Registration.EmailInUse);
 
         if (!string.IsNullOrWhiteSpace(request.Phone) && await _uow.Users.PhoneExistsAsync(request.Phone.Trim(), ct))
-            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Conflict, "Số điện thoại đã được sử dụng.");
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Registration.PhoneInUse);
 
         var user = new User
         {
@@ -128,7 +128,7 @@ public class RegistrationFlowService : IRegistrationFlowService
             User = _mapper.Map<UserSummary>(user),
         };
 
-        return ServiceResult<AuthResponse>.Success(response, "Đăng ký thành công.", ApiStatusCodes.Created);
+        return ServiceResult<AuthResponse>.Success(response, ApiStatusMessages.Registration.RegisterSuccess, ApiStatusCodes.Created);
     }
 
     private static string Normalize(string email) => email.Trim().ToLowerInvariant();

@@ -35,6 +35,9 @@ public interface IUnitOfWork
     IChatboxRepository Chatboxes { get; }
     IChatMessageRepository ChatMessages { get; }
 
+    // CustomerCare
+    IReviewRepository Reviews { get; }
+
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default);

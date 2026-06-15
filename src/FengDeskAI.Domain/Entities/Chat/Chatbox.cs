@@ -8,5 +8,5 @@ public class Chatbox : BaseEntity
     public Guid SenderUserId { get; set; }
     public Guid RecipientUserId { get; set; }
 
-    public ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
+    public virtual ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }

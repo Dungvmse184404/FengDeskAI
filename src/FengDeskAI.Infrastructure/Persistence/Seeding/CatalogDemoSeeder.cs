@@ -1,5 +1,6 @@
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Enums;
@@ -51,6 +52,23 @@ public class CatalogDemoSeeder : IDataSeeder
             IsActive = true,
         };
         await _context.Set<GardenStore>().AddAsync(store, ct);
+
+        // Mỗi store có 1 địa chỉ (1-1). Gắn vào ward bất kỳ đã được GeographySeeder (Order 10) seed trước.
+        var ward = await _context.Set<Ward>().OrderBy(w => w.Name).FirstOrDefaultAsync(ct);
+        if (ward is not null)
+        {
+            await _context.Set<StoreAddress>().AddAsync(new StoreAddress
+            {
+                StoreId = store.Id,
+                WardId = ward.Id,
+                StreetAddress = "123 Đường Phong Thủy",
+                IsActive = true,
+            }, ct);
+        }
+        else
+        {
+            _logger.LogWarning("Chưa có dữ liệu Ward — bỏ qua seed địa chỉ cho store demo.");
+        }
 
         var categories = new Dictionary<string, Category>();
         foreach (var name in new[] { "Cây để bàn", "Đá phong thủy", "Đèn trang trí", "Tượng phong thủy" })

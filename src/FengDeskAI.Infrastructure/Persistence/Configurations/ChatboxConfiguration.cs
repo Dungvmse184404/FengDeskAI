@@ -23,6 +23,8 @@ public class ChatboxConfiguration : IEntityTypeConfiguration<Chatbox>
         builder.Property(c => c.UpdatedBy).HasColumnName("updated_by");
         builder.Property(c => c.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
 
+        // Cặp người dùng được chuẩn hoá (SenderUserId < RecipientUserId) ở ChatboxRepository.GetOrCreateAsync,
+        // nên chỉ mục unique này thực chất đảm bảo duy nhất theo cặp KHÔNG có thứ tự — chặn được trùng A→B / B→A.
         builder.HasIndex(c => new { c.SenderUserId, c.RecipientUserId }).IsUnique();
         builder.HasIndex(c => c.SenderUserId);
         builder.HasIndex(c => c.RecipientUserId);

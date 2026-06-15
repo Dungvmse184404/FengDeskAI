@@ -7,9 +7,9 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FengDeskAI.WebAPI.Controllers;
 
-/// <summary>Danh mục sản phẩm. Đọc public; CRUD cho Manager/Admin.</summary>
+/// <summary>Danh mục sản phẩm. Đọc public; CRUD cho Manager trở lên.</summary>
 [Route("api/categories")]
-[Authorize(Policy = AuthorizationPolicies.ManagerOrAdmin)]
+[Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
 public class CategoriesController : ApiControllerBase
 {
     private readonly ICategoryService _service;

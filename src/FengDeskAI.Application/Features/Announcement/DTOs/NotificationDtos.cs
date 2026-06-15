@@ -11,7 +11,7 @@ public class NotificationResponse
     public bool IsRead { get; set; }
     public DateTime? ReadAt { get; set; }
     public Guid? ReferenceId { get; set; }
-    public string? ReferenceType { get; set; }
+    public ReferenceType? ReferenceType { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -22,5 +22,5 @@ public class CreateNotificationRequest
     public string Title { get; set; } = null!;
     public string Message { get; set; } = null!;
     public Guid? ReferenceId { get; set; }
-    public string? ReferenceType { get; set; }
+    public ReferenceType? ReferenceType { get; set; }
 }
