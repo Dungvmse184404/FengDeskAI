@@ -15,6 +15,19 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     Task<GardenStaffAssignment?> GetAssignmentByIdAsync(Guid assignmentId, Guid storeId, CancellationToken ct = default);
     Task AddAssignmentAsync(GardenStaffAssignment assignment, CancellationToken ct = default);
 
+    /// <summary>True nếu store tồn tại (kể cả đã soft-delete).</summary>
+    Task<bool> ExistsAsync(Guid id, CancellationToken ct = default);
+
+    /// <summary>Địa chỉ active của store (đã lọc soft-delete), tracked để cập nhật.</summary>
     Task<StoreAddress?> GetAddressAsync(Guid storeId, CancellationToken ct = default);
+    /// <summary>Địa chỉ của store kể cả đã soft-delete (để hồi sinh khi Add lại — StoreId là unique).</summary>
+    Task<StoreAddress?> GetAddressIncludingDeletedAsync(Guid storeId, CancellationToken ct = default);
+    /// <summary>True nếu có bản ghi địa chỉ cho store (kể cả đã soft-delete).</summary>
+    Task<bool> AddressExistsAsync(Guid storeId, CancellationToken ct = default);
     Task AddAddressAsync(StoreAddress address, CancellationToken ct = default);
+
+    /// <summary>Xóa vật lý store + địa chỉ + phân công nhân viên (bypass soft-delete). Nên gọi trong transaction.</summary>
+    Task HardDeleteAsync(Guid id, CancellationToken ct = default);
+    /// <summary>Xóa vật lý địa chỉ của store (bypass soft-delete).</summary>
+    Task HardDeleteAddressAsync(Guid storeId, CancellationToken ct = default);
 }

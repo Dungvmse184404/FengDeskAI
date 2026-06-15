@@ -43,7 +43,15 @@ public class UpdateStoreRequest
     public bool IsActive { get; set; }
 }
 
-public class UpsertStoreAddressRequest
+public class CreateStoreAddressRequest
+{
+    public Guid WardId { get; set; }
+    public string StreetAddress { get; set; } = null!;
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+}
+
+public class UpdateStoreAddressRequest
 {
     public Guid WardId { get; set; }
     public string StreetAddress { get; set; } = null!;

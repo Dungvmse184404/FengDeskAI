@@ -25,39 +25,39 @@ public class TagService : ITagService
     public async Task<IServiceResult<TagResponse>> CreateAsync(CreateTagRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.BadRequest, "Tên tag không được để trống.");
+            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Tag.NameRequired);
         if (await _uow.Tags.NameExistsAsync(request.Name.Trim(), null, ct))
-            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.Conflict, "Tag đã tồn tại.");
+            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Tag.AlreadyExists);
 
         var entity = _mapper.Map<Tag>(request);
         entity.Name = request.Name.Trim();
         await _uow.Tags.AddAsync(entity, ct);
         await _uow.SaveChangesAsync(ct);
-        return ServiceResult<TagResponse>.Success(_mapper.Map<TagResponse>(entity), "Tạo tag thành công.", ApiStatusCodes.Created);
+        return ServiceResult<TagResponse>.Success(_mapper.Map<TagResponse>(entity), ApiStatusMessages.Tag.Created, ApiStatusCodes.Created);
     }
 
     public async Task<IServiceResult<TagResponse>> UpdateAsync(Guid id, UpdateTagRequest request, CancellationToken ct = default)
     {
         var entity = await _uow.Tags.GetByIdAsync(id, ct);
-        if (entity is null) return ServiceResult<TagResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy tag.");
+        if (entity is null) return ServiceResult<TagResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Tag.NotFound);
         if (string.IsNullOrWhiteSpace(request.Name))
-            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.BadRequest, "Tên tag không được để trống.");
+            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Tag.NameRequired);
         if (await _uow.Tags.NameExistsAsync(request.Name.Trim(), id, ct))
-            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.Conflict, "Tên tag đã được dùng.");
+            return ServiceResult<TagResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Tag.NameTaken);
 
         entity.Name = request.Name.Trim();
         entity.Description = request.Description;
         _uow.Tags.Update(entity);
         await _uow.SaveChangesAsync(ct);
-        return ServiceResult<TagResponse>.Success(_mapper.Map<TagResponse>(entity), "Cập nhật tag thành công.");
+        return ServiceResult<TagResponse>.Success(_mapper.Map<TagResponse>(entity), ApiStatusMessages.Tag.Updated);
     }
 
     public async Task<IServiceResult> DeleteAsync(Guid id, CancellationToken ct = default)
     {
         var entity = await _uow.Tags.GetByIdAsync(id, ct);
-        if (entity is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy tag.");
+        if (entity is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Tag.NotFound);
         _uow.Tags.Remove(entity);
         await _uow.SaveChangesAsync(ct);
-        return ServiceResult.Success("Đã xóa tag.");
+        return ServiceResult.Success(ApiStatusMessages.Tag.Deleted);
     }
 }

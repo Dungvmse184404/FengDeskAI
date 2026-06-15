@@ -36,13 +36,13 @@ public class PaymentService : IPaymentService
     {
         var order = await _uow.Orders.GetDetailAsync(orderId, userId, ct);
         if (order is null)
-            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Payment.OrderNotFound);
         if (order.Status != OrderStatus.Pending)
-            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn hàng không ở trạng thái chờ thanh toán.");
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.OrderNotPending);
         if (order.PaymentMethod == PaymentMethod.COD)
-            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn COD thanh toán khi nhận hàng, không cần thanh toán online.");
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.CodNoOnlinePayment);
         if (await _uow.Transactions.HasPaidAsync(orderId, ct))
-            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn hàng đã được thanh toán.");
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.OrderAlreadyPaid);
 
         // Vô hiệu các link cũ còn treo để một đơn không thể bị trả tiền 2 lần qua link khác nhau.
         var staleTxns = await _uow.Transactions.GetPendingByOrderAsync(orderId, ct);
@@ -61,7 +61,7 @@ public class PaymentService : IPaymentService
 
         var amount = (int)Math.Round(order.TotalAmount, MidpointRounding.AwayFromZero);
         if (amount <= 0)
-            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, "Số tiền thanh toán không hợp lệ.");
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.AmountInvalid);
 
         var orderCode = GenerateOrderCode();
         var items = order.Items.Count > 0
@@ -78,7 +78,7 @@ public class PaymentService : IPaymentService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Tạo link PayOS thất bại cho order {OrderId}", orderId);
-            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.ServiceUnavailable, "Không tạo được link thanh toán. Thử lại sau.");
+            return ServiceResult<CreatePaymentResponse>.Failure(ApiStatusCodes.ServiceUnavailable, ApiStatusMessages.Payment.GatewayUnavailable);
         }
 
         var txn = new Transaction
@@ -101,7 +101,7 @@ public class PaymentService : IPaymentService
             QrCode = link.QrCode,
             PaymentLinkId = link.PaymentLinkId,
             Status = PaymentStatus.Pending,
-        }, "Đã tạo link thanh toán.", ApiStatusCodes.Created);
+        }, ApiStatusMessages.Payment.LinkCreated, ApiStatusCodes.Created);
     }
 
     public async Task<IServiceResult> HandleWebhookAsync(string rawJsonBody, CancellationToken ct = default)
@@ -114,7 +114,7 @@ public class PaymentService : IPaymentService
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "Webhook PayOS có chữ ký không hợp lệ.");
-            return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Webhook không hợp lệ.");
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.WebhookInvalid);
         }
 
         _logger.LogInformation("[Webhook] Nhận PayOS: orderCode={OrderCode} success={Success} code={Code} ref={Ref}",
@@ -124,12 +124,12 @@ public class PaymentService : IPaymentService
         if (txn is null)
         {
             _logger.LogWarning("[Webhook] orderCode {OrderCode} không khớp giao dịch nào.", result.OrderCode);
-            return ServiceResult.Success("Đã nhận webhook (không khớp giao dịch).");
+            return ServiceResult.Success(ApiStatusMessages.Payment.WebhookNoMatch);
         }
         _logger.LogInformation("[Webhook] Khớp transaction {TxnId} (status {Status}) của order {OrderId} (status {OrderStatus}).",
             txn.Id, txn.Status, txn.OrderId, txn.Order?.Status);
         if (txn.Status == PaymentStatus.Paid)
-            return ServiceResult.Success("Giao dịch đã được xử lý trước đó.");
+            return ServiceResult.Success(ApiStatusMessages.Payment.TransactionAlreadyProcessed);
 
         // Một transaction duy nhất. KHÔNG retry trên cùng context: nếu transaction rollback,
         // EF change tracker không reset → retry sẽ phát UPDATE cho entity chưa tồn tại (0 rows).
@@ -152,22 +152,22 @@ public class PaymentService : IPaymentService
 
         _logger.LogInformation("[Webhook] Đã xử lý xong orderCode {OrderCode}: transaction={TxnStatus}, order={OrderStatus}.",
             result.OrderCode, txn.Status, txn.Order?.Status);
-        return ServiceResult.Success("Đã xử lý webhook thanh toán.");
+        return ServiceResult.Success(ApiStatusMessages.Payment.WebhookProcessed);
     }
 
     public async Task<IServiceResult<PaymentStatusResponse>> CancelPaymentAsync(Guid orderId, Guid userId, string? reason, CancellationToken ct = default)
     {
         var order = await _uow.Orders.GetWithGraphAsync(orderId, userId, ct);
         if (order is null)
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Payment.OrderNotFound);
         if (order.Status != OrderStatus.Pending)
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Chỉ hủy được khi đơn đang chờ thanh toán.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.CancelOnlyPending);
 
         var txn = await _uow.Transactions.GetLatestByOrderAsync(orderId, ct);
         if (txn is null)
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn chưa có giao dịch thanh toán để hủy.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.NoTransactionToCancel);
         if (await _uow.Transactions.HasPaidAsync(orderId, ct))
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn đã thanh toán, không thể hủy thanh toán.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.PaidCannotCancel);
 
         // Hủy mọi link/giao dịch còn treo + đơn + hoàn kho — dùng chung lõi hủy với OrderService.
         await _cancellation.CancelAsync(order, userId,
@@ -183,14 +183,14 @@ public class PaymentService : IPaymentService
             Amount = txn.Amount,
             ProviderTransactionId = txn.ProviderTransactionId,
             PaidAt = txn.PaidAt,
-        }, "Đã hủy thanh toán và hủy đơn hàng.");
+        }, ApiStatusMessages.Payment.PaymentCancelled);
     }
 
     public async Task<IServiceResult<PaymentStatusResponse>> GetStatusAsync(Guid orderId, Guid userId, CancellationToken ct = default)
     {
         var order = await _uow.Orders.GetDetailAsync(orderId, userId, ct);
         if (order is null)
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Payment.OrderNotFound);
 
         var txn = await _uow.Transactions.GetLatestByOrderAsync(orderId, ct);
         return ServiceResult<PaymentStatusResponse>.Success(new PaymentStatusResponse
@@ -218,13 +218,13 @@ public class PaymentService : IPaymentService
     {
         var order = await _uow.Orders.GetForPaymentAsync(orderId, userId, ct);
         if (order is null)
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy đơn hàng.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Payment.OrderNotFound);
         if (order.Status is not (OrderStatus.Pending or OrderStatus.Expired))
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn không ở trạng thái chờ thanh toán.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.MarkPaidNotPending);
 
         var txn = await _uow.Transactions.GetLatestByOrderAsync(orderId, ct);
         if (txn is not null && txn.Status == PaymentStatus.Paid)
-            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, "Đơn đã thanh toán.");
+            return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Payment.MarkPaidAlreadyPaid);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
@@ -255,7 +255,7 @@ public class PaymentService : IPaymentService
             Amount = txn?.Amount,
             ProviderTransactionId = txn?.ProviderTransactionId,
             PaidAt = txn?.PaidAt,
-        }, "Đã giả lập thanh toán thành công (DEV).");
+        }, ApiStatusMessages.Payment.MarkPaidSuccess);
     }
 
     /// <summary>
