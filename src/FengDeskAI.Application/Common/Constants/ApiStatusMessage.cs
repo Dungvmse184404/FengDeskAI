@@ -214,4 +214,18 @@ public static class ApiStatusMessages
         public const string AssignmentNotFound = "Không tìm thấy phân công đang hiệu lực.";
         public const string Unassigned = "Đã gỡ phân công nhân viên.";
     }
+
+    public static class Review
+    {
+        public const string NotFound = "Không tìm thấy đánh giá.";
+        public const string Created = "Tạo đánh giá thành công.";
+        public const string Updated = "Cập nhật đánh giá thành công.";
+        public const string Deleted = "Đã xóa đánh giá.";
+        public const string Unauthorized = "Bạn không có quyền thao tác đánh giá này.";
+        public const string NotPurchased = "Bạn chưa mua sản phẩm này nên không thể đánh giá.";
+        public const string ProductNotFound = "Không tìm thấy sản phẩm.";
+        public const string AlreadyReviewed = "Bạn đã đánh giá sản phẩm này rồi.";
+        public const string RatingInvalid = "Điểm đánh giá phải từ 1 đến 5.";
+        public const string ContentRequired = "Nội dung đánh giá không được để trống.";
+    }
 }
