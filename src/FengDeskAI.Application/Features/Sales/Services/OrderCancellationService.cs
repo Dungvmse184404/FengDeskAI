@@ -7,7 +7,7 @@ using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 using Microsoft.Extensions.Logging;
-using NotificationEntity = FengDeskAI.Domain.Entities.Notification.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Features.Sales.Services;
 
@@ -78,7 +78,7 @@ public class OrderCancellationService : IOrderCancellationService
 
             order.StatusChangeNote = note;
 
-            await _uow.Notifications.AddAsync(new NotificationEntity
+            await _uow.Notifications.AddAsync(new Notification
             {
                 UserId = order.CustomerId,
                 Type = NotificationType.OrderCancelled,

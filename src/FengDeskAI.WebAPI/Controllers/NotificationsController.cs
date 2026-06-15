@@ -1,5 +1,5 @@
 using FengDeskAI.Application.Common.Models;
-using FengDeskAI.Application.Features.Notification.Services;
+using FengDeskAI.Application.Features.Announcement.Services;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;

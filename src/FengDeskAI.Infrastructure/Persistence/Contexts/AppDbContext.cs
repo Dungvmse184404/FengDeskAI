@@ -3,7 +3,7 @@ using FengDeskAI.Domain.Common;
 using FengDeskAI.Domain.Entities.Chat;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
-using FengDeskAI.Domain.Entities.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;

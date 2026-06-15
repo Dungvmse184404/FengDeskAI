@@ -1,5 +1,5 @@
 using FengDeskAI.Domain.Entities.Identity;
-using FengDeskAI.Domain.Entities.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 

@@ -1,5 +1,5 @@
 using FengDeskAI.Application.Interfaces.Repositories;
-using FengDeskAI.Domain.Entities.Notification;
+using FengDeskAI.Domain.Entities.Announcement;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 

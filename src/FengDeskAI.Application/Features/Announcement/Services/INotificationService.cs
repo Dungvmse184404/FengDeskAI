@@ -1,8 +1,8 @@
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
-using FengDeskAI.Application.Features.Notification.DTOs;
+using FengDeskAI.Application.Features.Announcement.DTOs;
 
-namespace FengDeskAI.Application.Features.Notification.Services;
+namespace FengDeskAI.Application.Features.Announcement.Services;
 
 public interface INotificationService
 {
