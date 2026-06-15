@@ -13,6 +13,8 @@ using FengDeskAI.Application.Features.Identity.Mappings;
 using FengDeskAI.Application.Features.Identity.Services;
 using FengDeskAI.Application.Features.Workspace.Mappings;
 using FengDeskAI.Application.Features.Workspace.Services;
+using FengDeskAI.Application.Features.CustomerCare.Mappings;
+using FengDeskAI.Application.Features.CustomerCare.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 
@@ -32,6 +34,7 @@ public static class DependencyInjection
             cfg.AddProfile<CatalogMappingProfile>();
             cfg.AddProfile<SalesMappingProfile>();
             cfg.AddProfile<ShippingMappingProfile>();
+            cfg.AddProfile<ReviewMappingProfile>();
         });
 
         services.AddScoped<IAuthService, AuthService>();
@@ -55,6 +58,8 @@ public static class DependencyInjection
         services.AddScoped<IShippingService, ShippingService>();
 
         services.AddScoped<IPaymentService, PaymentService>();
+
+        services.AddScoped<IReviewService, ReviewService>();
 
         return services;
     }

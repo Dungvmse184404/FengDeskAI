@@ -6,6 +6,7 @@ using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Entities.Vendor;
+using FengDeskAI.Domain.Entities.CustomerCare;
 using Microsoft.EntityFrameworkCore;
 
 namespace FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -48,6 +49,9 @@ public class AppDbContext : DbContext
 
     // Payment
     public DbSet<Transaction> Transactions => Set<Transaction>();
+
+    // CustomerCare
+    public DbSet<Review> Reviews => Set<Review>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

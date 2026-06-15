@@ -28,6 +28,9 @@ public interface IUnitOfWork
     // Payment
     ITransactionRepository Transactions { get; }
 
+    // CustomerCare
+    IReviewRepository Reviews { get; }
+
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default);
