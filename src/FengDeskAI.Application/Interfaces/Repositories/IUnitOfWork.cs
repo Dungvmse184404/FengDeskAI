@@ -28,6 +28,13 @@ public interface IUnitOfWork
     // Payment
     ITransactionRepository Transactions { get; }
 
+    // Notification
+    INotificationRepository Notifications { get; }
+
+    // Chat
+    IChatboxRepository Chatboxes { get; }
+    IChatMessageRepository ChatMessages { get; }
+
     // CustomerCare
     IReviewRepository Reviews { get; }
 

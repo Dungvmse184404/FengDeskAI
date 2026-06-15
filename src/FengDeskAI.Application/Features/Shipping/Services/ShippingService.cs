@@ -7,8 +7,10 @@ using FengDeskAI.Application.Features.Shipping.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Features.Shipping.Services;
 
@@ -67,9 +69,37 @@ public class ShippingService : IShippingService
             }
 
             await _uow.Shipping.AddProgressLogAsync(BuildLog(delivery, from, request, payloadJson, request.EventType), ct);
+
+            var preRollup = delivery.Order.Status;
             RollupOrder(delivery.Order);
             webhook.IsProcessed = true;
 
+            if (delivery.Order is not null)
+            {
+                var (nType, nTitle, nMsg) = MapDeliveryNotification(request.NewStatus);
+                await _uow.Notifications.AddAsync(new Notification
+                {
+                    UserId = delivery.Order.CustomerId,
+                    Type = nType,
+                    Title = nTitle,
+                    Message = nMsg,
+                    ReferenceId = delivery.Id,
+                    ReferenceType = ReferenceType.Delivery,
+                    IsRead = false,
+                }, ct);
+
+                if (delivery.Order.Status == OrderStatus.Completed && preRollup != OrderStatus.Completed)
+                    await _uow.Notifications.AddAsync(new Notification
+                    {
+                        UserId = delivery.Order.CustomerId,
+                        Type = NotificationType.OrderCompleted,
+                        Title = "Hoàn thành đơn hàng",
+                        Message = "Đơn hàng của bạn đã hoàn thành. Cảm ơn bạn đã mua sắm!",
+                        ReferenceId = delivery.Order.Id,
+                        ReferenceType = ReferenceType.Order,
+                        IsRead = false,
+                    }, ct);
+            }
             return ServiceResult.Success(ApiStatusMessages.Shipping.WebhookProcessed);
         }, ct);
     }
@@ -94,6 +124,18 @@ public class ShippingService : IShippingService
             return await _uow.Shipping.GetDeliveryByProviderOrderIdAsync(request.Provider!, request.ProviderOrderId!, ct);
         return null;
     }
+
+    private static (NotificationType Type, string Title, string Message) MapDeliveryNotification(DeliveryStatus status)
+        => status switch
+        {
+            DeliveryStatus.Confirmed => (NotificationType.DeliveryConfirmed, "Đơn hàng đã xác nhận", "Cửa hàng đã xác nhận đơn giao của bạn."),
+            DeliveryStatus.Preparing => (NotificationType.DeliveryPreparing, "Đang chuẩn bị hàng",   "Cửa hàng đang chuẩn bị hàng cho đơn giao của bạn."),
+            DeliveryStatus.Shipped   => (NotificationType.DeliveryShipped,   "Đơn hàng đang giao",   "Đơn giao của bạn đang trên đường đến."),
+            DeliveryStatus.Delivered => (NotificationType.DeliveryDelivered, "Giao hàng thành công", "Đơn giao của bạn đã được giao thành công."),
+            DeliveryStatus.Returned  => (NotificationType.DeliveryReturned,  "Hàng đã hoàn trả",    "Đơn giao của bạn đã được hoàn trả."),
+            DeliveryStatus.Cancelled => (NotificationType.DeliveryCancelled, "Hủy giao hàng",        "Đơn giao của bạn đã bị hủy."),
+            _                        => (NotificationType.SystemAlert,       "Cập nhật đơn giao",    "Trạng thái đơn giao của bạn đã thay đổi."),
+        };
 
     private static DeliveryProgressLog BuildLog(Delivery delivery, DeliveryStatus from, ShippingWebhookRequest request, string payloadJson, string? note)
         => new()

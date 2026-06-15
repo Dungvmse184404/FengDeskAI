@@ -8,9 +8,11 @@ using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
+using FengDeskAI.Domain.Entities.Announcement;
 
 namespace FengDeskAI.Application.Features.Sales.Services;
 
@@ -140,6 +142,19 @@ public class OrderService : IOrderService
                     _uow.Carts.RemoveItems(toRemove);
             }
 
+            await _uow.Notifications.AddAsync(new Notification
+            {
+                UserId = userId,
+                Type = NotificationType.OrderPlaced,
+                Title = "Đặt hàng thành công",
+                Message = request.PaymentMethod == PaymentMethod.COD
+                    ? "Đơn hàng của bạn đã được đặt. Vui lòng chờ xác nhận từ cửa hàng."
+                    : "Đơn hàng của bạn đã được đặt. Vui lòng thanh toán để xác nhận đơn hàng.",
+                ReferenceId = order.Id,
+                ReferenceType = ReferenceType.Order,
+                IsRead = false,
+            }, ct);
+
             return order.Id;
         }, ct);
 
@@ -224,13 +239,51 @@ public class OrderService : IOrderService
                 LoggedAt = now,
             });
 
+            var preRollupStatus = delivery.Order.Status;
             RecomputeOrderStatus(delivery.Order, userId);
+
+            var (nType, nTitle, nMsg) = MapDeliveryNotification(request.Status);
+            await _uow.Notifications.AddAsync(new Notification
+            {
+                UserId = delivery.Order.CustomerId,
+                Type = nType,
+                Title = nTitle,
+                Message = nMsg,
+                ReferenceId = delivery.Id,
+                ReferenceType = ReferenceType.Delivery,
+                IsRead = false,
+            }, ct);
+
+            if (delivery.Order.Status == OrderStatus.Completed && preRollupStatus != OrderStatus.Completed)
+                await _uow.Notifications.AddAsync(new Notification
+                {
+                    UserId = delivery.Order.CustomerId,
+                    Type = NotificationType.OrderCompleted,
+                    Title = "Hoàn thành đơn hàng",
+                    Message = "Đơn hàng của bạn đã hoàn thành. Cảm ơn bạn đã mua sắm!",
+                    ReferenceId = delivery.Order.Id,
+                    ReferenceType = ReferenceType.Order,
+                    IsRead = false,
+                }, ct);
+
             await Task.CompletedTask;
             return null;
         }, ct);
 
         return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
     }
+
+    private static (NotificationType Type, string Title, string Message) MapDeliveryNotification(DeliveryStatus status)
+        => status switch
+        {
+            DeliveryStatus.Confirmed => (NotificationType.DeliveryConfirmed, "Đơn hàng đã xác nhận", "Cửa hàng đã xác nhận đơn giao của bạn."),
+            DeliveryStatus.Preparing => (NotificationType.DeliveryPreparing, "Đang chuẩn bị hàng", "Cửa hàng đang chuẩn bị hàng cho đơn giao của bạn."),
+            DeliveryStatus.Shipped   => (NotificationType.DeliveryShipped,   "Đơn hàng đang giao",  "Đơn giao của bạn đang trên đường đến."),
+            DeliveryStatus.Delivered => (NotificationType.DeliveryDelivered, "Giao hàng thành công","Đơn giao của bạn đã được giao thành công."),
+            DeliveryStatus.Returned  => (NotificationType.DeliveryReturned,  "Hàng đã hoàn trả",   "Đơn giao của bạn đã được hoàn trả."),
+            DeliveryStatus.Cancelled => (NotificationType.DeliveryCancelled, "Hủy giao hàng",       "Đơn giao của bạn đã bị hủy."),
+            _                        => (NotificationType.SystemAlert,       "Cập nhật đơn giao",   "Trạng thái đơn giao của bạn đã thay đổi."),
+        };
 
     private static void RecomputeOrderStatus(Order order, Guid? actorId)
     {

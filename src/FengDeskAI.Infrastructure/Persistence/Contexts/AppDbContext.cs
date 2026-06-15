@@ -1,7 +1,9 @@
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Entities.Chat;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Entities.Announcement;
 using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
@@ -52,6 +54,13 @@ public class AppDbContext : DbContext
 
     // CustomerCare
     public DbSet<Review> Reviews => Set<Review>();
+
+    // Notification
+    public DbSet<Notification> Notifications => Set<Notification>();
+
+    // Chat
+    public DbSet<Chatbox> Chatboxes => Set<Chatbox>();
+    public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

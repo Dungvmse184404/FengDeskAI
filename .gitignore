@@ -10,7 +10,7 @@
 # Claude Code working dir
 .claude/
 .claude-code/
-
+.claudeignore
 # =====================
 # .NET build output
 # =====================
