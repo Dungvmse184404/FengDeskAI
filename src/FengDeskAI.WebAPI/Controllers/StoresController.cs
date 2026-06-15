@@ -40,9 +40,35 @@ public class StoresController : ApiControllerBase
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateStoreRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, IsAdmin, request, ct));
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>Xóa vĩnh viễn store (vật lý). Chỉ Staff hoặc Admin.</summary>
+    [HttpDelete("{id:guid}/hard")]
+    [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
+    public async Task<IActionResult> HardDelete(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.HardDeleteAsync(id, ct));
+
+    // ===== Địa chỉ store (1-1) =====
+
+    [HttpPost("{id:guid}/address")]
+    public async Task<IActionResult> AddAddress(Guid id, [FromBody] CreateStoreAddressRequest request, CancellationToken ct)
+        => ToActionResult(await _service.AddAddressAsync(id, CurrentUserId, IsAdmin, request, ct));
+
     [HttpPut("{id:guid}/address")]
-    public async Task<IActionResult> UpsertAddress(Guid id, [FromBody] UpsertStoreAddressRequest request, CancellationToken ct)
-        => ToActionResult(await _service.UpsertAddressAsync(id, CurrentUserId, IsAdmin, request, ct));
+    public async Task<IActionResult> UpdateAddress(Guid id, [FromBody] UpdateStoreAddressRequest request, CancellationToken ct)
+        => ToActionResult(await _service.UpdateAddressAsync(id, CurrentUserId, IsAdmin, request, ct));
+
+    [HttpDelete("{id:guid}/address")]
+    public async Task<IActionResult> DeleteAddress(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.DeleteAddressAsync(id, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>Xóa vĩnh viễn địa chỉ store (vật lý). Chỉ Staff hoặc Admin.</summary>
+    [HttpDelete("{id:guid}/address/hard")]
+    [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
+    public async Task<IActionResult> HardDeleteAddress(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.HardDeleteAddressAsync(id, ct));
 
     [HttpGet("{id:guid}/staff")]
     public async Task<IActionResult> GetStaff(Guid id, CancellationToken ct)

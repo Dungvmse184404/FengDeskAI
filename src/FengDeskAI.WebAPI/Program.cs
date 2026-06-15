@@ -71,12 +71,13 @@ builder.Services.AddHostedService<OrderExpirationWorker>();
 
 builder.Services.AddAuthorization(options =>
 {
+    // Thứ tự quyền: Customer < Manager < Staff < Admin. "...OrAbove" gồm role đó + mọi role cao hơn.
     options.AddPolicy(AuthorizationPolicies.AdminOnly,
         p => p.RequireRole(Roles.Admin));
-    options.AddPolicy(AuthorizationPolicies.ManagerOrAdmin,
-        p => p.RequireRole(Roles.Manager, Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.StaffOrAbove,
-        p => p.RequireRole(Roles.Staff, Roles.Manager, Roles.Admin));
+        p => p.RequireRole(Roles.Staff, Roles.Admin));
+    options.AddPolicy(AuthorizationPolicies.ManagerOrAbove,
+        p => p.RequireRole(Roles.Manager, Roles.Staff, Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.CustomerOnly,
         p => p.RequireRole(Roles.Customer));
 });

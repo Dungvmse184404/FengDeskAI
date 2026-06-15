@@ -40,9 +40,33 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
     public async Task AddAssignmentAsync(GardenStaffAssignment assignment, CancellationToken ct = default)
         => await _context.Set<GardenStaffAssignment>().AddAsync(assignment, ct);
 
+    public Task<bool> ExistsAsync(Guid id, CancellationToken ct = default)
+        => _set.IgnoreQueryFilters().AnyAsync(s => s.Id == id, ct);
+
     public Task<StoreAddress?> GetAddressAsync(Guid storeId, CancellationToken ct = default)
         => _context.Set<StoreAddress>().FirstOrDefaultAsync(a => a.StoreId == storeId, ct);
 
+    public Task<StoreAddress?> GetAddressIncludingDeletedAsync(Guid storeId, CancellationToken ct = default)
+        => _context.Set<StoreAddress>().IgnoreQueryFilters().FirstOrDefaultAsync(a => a.StoreId == storeId, ct);
+
+    public Task<bool> AddressExistsAsync(Guid storeId, CancellationToken ct = default)
+        => _context.Set<StoreAddress>().IgnoreQueryFilters().AnyAsync(a => a.StoreId == storeId, ct);
+
     public async Task AddAddressAsync(StoreAddress address, CancellationToken ct = default)
         => await _context.Set<StoreAddress>().AddAsync(address, ct);
+
+    public async Task HardDeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        // Bypass soft-delete interceptor (SaveChanges) bằng ExecuteDelete chạy SQL trực tiếp.
+        await _context.Set<StoreAddress>().IgnoreQueryFilters()
+            .Where(a => a.StoreId == id).ExecuteDeleteAsync(ct);
+        await _context.Set<GardenStaffAssignment>().IgnoreQueryFilters()
+            .Where(a => a.GardenStoreId == id).ExecuteDeleteAsync(ct);
+        await _set.IgnoreQueryFilters()
+            .Where(s => s.Id == id).ExecuteDeleteAsync(ct);
+    }
+
+    public async Task HardDeleteAddressAsync(Guid storeId, CancellationToken ct = default)
+        => await _context.Set<StoreAddress>().IgnoreQueryFilters()
+            .Where(a => a.StoreId == storeId).ExecuteDeleteAsync(ct);
 }
