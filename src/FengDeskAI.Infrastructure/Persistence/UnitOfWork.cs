@@ -25,6 +25,9 @@ public class UnitOfWork : IUnitOfWork
         IOrderRepository orders,
         IShippingRepository shipping,
         ITransactionRepository transactions,
+        INotificationRepository notifications,
+        IChatboxRepository chatboxes,
+        IChatMessageRepository chatMessages,
         IReviewRepository reviews)
     {
         _context = context;
@@ -42,6 +45,9 @@ public class UnitOfWork : IUnitOfWork
         Orders = orders;
         Shipping = shipping;
         Transactions = transactions;
+        Notifications = notifications;
+        Chatboxes = chatboxes;
+        ChatMessages = chatMessages;
         Reviews = reviews;
     }
 
@@ -58,6 +64,9 @@ public class UnitOfWork : IUnitOfWork
     public IOrderRepository Orders { get; }
     public IShippingRepository Shipping { get; }
     public ITransactionRepository Transactions { get; }
+    public INotificationRepository Notifications { get; }
+    public IChatboxRepository Chatboxes { get; }
+    public IChatMessageRepository ChatMessages { get; }
     public IReviewRepository Reviews { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
