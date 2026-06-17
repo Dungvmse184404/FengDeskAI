@@ -198,6 +198,11 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("name");
 
+                    b.Property<string>("SizeClass")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("size_class");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -228,6 +233,30 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("CategoryId");
 
                     b.ToTable("product_categories", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductElement", b =>
+                {
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Element")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("element");
+
+                    b.Property<bool>("IsPrimary")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_primary");
+
+                    b.HasKey("ProductId", "Element");
+
+                    b.HasIndex("ProductId", "IsPrimary");
+
+                    b.ToTable("product_element", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductImage", b =>
@@ -346,6 +375,22 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.ToTable("product_items", (string)null);
                 });
 
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductStyle", b =>
+                {
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Style")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("style");
+
+                    b.HasKey("ProductId", "Style");
+
+                    b.ToTable("product_styles", (string)null);
+                });
+
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductTag", b =>
                 {
                     b.Property<Guid>("ProductId")
@@ -361,6 +406,22 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("TagId");
 
                     b.ToTable("product_tags", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductVibe", b =>
+                {
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<string>("Vibe")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("vibe");
+
+                    b.HasKey("ProductId", "Vibe");
+
+                    b.ToTable("product_vibes", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.Tag", b =>
@@ -423,7 +484,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnName("chatbox_id");
 
                     b.Property<string>("Content")
-                        .IsRequired()
                         .HasMaxLength(5000)
                         .HasColumnType("character varying(5000)")
                         .HasColumnName("content");
@@ -442,6 +502,12 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
+                    b.Property<bool>("IsFromAi")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_from_ai");
+
                     b.Property<bool>("IsRead")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -452,7 +518,16 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("read_at");
 
-                    b.Property<Guid>("SenderUserId")
+                    b.Property<string>("SenderName")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("sender_name");
+
+                    b.Property<int>("SenderRole")
+                        .HasColumnType("integer")
+                        .HasColumnName("sender_role");
+
+                    b.Property<Guid?>("SenderUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("sender_user_id");
 
@@ -473,6 +548,57 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("ChatboxId", "IsRead");
 
                     b.ToTable("chat_messages", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.ChatMessageImage", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("ChatMessageId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("chat_message_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("url");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ChatMessageId");
+
+                    b.ToTable("chat_message_images", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.Chatbox", b =>
@@ -496,13 +622,21 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<Guid>("RecipientUserId")
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid?>("RecipientUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("recipient_user_id");
 
                     b.Property<Guid>("SenderUserId")
                         .HasColumnType("uuid")
                         .HasColumnName("sender_user_id");
+
+                    b.Property<int>("Type")
+                        .HasColumnType("integer")
+                        .HasColumnName("type");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
@@ -514,6 +648,8 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ProductId");
+
                     b.HasIndex("RecipientUserId");
 
                     b.HasIndex("SenderUserId");
@@ -522,6 +658,272 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .IsUnique();
 
                     b.ToTable("chatboxes", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.FengShuiRule", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("ObjectElement")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("object_element");
+
+                    b.Property<string>("Relation")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("relation");
+
+                    b.Property<decimal>("Score")
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("score");
+
+                    b.Property<string>("SubjectElement")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("subject_element");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubjectElement", "ObjectElement")
+                        .IsUnique()
+                        .HasFilter("is_deleted = FALSE");
+
+                    b.ToTable("feng_shui_rules", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.Recommendation", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CustomerElement")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("customer_element");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("KuaGroup")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("kua_group");
+
+                    b.Property<int?>("KuaNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("kua_number");
+
+                    b.Property<decimal>("PersonalWeight")
+                        .HasColumnType("numeric(4,2)")
+                        .HasColumnName("personal_weight");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("WorkspaceProfileId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_profile_id");
+
+                    b.Property<Guid?>("WorkspaceTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_type_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId");
+
+                    b.HasIndex("WorkspaceProfileId");
+
+                    b.HasIndex("WorkspaceTypeId");
+
+                    b.ToTable("recommendations", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.RecommendationItem", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("AiExplanation")
+                        .HasColumnType("text")
+                        .HasColumnName("ai_explanation");
+
+                    b.Property<int>("BaseRank")
+                        .HasColumnType("integer")
+                        .HasColumnName("base_rank");
+
+                    b.Property<decimal>("BaseScore")
+                        .HasColumnType("numeric(6,3)")
+                        .HasColumnName("base_score");
+
+                    b.Property<string>("CautionFacts")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("caution_facts");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<int>("FinalRank")
+                        .HasColumnType("integer")
+                        .HasColumnName("final_rank");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("MatchFacts")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("match_facts");
+
+                    b.Property<Guid>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid>("RecommendationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recommendation_id");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductId");
+
+                    b.HasIndex("RecommendationId");
+
+                    b.ToTable("recommendation_items", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.RecommendationLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Detail")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("detail");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("RecommendationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recommendation_id");
+
+                    b.Property<string>("Stage")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("stage");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("RecommendationId");
+
+                    b.ToTable("recommendation_logs", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.Review", b =>
@@ -1876,6 +2278,10 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("work_purpose");
 
+                    b.Property<Guid?>("WorkspaceTypeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("workspace_type_id");
+
                     b.HasKey("Id");
 
                     b.HasIndex("UserId")
@@ -1883,7 +2289,74 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("UX_workspace_profiles_user_default")
                         .HasFilter("is_default = TRUE AND is_deleted = FALSE");
 
+                    b.HasIndex("WorkspaceTypeId");
+
                     b.ToTable("workspace_profiles", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Workspace.WorkspaceType", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("description");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<bool>("IsPublic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_public");
+
+                    b.Property<bool>("IsSystemSeeded")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_system_seeded");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("PersonalWeight")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(4,2)")
+                        .HasDefaultValue(1.0m)
+                        .HasColumnName("personal_weight");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Name");
+
+                    b.ToTable("workspace_types", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Announcement.Notification", b =>
@@ -1935,6 +2408,17 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Product");
                 });
 
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductElement", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
+                        .WithMany("Elements")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductImage", b =>
                 {
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
@@ -1950,6 +2434,17 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                 {
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
                         .WithMany("Items")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductStyle", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
+                        .WithMany("Styles")
                         .HasForeignKey("ProductId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -1976,6 +2471,17 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Tag");
                 });
 
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.ProductVibe", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
+                        .WithMany("Vibes")
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.ChatMessage", b =>
                 {
                     b.HasOne("FengDeskAI.Domain.Entities.Chat.Chatbox", "Chatbox")
@@ -1987,25 +2493,93 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasOne("FengDeskAI.Domain.Entities.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("SenderUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Chatbox");
                 });
 
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.ChatMessageImage", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Chat.ChatMessage", "Message")
+                        .WithMany("Images")
+                        .HasForeignKey("ChatMessageId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Message");
+                });
+
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.Chatbox", b =>
                 {
+                    b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", null)
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("FengDeskAI.Domain.Entities.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("RecipientUserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("FengDeskAI.Domain.Entities.Identity.User", null)
                         .WithMany()
                         .HasForeignKey("SenderUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.Recommendation", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Identity.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Workspace.WorkspaceProfile", "WorkspaceProfile")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceProfileId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Workspace.WorkspaceType", null)
+                        .WithMany()
+                        .HasForeignKey("WorkspaceTypeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("User");
+
+                    b.Navigation("WorkspaceProfile");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.RecommendationItem", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FengDeskAI.Domain.Entities.CustomerCare.Recommendation", "Recommendation")
+                        .WithMany("Items")
+                        .HasForeignKey("RecommendationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+
+                    b.Navigation("Recommendation");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.RecommendationLog", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.CustomerCare.Recommendation", "Recommendation")
+                        .WithMany("Logs")
+                        .HasForeignKey("RecommendationId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Recommendation");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.Review", b =>
@@ -2253,7 +2827,14 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
+                    b.HasOne("FengDeskAI.Domain.Entities.Workspace.WorkspaceType", "WorkspaceType")
+                        .WithMany()
+                        .HasForeignKey("WorkspaceTypeId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.Navigation("User");
+
+                    b.Navigation("WorkspaceType");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.Category", b =>
@@ -2263,6 +2844,8 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Catalog.Product", b =>
                 {
+                    b.Navigation("Elements");
+
                     b.Navigation("Images");
 
                     b.Navigation("Items");
@@ -2270,11 +2853,27 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("ProductCategories");
 
                     b.Navigation("ProductTags");
+
+                    b.Navigation("Styles");
+
+                    b.Navigation("Vibes");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.ChatMessage", b =>
+                {
+                    b.Navigation("Images");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.Chatbox", b =>
                 {
                     b.Navigation("Messages");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.Recommendation", b =>
+                {
+                    b.Navigation("Items");
+
+                    b.Navigation("Logs");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Geography.District", b =>

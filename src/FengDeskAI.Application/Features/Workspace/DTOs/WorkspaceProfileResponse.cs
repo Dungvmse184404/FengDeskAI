@@ -7,6 +7,7 @@ public class WorkspaceProfileResponse
     public Guid Id { get; set; }
     public Guid UserId { get; set; }
     public string Name { get; set; } = null!;
+    public Guid? WorkspaceTypeId { get; set; }
     public LocationType LocationType { get; set; }
     public WorkspaceStyle Style { get; set; }
     public LightingType Lighting { get; set; }

@@ -6,6 +6,10 @@ public class CreateWorkspaceProfileRequest
 {
     public string Name { get; set; } = null!;
     public LocationType LocationType { get; set; }
+
+    /// <summary>Loại không gian (Personal Desk, Meeting Room...). Bỏ trống → coi như riêng tư (weight 1.0).</summary>
+    public Guid? WorkspaceTypeId { get; set; }
+
     public WorkspaceStyle Style { get; set; }
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }

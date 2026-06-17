@@ -102,6 +102,8 @@ public static class ApiStatusMessages
         public const string ItemDeleted = "Đã xóa biến thể.";
 
         public const string ImageUrlRequired = "URL ảnh không được để trống.";
+        public const string ImageFileRequired = "Vui lòng chọn tệp ảnh để tải lên.";
+        public const string ImageTypeInvalid = "Chỉ chấp nhận ảnh JPEG, PNG, WEBP hoặc GIF.";
         public const string ImageNotFound = "Không tìm thấy ảnh.";
         public const string ImageCreated = "Thêm ảnh thành công.";
         public const string ImageDeleted = "Đã xóa ảnh.";

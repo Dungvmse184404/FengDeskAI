@@ -87,10 +87,11 @@
 | POST | `/api/products/{id}/items` | 🏪 | `{ "name":"Size L", "price":250000, "stock":30, "sku":"KT-L" }` |
 | PUT | `/api/products/{id}/items/{itemId}` | 🏪 | như trên |
 | DELETE | `/api/products/{id}/items/{itemId}` | 🏪 | |
-| POST | `/api/products/{id}/images` | 🏪 | `{ "url":"https://...", "sortOrder":0 }` |
-| DELETE | `/api/products/{id}/images/{imageId}` | 🏪 | |
+| POST | `/api/products/{id}/images` | 🏪 | **multipart/form-data**: field `file` (+ `sortOrder`). Lưu Supabase Storage `Product_images/{id}/`, trả URL |
+| DELETE | `/api/products/{id}/images/{imageId}` | 🏪 | xoá bản ghi DB **và** file trên storage |
 | PUT | `/api/products/{id}/categories` | 🏪 | `{ "categoryIds":["...","..."] }` (thay toàn bộ) |
 | PUT | `/api/products/{id}/tags` | 🏪 | `{ "tagIds":["...","..."] }` (thay toàn bộ) |
+| PUT | `/api/products/{id}/feng-shui` | 🏪 | thuộc tính phong thủy (làm ứng viên gợi ý) — xem body dưới |
 
 **Body tạo product:**
 ```jsonc
@@ -107,6 +108,19 @@ POST /api/products
 ```
 
 > **Lưu ý**: `productItemId` mà cart/order dùng = `items[].id` trong product detail (mỗi SKU mang giá + tồn kho riêng).
+> Ảnh trong body tạo product vẫn nhận URL có sẵn; để **upload tệp** dùng endpoint `POST /api/products/{id}/images` (multipart).
+
+**Body thuộc tính phong thủy** (lưu vào `product_element` nhiều-nhiều + `products.size_class`):
+```jsonc
+PUT /api/products/{id}/feng-shui
+{
+  "primaryElement": "Moc",          // hành chính — bắt buộc (Kim|Moc|Thuy|Hoa|Tho)
+  "secondaryElements": ["Thuy"],    // hành phụ 0..n (trùng hành chính sẽ bị bỏ)
+  "sizeClass": "Small",             // Small | Medium | Large
+  "vibes": ["Focus"],
+  "styles": ["Scandinavian"]
+}
+```
 
 ---
 
@@ -206,7 +220,47 @@ POST /api/shipping/webhook    (header: X-Webhook-Secret: <ShippingWebhook:Secret
 
 ---
 
-## 9. 🛒 Luồng mua hàng end-to-end (test nhanh)
+## 9. Chat & Trợ lý AI — `api/chat` (🔑)
+
+Một mô hình **`chatboxes` 1-n `chat_messages`** dùng chung cho cả chat **người ↔ người** (customer ↔ garden owner / staff / manager — không giới hạn cặp role) lẫn **người ↔ AI**. Mỗi message có `senderRole`, `senderName` (prefix email, để AI phân biệt 2 người cùng role), `content` (nullable), `images` (chỉ lưu **link**), `isFromAi`.
+
+### Người ↔ người
+| Method | Path | Ghi chú |
+|---|---|---|
+| POST | `/api/chat/chatbox/with/{otherUserId}` | lấy/tạo chatbox Direct với user khác |
+| GET | `/api/chat/chatboxes?page=&pageSize=` | danh sách hội thoại của tôi |
+| GET | `/api/chat/chatbox/{chatboxId}/messages?page=&pageSize=` | tin nhắn (mới nhất trước) |
+| POST | `/api/chat/chatbox/{chatboxId}/messages` | gửi tin: `{ "content":"...", "imageUrls":["..."] }` — cần **content HOẶC ảnh** |
+| POST | `/api/chat/chatbox/{chatboxId}/images` | **multipart** field `file` → trả link ảnh (`Chat_images/{chatboxId}/`) để gắn vào tin |
+| PATCH | `/api/chat/message/{messageId}/read` | đánh dấu 1 tin đã đọc |
+| PATCH | `/api/chat/chatbox/{chatboxId}/read-all` | đánh dấu cả hội thoại đã đọc |
+
+### Người ↔ AI
+| Method | Path | Ghi chú |
+|---|---|---|
+| POST | `/api/chat/ai/messages` | chat với trợ lý AI (lưu cùng `chatboxes`/`chat_messages`, Type=Assistant) |
+
+```jsonc
+POST /api/chat/ai/messages
+{
+  "chatboxId": null,            // lượt đầu để null → server tạo hội thoại AI & trả lại chatboxId
+  "message": "Cây này hợp mệnh Mộc không?",   // có thể null nếu chỉ gửi ảnh
+  "model": null,                // null → AiChat:DefaultModel; phải nằm trong AiChat:AllowedModels
+  "productId": "<id>",          // hỏi về 1 sản phẩm → AI nạp thông tin sản phẩm làm ngữ cảnh
+  "imageUrls": ["https://..."]  // ảnh: lưu link; AI nhận bản base64 tải từ link
+}
+```
+- **Nhớ N lượt gần nhất** đọc từ DB (cấu hình `AiChat:MaxHistoryTurns`, mặc định 5).
+- **Đổi model mỗi lượt** qua `model`. Danh tính người dùng (tên từ JWT) được đưa vào ngữ cảnh để AI xưng hô đúng.
+- Cấu hình ở section **`AiChat`** (BaseUrl/ChatPath/DefaultModel/AllowedModels/...) và storage ở section **`SupabaseStorage`** trong `appsettings`.
+
+### Realtime — SignalR hub `/hubs/chat` (cần Bearer)
+- Gọi: `JoinChatbox(chatboxId)`, `SendMessage(chatboxId, content)`, `MarkAsRead(messageId)`, `LeaveChatbox(chatboxId)`.
+- Sự kiện nhận: `messageReceived`, `messageMarkedAsRead`, `userJoined`, `userLeft`, `error`.
+
+---
+
+## 10. 🛒 Luồng mua hàng end-to-end (test nhanh)
 
 ```http
 # 0. Đăng nhập (hoặc dùng vendor seed: vendor@fengdesk.local / Vendor@123)
@@ -239,7 +293,7 @@ PATCH /api/orders/deliveries/{deliveryId}/status   { status: "Shipped" } → ...
 
 ---
 
-## 10. Tài khoản & dữ liệu seed
+## 11. Tài khoản & dữ liệu seed
 
 Chạy `dotnet run --project src/FengDeskAI.WebAPI -- seed` (idempotent):
 - **Geography**: tỉnh/quận/phường mẫu (Hà Nội, Đà Nẵng, HCM).
@@ -248,7 +302,7 @@ Chạy `dotnet run --project src/FengDeskAI.WebAPI -- seed` (idempotent):
 
 ---
 
-## 11. Bảng trạng thái (enum)
+## 12. Bảng trạng thái (enum)
 
 | Enum | Giá trị |
 |---|---|

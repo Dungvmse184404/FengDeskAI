@@ -14,6 +14,13 @@ public class WorkspaceProfile : BaseEntity
     public string Name { get; set; } = null!;
 
     public LocationType LocationType { get; set; }
+
+    /// <summary>
+    /// Loại không gian (Personal Desk, Meeting Room...) — quyết định trọng số cá nhân khi gợi ý.
+    /// Nullable để tương thích dữ liệu cũ; khi null engine coi như không gian riêng (weight 1.0).
+    /// </summary>
+    public Guid? WorkspaceTypeId { get; set; }
+
     public WorkspaceStyle Style { get; set; }
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }
@@ -28,4 +35,5 @@ public class WorkspaceProfile : BaseEntity
     public bool IsDefault { get; set; }
 
     public User User { get; set; } = null!;
+    public WorkspaceType? WorkspaceType { get; set; }
 }

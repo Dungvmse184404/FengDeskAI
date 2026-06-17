@@ -13,6 +13,7 @@ public class WorkspaceProfileConfiguration : IEntityTypeConfiguration<WorkspaceP
         builder.HasKey(w => w.Id);
         builder.Property(w => w.Id).HasColumnName("id");
         builder.Property(w => w.UserId).HasColumnName("user_id").IsRequired();
+        builder.Property(w => w.WorkspaceTypeId).HasColumnName("workspace_type_id");
 
         builder.Property(w => w.Name)
             .HasColumnName("name")
@@ -50,6 +51,13 @@ public class WorkspaceProfileConfiguration : IEntityTypeConfiguration<WorkspaceP
             .WithMany(u => u.WorkspaceProfiles)
             .HasForeignKey(w => w.UserId)
             .OnDelete(DeleteBehavior.Cascade);
+
+        // Xóa loại không gian → profile về null (coi như riêng tư, weight 1.0).
+        builder.HasIndex(w => w.WorkspaceTypeId);
+        builder.HasOne(w => w.WorkspaceType)
+            .WithMany()
+            .HasForeignKey(w => w.WorkspaceTypeId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasQueryFilter(w => !w.IsDeleted);
     }

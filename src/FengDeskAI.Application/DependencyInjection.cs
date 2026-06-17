@@ -21,6 +21,7 @@ using FengDeskAI.Application.Features.CustomerCare.Mappings;
 using FengDeskAI.Application.Features.CustomerCare.Services;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
+using FengDeskAI.Application.Features.CustomerCare.Engine;
 
 namespace FengDeskAI.Application;
 
@@ -46,6 +47,7 @@ public static class DependencyInjection
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRegistrationFlowService, RegistrationFlowService>();
         services.AddScoped<IWorkspaceProfileService, WorkspaceProfileService>();
+        services.AddScoped<IWorkspaceTypeService, WorkspaceTypeService>();
 
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IUserAddressService, UserAddressService>();
@@ -70,6 +72,13 @@ public static class DependencyInjection
         services.AddScoped<IChatService, ChatService>();
 
         services.AddScoped<IReviewService, ReviewService>();
+
+        // Engine chấm điểm phong thủy — thuần logic, stateless.
+        services.AddSingleton<IRecommendationScorer, RecommendationScorer>();
+        services.AddScoped<IRecommendationService, RecommendationService>();
+
+        // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model theo cấu hình "AiChat".
+        services.AddScoped<IAiChatService, AiChatService>();
 
         return services;
     }

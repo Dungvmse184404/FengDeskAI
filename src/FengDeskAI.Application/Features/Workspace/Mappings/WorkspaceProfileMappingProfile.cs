@@ -9,6 +9,8 @@ public class WorkspaceProfileMappingProfile : Profile
     {
         CreateMap<Domain.Entities.Workspace.WorkspaceProfile, WorkspaceProfileResponse>();
 
+        CreateMap<Domain.Entities.Workspace.WorkspaceType, WorkspaceTypeResponse>();
+
         CreateMap<CreateWorkspaceProfileRequest, Domain.Entities.Workspace.WorkspaceProfile>()
             .ForMember(d => d.Id, opt => opt.Ignore())
             .ForMember(d => d.UserId, opt => opt.Ignore())

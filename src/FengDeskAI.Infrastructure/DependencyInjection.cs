@@ -1,13 +1,16 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
+using FengDeskAI.Application.Features.CustomerCare;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Infrastructure.ExternalServices.Ai;
 using FengDeskAI.Infrastructure.ExternalServices.Payment;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure.Authentication;
 using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.ExternalServices.Mail;
 using FengDeskAI.Infrastructure.ExternalServices.Shipping;
+using FengDeskAI.Infrastructure.ExternalServices.Storage;
 using FengDeskAI.Infrastructure.Persistence;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using FengDeskAI.Infrastructure.Persistence.Repositories;
@@ -119,6 +122,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IWorkspaceProfileRepository, WorkspaceProfileRepository>();
+        services.AddScoped<IWorkspaceTypeRepository, WorkspaceTypeRepository>();
         services.AddScoped<ILocationRepository, LocationRepository>();
         services.AddScoped<IUserAddressRepository, UserAddressRepository>();
         services.AddScoped<IStoreRepository, StoreRepository>();
@@ -133,6 +137,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
         services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+        services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordService, PasswordService>();
@@ -155,8 +160,29 @@ public static class DependencyInjection
         services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>();
         services.AddScoped<IShippingProvider, MockShopeeShippingProvider>();
 
+        // AI recommendation — mock theo CONTRACT.md (mặc định) hoặc HTTP client gọi Python.
+        // Toggle bằng AiRecommendationSettings:UseMock.
+        services.AddSettings<AiRecommendationSettings>(configuration);
+        var aiSettings = configuration.GetSettings<AiRecommendationSettings>();
+        if (aiSettings.UseMock)
+            services.AddScoped<IAiRecommendationClient, MockAiRecommendationClient>();
+        else
+            services.AddHttpClient<IAiRecommendationClient, HttpAiRecommendationClient>();
+
+        // AI chat hội thoại — gọi LLM kiểu Ollama (/api/chat). Lịch sử lưu trong chatboxes/chat_messages (DB).
+        services.AddSettings<AiChatOptions>(configuration);
+        services.AddHttpClient<IAiChatClient, OllamaChatClient>();
+
+        // Object storage (Supabase) cho ảnh sản phẩm/người dùng + encoder ảnh → base64 để feed AI.
+        services.AddSettings<SupabaseStorageOptions>(configuration);
+        services.AddHttpClient<IFileStorage, SupabaseFileStorage>();
+        services.AddHttpClient<IImageEncoder, ImageEncoder>();
+
+        services.AddScoped<IDataSeeder, WorkspaceTypeSeeder>();
+        services.AddScoped<IDataSeeder, FengShuiRuleSeeder>();
         services.AddScoped<IDataSeeder, GeographySeeder>();
         services.AddScoped<IDataSeeder, CatalogDemoSeeder>();
+        services.AddScoped<IDataSeeder, ProductFengShuiDemoSeeder>();
 
         return services;
     }

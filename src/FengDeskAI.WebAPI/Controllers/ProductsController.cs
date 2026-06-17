@@ -1,3 +1,5 @@
+using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Catalog.DTOs;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.WebAPI.Authorization;
@@ -59,9 +61,18 @@ public class ProductsController : ApiControllerBase
 
     // ----- Product images -----
 
+    /// <summary>Tải ảnh sản phẩm (multipart/form-data, field "file"). Lưu vào storage rồi gắn URL vào sản phẩm.</summary>
     [HttpPost("{id:guid}/images")]
-    public async Task<IActionResult> AddImage(Guid id, [FromBody] CreateProductImageRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AddImageAsync(id, CurrentUserId, IsAdmin, request, ct));
+    public async Task<IActionResult> UploadImage(Guid id, IFormFile file, [FromForm] int sortOrder = 0, CancellationToken ct = default)
+    {
+        if (file is null || file.Length == 0)
+            return ToActionResult(ServiceResult<ProductImageResponse>.Failure(
+                ApiStatusCodes.BadRequest, ApiStatusMessages.Product.ImageFileRequired));
+
+        await using var stream = file.OpenReadStream();
+        return ToActionResult(await _service.UploadImageAsync(
+            id, CurrentUserId, IsAdmin, stream, file.FileName, file.ContentType, sortOrder, ct));
+    }
 
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
     public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
@@ -76,4 +87,10 @@ public class ProductsController : ApiControllerBase
     [HttpPut("{id:guid}/tags")]
     public async Task<IActionResult> SetTags(Guid id, [FromBody] SetTagsRequest request, CancellationToken ct)
         => ToActionResult(await _service.SetTagsAsync(id, CurrentUserId, IsAdmin, request, ct));
+
+    // ----- Thuộc tính phong thủy (ứng viên gợi ý) -----
+
+    [HttpPut("{id:guid}/feng-shui")]
+    public async Task<IActionResult> SetFengShui(Guid id, [FromBody] SetProductFengShuiRequest request, CancellationToken ct)
+        => ToActionResult(await _service.SetFengShuiAsync(id, CurrentUserId, IsAdmin, request, ct));
 }

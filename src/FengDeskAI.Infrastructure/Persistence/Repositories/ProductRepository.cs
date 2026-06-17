@@ -1,5 +1,7 @@
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Enums.Catalog;
+using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -16,6 +18,9 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Images)
             .Include(p => p.ProductCategories).ThenInclude(pc => pc.Category)
             .Include(p => p.ProductTags).ThenInclude(pt => pt.Tag)
+            .Include(p => p.Elements)
+            .Include(p => p.Vibes)
+            .Include(p => p.Styles)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<Product?> GetForUpdateAsync(Guid id, CancellationToken ct = default)
@@ -53,6 +58,16 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         return (items, total);
     }
 
+    public Task<List<Product>> GetScorableCandidatesAsync(CancellationToken ct = default)
+        => _set.AsNoTracking()
+            .Where(p => p.IsActive && p.Elements.Any())
+            .Include(p => p.Elements)
+            .Include(p => p.Vibes)
+            .Include(p => p.Styles)
+            .Include(p => p.Images)
+            .Include(p => p.Items)
+            .ToListAsync(ct);
+
     public Task<ProductItem?> GetItemAsync(Guid productId, Guid itemId, CancellationToken ct = default)
         => _context.Set<ProductItem>().FirstOrDefaultAsync(i => i.Id == itemId && i.ProductId == productId, ct);
 
@@ -85,5 +100,39 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         set.RemoveRange(existing);
         foreach (var tid in tagIds.Distinct())
             await set.AddAsync(new ProductTag { ProductId = productId, TagId = tid }, ct);
+    }
+
+    public async Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, SizeClass size, CancellationToken ct = default)
+    {
+        // size_class nằm trên products.
+        var product = await _set.FirstOrDefaultAsync(p => p.Id == productId, ct);
+        if (product is not null) product.SizeClass = size;
+
+        // Thay toàn bộ hành: 1 hành chính (IsPrimary) + các hành phụ (khác hành chính).
+        var set = _context.Set<ProductElement>();
+        var existing = await set.Where(e => e.ProductId == productId).ToListAsync(ct);
+        set.RemoveRange(existing);
+
+        await set.AddAsync(new ProductElement { ProductId = productId, Element = primary, IsPrimary = true }, ct);
+        foreach (var el in secondaries.Distinct().Where(e => e != primary))
+            await set.AddAsync(new ProductElement { ProductId = productId, Element = el, IsPrimary = false }, ct);
+    }
+
+    public async Task ReplaceVibesAsync(Guid productId, IEnumerable<Vibe> vibes, CancellationToken ct = default)
+    {
+        var set = _context.Set<ProductVibe>();
+        var existing = await set.Where(v => v.ProductId == productId).ToListAsync(ct);
+        set.RemoveRange(existing);
+        foreach (var vibe in vibes.Distinct())
+            await set.AddAsync(new ProductVibe { ProductId = productId, Vibe = vibe }, ct);
+    }
+
+    public async Task ReplaceStylesAsync(Guid productId, IEnumerable<WorkspaceStyle> styles, CancellationToken ct = default)
+    {
+        var set = _context.Set<ProductStyle>();
+        var existing = await set.Where(s => s.ProductId == productId).ToListAsync(ct);
+        set.RemoveRange(existing);
+        foreach (var style in styles.Distinct())
+            await set.AddAsync(new ProductStyle { ProductId = productId, Style = style }, ct);
     }
 }

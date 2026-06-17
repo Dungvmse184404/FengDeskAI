@@ -5,6 +5,7 @@ public interface IUnitOfWork
     IUserRepository Users { get; }
     IRefreshTokenRepository RefreshTokens { get; }
     IWorkspaceProfileRepository WorkspaceProfiles { get; }
+    IWorkspaceTypeRepository WorkspaceTypes { get; }
 
     // Geography
     ILocationRepository Locations { get; }
@@ -37,6 +38,9 @@ public interface IUnitOfWork
 
     // CustomerCare
     IReviewRepository Reviews { get; }
+
+    // Recommendation (AI)
+    IRecommendationRepository Recommendations { get; }
 
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(

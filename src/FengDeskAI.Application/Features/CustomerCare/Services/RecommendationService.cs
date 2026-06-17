@@ -1,0 +1,316 @@
+using System.Text.Json;
+using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Interfaces.External;
+using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Contracts.Recommendation;
+using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Entities.Workspace;
+using Microsoft.Extensions.Logging;
+using FengDeskAI.Domain.Entities.CustomerCare;
+using FengDeskAI.Domain.Enums.Catalog;
+using FengDeskAI.Domain.Enums.Recommendation;
+using FengDeskAI.Domain.Enums.Workspace;
+using FengDeskAI.Application.Features.CustomerCare.Engine;
+using FengDeskAI.Application.Features.CustomerCare.DTOs;
+
+namespace FengDeskAI.Application.Features.CustomerCare.Services;
+
+public sealed class RecommendationService : IRecommendationService
+{
+    private const int DefaultTopN = 8;
+    private const int MaxTopN = 20;
+
+    private readonly IUnitOfWork _uow;
+    private readonly IRecommendationScorer _scorer;
+    private readonly IAiRecommendationClient _ai;
+    private readonly ILogger<RecommendationService> _logger;
+
+    public RecommendationService(
+        IUnitOfWork uow,
+        IRecommendationScorer scorer,
+        IAiRecommendationClient ai,
+        ILogger<RecommendationService> logger)
+    {
+        _uow = uow;
+        _scorer = scorer;
+        _ai = ai;
+        _logger = logger;
+    }
+
+    public async Task<IServiceResult<RecommendationResponse>> GenerateAsync(
+        Guid userId, GenerateRecommendationRequest request, CancellationToken ct = default)
+    {
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(request.WorkspaceProfileId, userId, ct);
+        if (profile is null)
+            return ServiceResult<RecommendationResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hồ sơ không gian.");
+
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        if (user is null)
+            return ServiceResult<RecommendationResponse>.Failure(ApiStatusCodes.Unauthorized, "Người dùng không hợp lệ.");
+
+        // Phần cá nhân (null nếu giới tính không Nam/Nữ → bỏ qua mệnh & hướng).
+        var personal = _scorer.BuildPersonalProfile(user.DateOfBirth, user.Gender);
+
+        // Trọng số cá nhân theo loại không gian (mặc định 1.0 = riêng tư).
+        decimal personalWeight = 1.0m;
+        WorkspaceType? wsType = null;
+        if (profile.WorkspaceTypeId is { } typeId)
+        {
+            wsType = await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct);
+            if (wsType is not null) personalWeight = wsType.PersonalWeight;
+        }
+
+        var rules = await _uow.Recommendations.GetAllRulesAsync(ct);
+        var elementScores = rules.ToDictionary(r => (r.SubjectElement, r.ObjectElement), r => r.Score);
+
+        var products = await _uow.Products.GetScorableCandidatesAsync(ct);
+        if (products.Count == 0)
+            return ServiceResult<RecommendationResponse>.Failure(
+                ApiStatusCodes.UnprocessableEntity,
+                "Chưa có sản phẩm nào được gắn thuộc tính phong thủy để gợi ý.");
+
+        var candidates = products.Select(ToFacts).ToList();
+
+        var context = new ScoringContext
+        {
+            PersonalWeight = personalWeight,
+            Purpose = profile.WorkPurpose,
+            Style = profile.Style,
+            Lighting = profile.Lighting,
+            DeskOrientation = profile.DeskOrientation,
+            DeskArea = profile.DeskArea,
+            Personal = personal,
+            ElementScores = elementScores,
+        };
+
+        int topN = Math.Clamp(request.TopN ?? DefaultTopN, 1, MaxTopN);
+        var top = _scorer.Score(context, candidates).Take(topN).ToList();
+        var productById = products.ToDictionary(p => p.Id);
+
+        return await _uow.ExecuteInTransactionAsync(async innerCt =>
+        {
+            var rec = new Recommendation
+            {
+                UserId = userId,
+                WorkspaceProfileId = profile.Id,
+                WorkspaceTypeId = profile.WorkspaceTypeId,
+                CustomerElement = personal?.Element,
+                KuaNumber = personal?.KuaNumber,
+                KuaGroup = personal?.Group,
+                PersonalWeight = personalWeight,
+                Status = RecommendationStatus.Scored,
+            };
+
+            int rank = 1;
+            foreach (var s in top)
+            {
+                rec.Items.Add(new RecommendationItem
+                {
+                    ProductId = s.ProductId,
+                    BaseScore = s.Score,
+                    BaseRank = rank,
+                    FinalRank = rank,
+                    MatchFacts = JsonSerializer.Serialize(s.MatchFacts),
+                    CautionFacts = s.CautionFacts.Count > 0 ? JsonSerializer.Serialize(s.CautionFacts) : null,
+                });
+                rank++;
+            }
+
+            await _uow.Recommendations.AddAsync(rec, innerCt);
+            rec.Logs.Add(new RecommendationLog
+            {
+                Stage = "EngineScored",
+                Detail = JsonSerializer.Serialize(new { topN, candidates = candidates.Count, personalWeight }),
+            });
+
+            var aiRequest = BuildAiRequest(context, wsType, personal, top, productById);
+            rec.Logs.Add(new RecommendationLog { Stage = "AiRequested", Detail = JsonSerializer.Serialize(aiRequest) });
+
+            AiRecommendationResponse aiResponse;
+            try
+            {
+                aiResponse = await _ai.ExplainAsync(aiRequest, innerCt);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "AI explain thất bại cho recommendation {RecId}.", rec.Id);
+                rec.Status = RecommendationStatus.Failed;
+                rec.Logs.Add(new RecommendationLog { Stage = "Error", Detail = ex.Message });
+                return ServiceResult<RecommendationResponse>.Success(
+                    BuildResponse(rec, top, productById),
+                    "Đã chấm điểm nhưng AI diễn giải gặp lỗi.", ApiStatusCodes.Ok);
+            }
+
+            ApplyAiResponse(rec, aiResponse, candidates);
+            rec.Status = RecommendationStatus.Completed;
+            rec.Logs.Add(new RecommendationLog { Stage = "AiResponded", Detail = JsonSerializer.Serialize(aiResponse) });
+
+            return ServiceResult<RecommendationResponse>.Success(
+                BuildResponse(rec, top, productById),
+                "Tạo gợi ý thành công.", ApiStatusCodes.Created);
+        }, ct);
+    }
+
+    public async Task<IServiceResult<RecommendationResponse>> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
+    {
+        var rec = await _uow.Recommendations.GetDetailForUserAsync(id, userId, ct);
+        if (rec is null)
+            return ServiceResult<RecommendationResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phiên gợi ý.");
+
+        var productIds = rec.Items.Select(i => i.ProductId).ToList();
+        var products = await _uow.Products.GetScorableCandidatesAsync(ct);
+        var productById = products.Where(p => productIds.Contains(p.Id)).ToDictionary(p => p.Id);
+
+        return ServiceResult<RecommendationResponse>.Success(BuildResponseFromEntity(rec, productById));
+    }
+
+    // ─────────────────────────── helpers ───────────────────────────
+
+    private static ProductFacts ToFacts(Product p) => new(
+        p.Id,
+        p.Elements.Where(e => e.IsPrimary).Select(e => (FengShuiElement?)e.Element).FirstOrDefault(),
+        p.Elements.Where(e => !e.IsPrimary).Select(e => (FengShuiElement?)e.Element).FirstOrDefault(),
+        p.SizeClass ?? SizeClass.Medium,
+        p.Vibes.Select(v => v.Vibe).ToHashSet(),
+        p.Styles.Select(s => s.Style).ToHashSet());
+
+    private static AiRecommendationRequest BuildAiRequest(
+        ScoringContext ctx, WorkspaceType? wsType, PersonalProfile? personal,
+        List<ScoredProduct> top, IReadOnlyDictionary<Guid, Product> productById)
+    {
+        return new AiRecommendationRequest
+        {
+            Customer = new AiCustomerInfo
+            {
+                Element = personal?.Element.ToString(),
+                KuaNumber = personal?.KuaNumber,
+                KuaGroup = personal?.Group.ToString(),
+                FavorableDirections = personal?.FavorableDirections.Select(d => d.ToString()).ToList()
+                    ?? new List<string>(),
+            },
+            Workspace = new AiWorkspaceInfo
+            {
+                Type = wsType?.Name ?? "Personal Desk",
+                IsPublic = wsType?.IsPublic ?? false,
+                Purpose = ctx.Purpose.ToString(),
+                Style = ctx.Style.ToString(),
+                Lighting = ctx.Lighting.ToString(),
+                DeskOrientation = ctx.DeskOrientation.ToString(),
+                DeskArea = ctx.DeskArea,
+                PersonalWeight = ctx.PersonalWeight,
+            },
+            Candidates = top.Select((s, i) =>
+            {
+                var p = productById[s.ProductId];
+                return new AiCandidate
+                {
+                    ProductId = s.ProductId,
+                    Name = p.Name,
+                    Description = p.Description,
+                    Score = s.Score,
+                    BaseRank = i + 1,
+                    MatchFacts = s.MatchFacts.ToList(),
+                    CautionFacts = s.CautionFacts.ToList(),
+                };
+            }).ToList(),
+        };
+    }
+
+    /// <summary>Áp diễn giải + thứ hạng AI lên item, bỏ qua sản phẩm lạ (luật contract).</summary>
+    private void ApplyAiResponse(Recommendation rec, AiRecommendationResponse response, List<ProductFacts> candidates)
+    {
+        var allowed = candidates.Select(c => c.ProductId).ToHashSet();
+        var byProduct = rec.Items.ToDictionary(i => i.ProductId);
+
+        var unknown = response.Items.Where(i => !allowed.Contains(i.ProductId)).ToList();
+        if (unknown.Count > 0)
+        {
+            _logger.LogWarning("[Contract] AI trả {Count} sản phẩm ngoài danh sách — bỏ qua.", unknown.Count);
+            rec.Logs.Add(new RecommendationLog
+            {
+                Stage = "ContractViolation",
+                Detail = JsonSerializer.Serialize(unknown.Select(u => u.ProductId)),
+            });
+        }
+
+        foreach (var explained in response.Items)
+        {
+            if (!byProduct.TryGetValue(explained.ProductId, out var item)) continue;
+            item.AiExplanation = explained.Explanation;
+            item.FinalRank = explained.FinalRank;
+        }
+
+        rec.Summary = response.Summary;
+    }
+
+    private static RecommendationResponse BuildResponse(
+        Recommendation rec, List<ScoredProduct> top, IReadOnlyDictionary<Guid, Product> productById)
+    {
+        var factsByProduct = top.ToDictionary(t => t.ProductId);
+
+        var items = rec.Items.Select(it =>
+        {
+            productById.TryGetValue(it.ProductId, out var p);
+            factsByProduct.TryGetValue(it.ProductId, out var facts);
+
+            return new RecommendationItemResponse
+            {
+                ProductId = it.ProductId,
+                ProductName = p?.Name ?? "(unknown)",
+                Price = p is { Items.Count: > 0 } ? p.Items.Min(i => i.Price) : null,
+                ImageUrl = p?.Images.OrderBy(im => im.SortOrder).FirstOrDefault()?.Url,
+                Score = it.BaseScore,
+                Rank = it.FinalRank,
+                MatchFacts = facts?.MatchFacts.ToList() ?? new(),
+                CautionFacts = facts?.CautionFacts.ToList() ?? new(),
+                Explanation = it.AiExplanation,
+            };
+        })
+        .OrderBy(i => i.Rank)
+        .ToList();
+
+        return Compose(rec, items);
+    }
+
+    private static RecommendationResponse BuildResponseFromEntity(Recommendation rec, IReadOnlyDictionary<Guid, Product> productById)
+    {
+        var items = rec.Items.Select(it =>
+        {
+            productById.TryGetValue(it.ProductId, out var p);
+            return new RecommendationItemResponse
+            {
+                ProductId = it.ProductId,
+                ProductName = p?.Name ?? "(unknown)",
+                Price = p is { Items.Count: > 0 } ? p.Items.Min(i => i.Price) : null,
+                ImageUrl = p?.Images.OrderBy(im => im.SortOrder).FirstOrDefault()?.Url,
+                Score = it.BaseScore,
+                Rank = it.FinalRank,
+                MatchFacts = Deserialize(it.MatchFacts),
+                CautionFacts = Deserialize(it.CautionFacts),
+                Explanation = it.AiExplanation,
+            };
+        })
+        .OrderBy(i => i.Rank)
+        .ToList();
+
+        return Compose(rec, items);
+    }
+
+    private static RecommendationResponse Compose(Recommendation rec, List<RecommendationItemResponse> items) => new()
+    {
+        Id = rec.Id,
+        CustomerElement = rec.CustomerElement?.ToString(),
+        KuaNumber = rec.KuaNumber,
+        KuaGroup = rec.KuaGroup?.ToString(),
+        PersonalWeight = rec.PersonalWeight,
+        Status = rec.Status.ToString(),
+        Summary = rec.Summary,
+        Items = items,
+    };
+
+    private static List<string> Deserialize(string? json)
+        => string.IsNullOrWhiteSpace(json)
+            ? new List<string>()
+            : JsonSerializer.Deserialize<List<string>>(json) ?? new List<string>();
+}

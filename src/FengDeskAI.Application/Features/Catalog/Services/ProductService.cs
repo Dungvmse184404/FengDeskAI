@@ -3,6 +3,7 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Catalog.DTOs;
+using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
 
@@ -10,13 +11,18 @@ namespace FengDeskAI.Application.Features.Catalog.Services;
 
 public class ProductService : IProductService
 {
+    private static readonly string[] AllowedImageContentTypes =
+        { "image/jpeg", "image/png", "image/webp", "image/gif" };
+
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly IFileStorage _storage;
 
-    public ProductService(IUnitOfWork uow, IMapper mapper)
+    public ProductService(IUnitOfWork uow, IMapper mapper, IFileStorage storage)
     {
         _uow = uow;
         _mapper = mapper;
+        _storage = storage;
     }
 
     public async Task<IServiceResult<PagedResult<ProductListItemResponse>>> SearchAsync(ProductQueryParams query, CancellationToken ct = default)
@@ -165,16 +171,53 @@ public class ProductService : IProductService
         return ServiceResult<ProductImageResponse>.Success(_mapper.Map<ProductImageResponse>(image), ApiStatusMessages.Product.ImageCreated, ApiStatusCodes.Created);
     }
 
+    public async Task<IServiceResult<ProductImageResponse>> UploadImageAsync(
+        Guid productId, Guid userId, bool isAdmin,
+        Stream content, string fileName, string contentType, int sortOrder, CancellationToken ct = default)
+    {
+        var guard = await GuardProductAsync<ProductImageResponse>(productId, userId, isAdmin, ct);
+        if (guard.Error is not null) return guard.Error;
+
+        if (content is null || content.Length == 0)
+            return ServiceResult<ProductImageResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.ImageFileRequired);
+        if (!AllowedImageContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase))
+            return ServiceResult<ProductImageResponse>.Failure(ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.Product.ImageTypeInvalid);
+
+        // Mỗi product một thư mục riêng: Product_images/{productId}/{guid}{ext}
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ExtensionFor(contentType);
+        var objectPath = $"Product_images/{productId}/{Guid.NewGuid():N}{ext}";
+
+        var stored = await _storage.UploadAsync(objectPath, content, contentType, ct);
+
+        var image = new ProductImage { ProductId = productId, Url = stored.Url, SortOrder = sortOrder };
+        await _uow.Products.AddImageAsync(image, ct);
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<ProductImageResponse>.Success(_mapper.Map<ProductImageResponse>(image), ApiStatusMessages.Product.ImageCreated, ApiStatusCodes.Created);
+    }
+
     public async Task<IServiceResult> DeleteImageAsync(Guid productId, Guid imageId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var guard = await GuardProductAsync<object>(productId, userId, isAdmin, ct);
         if (guard.Error is not null) return guard.Error;
         var image = await _uow.Products.GetImageAsync(productId, imageId, ct);
         if (image is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.ImageNotFound);
+
         _uow.Products.RemoveImage(image);
         await _uow.SaveChangesAsync(ct);
+        // Xoá file trên storage best-effort sau khi DB đã commit (không chặn nghiệp vụ nếu lỗi).
+        await _storage.DeleteByUrlAsync(image.Url, ct);
         return ServiceResult.Success(ApiStatusMessages.Product.ImageDeleted);
     }
+
+    private static string ExtensionFor(string contentType) => contentType?.ToLowerInvariant() switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        "image/gif" => ".gif",
+        _ => ".bin",
+    };
 
     public async Task<IServiceResult<ProductDetailResponse>> SetCategoriesAsync(Guid productId, Guid userId, bool isAdmin, SetCategoriesRequest request, CancellationToken ct = default)
     {
@@ -200,6 +243,27 @@ public class ProductService : IProductService
         await _uow.SaveChangesAsync(ct);
         var detail = await _uow.Products.GetDetailAsync(productId, ct);
         return ServiceResult<ProductDetailResponse>.Success(_mapper.Map<ProductDetailResponse>(detail), ApiStatusMessages.Product.TagsUpdated);
+    }
+
+    public async Task<IServiceResult<ProductFengShuiResponse>> SetFengShuiAsync(Guid productId, Guid userId, bool isAdmin, SetProductFengShuiRequest request, CancellationToken ct = default)
+    {
+        var guard = await GuardProductAsync<ProductFengShuiResponse>(productId, userId, isAdmin, ct);
+        if (guard.Error is not null) return guard.Error;
+
+        await _uow.Products.SetFengShuiAsync(productId, request.PrimaryElement, request.SecondaryElements, request.SizeClass, ct);
+        await _uow.Products.ReplaceVibesAsync(productId, request.Vibes, ct);
+        await _uow.Products.ReplaceStylesAsync(productId, request.Styles, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        return ServiceResult<ProductFengShuiResponse>.Success(new ProductFengShuiResponse
+        {
+            ProductId = productId,
+            PrimaryElement = request.PrimaryElement,
+            SecondaryElements = request.SecondaryElements.Distinct().Where(e => e != request.PrimaryElement).ToList(),
+            SizeClass = request.SizeClass,
+            Vibes = request.Vibes.Distinct().ToList(),
+            Styles = request.Styles.Distinct().ToList(),
+        }, "Cập nhật thuộc tính phong thủy thành công.");
     }
 
     // ---- helpers ----
