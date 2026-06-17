@@ -1,5 +1,6 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Catalog.DTOs;
@@ -11,9 +12,6 @@ namespace FengDeskAI.Application.Features.Catalog.Services;
 
 public class ProductService : IProductService
 {
-    private static readonly string[] AllowedImageContentTypes =
-        { "image/jpeg", "image/png", "image/webp", "image/gif" };
-
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly IFileStorage _storage;
@@ -180,12 +178,12 @@ public class ProductService : IProductService
 
         if (content is null || content.Length == 0)
             return ServiceResult<ProductImageResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.ImageFileRequired);
-        if (!AllowedImageContentTypes.Contains(contentType, StringComparer.OrdinalIgnoreCase))
+        if (!ImageUpload.IsAllowed(contentType))
             return ServiceResult<ProductImageResponse>.Failure(ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.Product.ImageTypeInvalid);
 
         // Mỗi product một thư mục riêng: Product_images/{productId}/{guid}{ext}
         var ext = Path.GetExtension(fileName);
-        if (string.IsNullOrWhiteSpace(ext)) ext = ExtensionFor(contentType);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(contentType);
         var objectPath = $"Product_images/{productId}/{Guid.NewGuid():N}{ext}";
 
         var stored = await _storage.UploadAsync(objectPath, content, contentType, ct);
@@ -209,15 +207,6 @@ public class ProductService : IProductService
         await _storage.DeleteByUrlAsync(image.Url, ct);
         return ServiceResult.Success(ApiStatusMessages.Product.ImageDeleted);
     }
-
-    private static string ExtensionFor(string contentType) => contentType?.ToLowerInvariant() switch
-    {
-        "image/jpeg" => ".jpg",
-        "image/png" => ".png",
-        "image/webp" => ".webp",
-        "image/gif" => ".gif",
-        _ => ".bin",
-    };
 
     public async Task<IServiceResult<ProductDetailResponse>> SetCategoriesAsync(Guid productId, Guid userId, bool isAdmin, SetCategoriesRequest request, CancellationToken ct = default)
     {
@@ -250,6 +239,13 @@ public class ProductService : IProductService
         var guard = await GuardProductAsync<ProductFengShuiResponse>(productId, userId, isAdmin, ct);
         if (guard.Error is not null) return guard.Error;
 
+        // Element là enum (FengShuiElement) nên luôn hợp lệ; chỉ cần kiểm style/vibe code có trong bảng tra cứu
+        // → tránh lỗi FK 500, trả 400 thân thiện.
+        if (!await AllCodesExistAsync(_uow.Styles, request.Styles, ct))
+            return ServiceResult<ProductFengShuiResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.StylesNotExist);
+        if (!await AllCodesExistAsync(_uow.Vibes, request.Vibes, ct))
+            return ServiceResult<ProductFengShuiResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.VibesNotExist);
+
         await _uow.Products.SetFengShuiAsync(productId, request.PrimaryElement, request.SecondaryElements, request.SizeClass, ct);
         await _uow.Products.ReplaceVibesAsync(productId, request.Vibes, ct);
         await _uow.Products.ReplaceStylesAsync(productId, request.Styles, ct);
@@ -264,6 +260,17 @@ public class ProductService : IProductService
             Vibes = request.Vibes.Distinct().ToList(),
             Styles = request.Styles.Distinct().ToList(),
         }, "Cập nhật thuộc tính phong thủy thành công.");
+    }
+
+    /// <summary>True nếu mọi code (style/vibe...) đều tồn tại trong bảng tra cứu. Tập rỗng → true.</summary>
+    private static async Task<bool> AllCodesExistAsync<T>(
+        IGenericRepository<T> repo, IEnumerable<string> codes, CancellationToken ct)
+        where T : class, Domain.Entities.Catalog.ILookup
+    {
+        var wanted = codes.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        if (wanted.Count == 0) return true;
+        var existing = (await repo.GetAllAsync(ct)).Select(x => x.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return wanted.All(existing.Contains);
     }
 
     // ---- helpers ----

@@ -24,16 +24,22 @@ public sealed class RecommendationScorer : IRecommendationScorer
 
     public PersonalProfile? BuildPersonalProfile(DateTime? dateOfBirth, Gender gender)
     {
-        if (dateOfBirth is null || gender is not (Gender.Male or Gender.Female))
-            return null;
+        if (dateOfBirth is null)
+            return null; // không có năm sinh → bỏ toàn bộ phần cá nhân
 
         int year = dateOfBirth.Value.Year;
-        var element = FengShuiCalculator.GetNapAmElement(year);
-        int kua = FengShuiCalculator.GetKuaNumber(year, gender);
-        var group = FengShuiCalculator.GetKuaGroup(kua);
-        var favorable = FengShuiCalculator.GetFavorableDirections(group);
+        var element = FengShuiCalculator.GetNapAmElement(year); // mệnh Nạp Âm: chỉ cần năm sinh
 
-        return new PersonalProfile(element, kua, group, favorable);
+        // Kua + hướng tốt cần giới tính Nam/Nữ.
+        if (gender is Gender.Male or Gender.Female)
+        {
+            int kua = FengShuiCalculator.GetKuaNumber(year, gender);
+            var group = FengShuiCalculator.GetKuaGroup(kua);
+            return new PersonalProfile(element, kua, group, FengShuiCalculator.GetFavorableDirections(group));
+        }
+
+        // Thiếu giới tính → vẫn có mệnh, không có hướng.
+        return new PersonalProfile(element, null, null, new HashSet<CompassDirection>());
     }
 
     public IReadOnlyList<ScoredProduct> Score(ScoringContext context, IReadOnlyList<ProductFacts> candidates)
@@ -57,12 +63,15 @@ public sealed class RecommendationScorer : IRecommendationScorer
         decimal personalRaw = 0m;
         if (ctx.Personal is { } personal)
         {
-            personalRaw += w.Element * ScoreElement(ctx, personal, product, facts, cautions);
-            personalRaw += w.Direction * ScoreDirection(personal, product, ctx.DeskOrientation, facts);
+            personalRaw += w.Element * ScoreElement(ctx, personal, product, facts, cautions); // mệnh: luôn xét
+            if (personal.FavorableDirections.Count > 0)
+                personalRaw += w.Direction * ScoreDirection(personal, product, ctx.DeskOrientation, facts);
+            else
+                cautions.Add("Chưa xác định giới tính Nam/Nữ — bỏ qua yếu tố hướng (Kua), vẫn xét mệnh.");
         }
         else
         {
-            cautions.Add("Chưa xác định giới tính Nam/Nữ — bỏ qua yếu tố mệnh & hướng, chỉ xét công năng.");
+            cautions.Add("Chưa có ngày sinh — bỏ qua yếu tố cá nhân, chỉ xét công năng.");
         }
 
         decimal personalScore = ctx.PersonalWeight * personalRaw;

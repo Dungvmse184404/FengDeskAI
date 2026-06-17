@@ -20,11 +20,15 @@ public sealed record ScoringWeights
     public static ScoringWeights Default { get; } = new();
 }
 
-/// <summary>Hồ sơ cá nhân đã tính. Null ở context nghĩa là bỏ qua phần cá nhân (giới tính không Nam/Nữ).</summary>
+/// <summary>
+/// Hồ sơ cá nhân. <see cref="Element"/> (mệnh Nạp Âm) tính chỉ từ năm sinh — luôn có khi có ngày sinh.
+/// Kua/hướng cần thêm giới tính Nam/Nữ; thiếu giới tính → <see cref="KuaNumber"/>/<see cref="Group"/> null
+/// và <see cref="FavorableDirections"/> rỗng (bỏ phần hướng, vẫn giữ phần mệnh).
+/// </summary>
 public sealed record PersonalProfile(
     FengShuiElement Element,
-    int KuaNumber,
-    KuaGroup Group,
+    int? KuaNumber,
+    KuaGroup? Group,
     IReadOnlySet<CompassDirection> FavorableDirections);
 
 /// <summary>Bối cảnh không gian + cá nhân cho 1 phiên chấm điểm.</summary>

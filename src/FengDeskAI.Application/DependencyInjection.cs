@@ -19,6 +19,8 @@ using FengDeskAI.Application.Features.Workspace.Mappings;
 using FengDeskAI.Application.Features.Workspace.Services;
 using FengDeskAI.Application.Features.CustomerCare.Mappings;
 using FengDeskAI.Application.Features.CustomerCare.Services;
+using FengDeskAI.Application.Features.CustomerCare.Tools;
+using FengDeskAI.Application.Interfaces.External;
 using Microsoft.Extensions.DependencyInjection;
 using System.Diagnostics.CodeAnalysis;
 using FengDeskAI.Application.Features.CustomerCare.Engine;
@@ -78,7 +80,13 @@ public static class DependencyInjection
         services.AddSingleton<IRecommendationScorer, RecommendationScorer>();
         services.AddScoped<IRecommendationService, RecommendationService>();
 
-        // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model theo cấu hình "AiChat".
+        // Tools cho AI (function calling) — đọc, scope theo user.
+        services.AddScoped<IAiTool, SearchProductsTool>();
+        services.AddScoped<IAiTool, GetProductTool>();
+        services.AddScoped<IAiTool, RecommendProductsTool>();
+        services.AddScoped<IAiTool, ListMyWorkspacesTool>();
+
+        // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "AiChat".
         services.AddScoped<IAiChatService, AiChatService>();
 
         return services;

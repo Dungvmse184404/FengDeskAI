@@ -1,3 +1,4 @@
+using System.Text.Json;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Chat;
@@ -16,6 +17,8 @@ public sealed class AiChatService : IAiChatService
     private readonly IAiChatClient _client;
     private readonly IUnitOfWork _uow;
     private readonly IImageEncoder _encoder;
+    private readonly IReadOnlyList<IAiTool> _tools;
+    private readonly IChatRealtimeNotifier _notifier;
     private readonly AiChatOptions _options;
     private readonly ILogger<AiChatService> _logger;
 
@@ -23,12 +26,16 @@ public sealed class AiChatService : IAiChatService
         IAiChatClient client,
         IUnitOfWork uow,
         IImageEncoder encoder,
+        IEnumerable<IAiTool> tools,
+        IChatRealtimeNotifier notifier,
         IOptions<AiChatOptions> options,
         ILogger<AiChatService> logger)
     {
         _client = client;
         _uow = uow;
         _encoder = encoder;
+        _tools = tools.ToList();
+        _notifier = notifier;
         _options = options.Value;
         _logger = logger;
     }
@@ -45,37 +52,41 @@ public sealed class AiChatService : IAiChatService
         if (!TryResolveModel(request.Model, out var model, out var modelError))
             return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.BadRequest, modelError!);
 
-        // 1) Lấy/tạo hội thoại AI.
+        // 1) Lấy/tạo phòng riêng user ↔ AI (chỉ user đó + AiBot).
         Chatbox chatbox;
         if (request.ChatboxId is { } cbId)
         {
-            var existing = await _uow.Chatboxes.GetByIdAsync(cbId, ct);
-            if (existing is null || existing.Type != ChatboxType.Assistant || existing.SenderUserId != userId)
+            var existing = await _uow.Chatboxes.GetWithParticipantsAsync(cbId, ct);
+            var isPrivateAiRoom = existing is not null
+                && existing.Participants.Any(p => p.ParticipantType == ParticipantType.AiBot)
+                && existing.Participants.Any(p => p.UserId == userId)
+                && !existing.Participants.Any(p => p.UserId != null && p.UserId != userId);
+            if (!isPrivateAiRoom)
                 return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hội thoại AI của bạn.");
-            chatbox = existing;
+            chatbox = existing!;
         }
         else
         {
-            chatbox = await _uow.Chatboxes.GetOrCreateAssistantAsync(userId, request.ProductId, ct);
-            await _uow.SaveChangesAsync(ct); // đảm bảo có ChatboxId trước khi thêm message
+            chatbox = await _uow.Chatboxes.GetOrCreateAssistantAsync(
+                userId, ChatSenderHelper.TypeFrom(userRole), request.ProductId, ct);
+            await _uow.SaveChangesAsync(ct); // đảm bảo có ChatboxId
         }
 
-        // 2) Lưu tin nhắn người dùng (kèm link ảnh — KHÔNG lưu nhị phân).
+        // 2) Lưu tin của người dùng (kèm link ảnh).
         var userMessage = new ChatMessage
         {
             ChatboxId = chatbox.Id,
-            SenderUserId = userId,
-            SenderRole = ChatSenderHelper.RoleFrom(userRole),
+            SenderId = userId,
+            SenderType = MessageSenderType.User,
             SenderName = ChatSenderHelper.NameFrom(userEmail),
             Content = message,
-            IsFromAi = false,
             Images = imageUrls.Select((url, i) => new ChatMessageImage { Url = url, SortOrder = i }).ToList(),
         };
         await _uow.ChatMessages.AddAsync(userMessage, ct);
         chatbox.UpdatedAt = DateTime.UtcNow;
         await _uow.SaveChangesAsync(ct);
 
-        // 3) Dựng payload: system (+danh tính +sản phẩm) + N lượt gần nhất (đã gồm tin vừa lưu).
+        // 3) Payload: system (+danh tính +sản phẩm) + N lượt gần nhất.
         var history = await _uow.ChatMessages.GetRecentAsync(chatbox.Id, _options.MaxHistoryTurns * 2, ct);
         var outgoing = new List<AiChatMessage>(history.Count + 1);
 
@@ -83,18 +94,21 @@ public sealed class AiChatService : IAiChatService
         if (systemPrompt is not null)
             outgoing.Add(new AiChatMessage(AiChatRoles.System, systemPrompt));
 
-        for (var i = 0; i < history.Count; i++)
-        {
-            var m = history[i];
-            var isLast = i == history.Count - 1;
-            outgoing.Add(await ToOutgoingAsync(m, isLast, ct));
-        }
+        // Phòng riêng (chỉ user + AI) → nạp ngữ cảnh từ các phòng CHUNG của user để "bàn luận tổng hợp".
+        // Reply chỉ user thấy nên không lộ chéo. (Ở phòng chung sẽ KHÔNG gom — Phase 3.)
+        var sharedContext = await BuildSharedContextAsync(userId, chatbox.Id, ct);
+        if (sharedContext is not null)
+            outgoing.Add(new AiChatMessage(AiChatRoles.System, sharedContext));
 
-        // 4) Gọi LLM.
+        for (var i = 0; i < history.Count; i++)
+            outgoing.Add(await ToOutgoingAsync(history[i], encodeImages: i == history.Count - 1, ct));
+
+        // 4) Gọi LLM (kèm vòng lặp tool calling nếu bật + model hỗ trợ).
         AiChatCompletion completion;
         try
         {
-            completion = await _client.CompleteAsync(model, outgoing, ct);
+            var ctx = new AiToolContext(userId, userRole, userEmail);
+            completion = await RunWithToolsAsync(model, outgoing, ctx, ct);
         }
         catch (Exception ex)
         {
@@ -103,24 +117,28 @@ public sealed class AiChatService : IAiChatService
                 ApiStatusCodes.ServiceUnavailable, "Không kết nối được tới dịch vụ AI. Vui lòng thử lại sau.");
         }
 
-        // 5) Lưu câu trả lời của AI.
+        // 5) Lưu câu trả lời AI.
         var aiMessage = new ChatMessage
         {
             ChatboxId = chatbox.Id,
-            SenderUserId = null,
-            SenderRole = ChatRole.Assistant,
+            SenderId = null,
+            SenderType = MessageSenderType.AiBot,
             SenderName = null,
             Content = completion.Content,
-            IsFromAi = true,
         };
         await _uow.ChatMessages.AddAsync(aiMessage, ct);
         chatbox.UpdatedAt = DateTime.UtcNow;
         await _uow.SaveChangesAsync(ct);
 
-        // 6) Trả về lịch sử gần nhất (link ảnh để client hiển thị, không phải base64).
+        // Broadcast realtime câu trả lời AI tới phòng (cho các thiết bị khác / phòng chung Phase 3).
+        await _notifier.MessageReceivedAsync(new ChatMessageBroadcast(
+            aiMessage.Id, chatbox.Id, null, nameof(MessageSenderType.AiBot), null,
+            aiMessage.Content, aiMessage.CreatedAt, Array.Empty<string>()), ct);
+
+        // 6) Trả lịch sử gần nhất (link ảnh để hiển thị).
         var recent = await _uow.ChatMessages.GetRecentAsync(chatbox.Id, _options.MaxHistoryTurns * 2, ct);
         var turns = recent.Select(m => new AiChatTurn(
-            m.SenderRole.ToString(),
+            m.SenderType.ToString(),
             m.Content,
             m.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList())).ToList();
 
@@ -133,13 +151,113 @@ public sealed class AiChatService : IAiChatService
         });
     }
 
-    /// <summary>Map 1 message DB → message gửi LLM. Chỉ encode ảnh base64 cho lượt hiện tại (tránh nặng).</summary>
+    public async Task RespondInRoomAsync(Guid chatboxId, CancellationToken ct = default)
+    {
+        var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
+        if (chatbox is null || !chatbox.IsAiEnabled) return;
+
+        var history = await _uow.ChatMessages.GetRecentAsync(chatboxId, _options.MaxHistoryTurns * 2, ct);
+        if (history.Count == 0) return;
+        // Đã có tin AI mới nhất rồi → không trả lời lần nữa (chống lặp khi nhiều job trùng).
+        if (history[^1].SenderType == MessageSenderType.AiBot) return;
+
+        var outgoing = new List<AiChatMessage>(history.Count + 1);
+        var systemPrompt = await BuildSystemPromptAsync(userDisplayName: null, chatbox.ProductId, ct);
+        if (systemPrompt is not null)
+            outgoing.Add(new AiChatMessage(AiChatRoles.System, systemPrompt));
+        for (var i = 0; i < history.Count; i++)
+            outgoing.Add(await ToOutgoingAsync(history[i], encodeImages: i == history.Count - 1, ct));
+
+        AiChatCompletion completion;
+        try
+        {
+            // Phòng chung: KHÔNG dùng tool (tránh nhập nhằng user-scope), ngữ cảnh chỉ trong phòng.
+            completion = await _client.CompleteAsync(_options.DefaultModel, outgoing, tools: null, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AiChat] Bot trả lời phòng {ChatboxId} thất bại.", chatboxId);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(completion.Content)) return;
+
+        var aiMessage = new ChatMessage
+        {
+            ChatboxId = chatboxId,
+            SenderId = null,
+            SenderType = MessageSenderType.AiBot,
+            Content = completion.Content,
+        };
+        await _uow.ChatMessages.AddAsync(aiMessage, ct);
+        chatbox.UpdatedAt = DateTime.UtcNow;
+        await _uow.SaveChangesAsync(ct);
+
+        await _notifier.MessageReceivedAsync(new ChatMessageBroadcast(
+            aiMessage.Id, chatboxId, null, nameof(MessageSenderType.AiBot), null,
+            aiMessage.Content, aiMessage.CreatedAt, Array.Empty<string>()), ct);
+    }
+
+    /// <summary>Vòng lặp tool calling: gọi LLM → nếu có tool_calls thì chạy tool, nối kết quả, gọi lại (tối đa N vòng).</summary>
+    private async Task<AiChatCompletion> RunWithToolsAsync(
+        string model, List<AiChatMessage> messages, AiToolContext ctx, CancellationToken ct)
+    {
+        var tools = BuildToolSpecs();
+        var maxRounds = tools is { Count: > 0 } ? Math.Max(1, _options.MaxToolIterations) : 1;
+
+        for (var round = 0; round < maxRounds; round++)
+        {
+            var completion = await _client.CompleteAsync(model, messages, tools, ct);
+            if (completion.ToolCalls is not { Count: > 0 })
+                return completion; // câu trả lời cuối (không gọi tool)
+
+            // Echo lời gọi tool của assistant + chạy từng tool → nối kết quả role=tool.
+            messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content, ToolCalls: completion.ToolCalls));
+            foreach (var call in completion.ToolCalls)
+            {
+                var output = await ExecuteToolAsync(call, ctx, ct);
+                messages.Add(new AiChatMessage(AiChatRoles.Tool, output, ToolName: call.Name));
+            }
+        }
+
+        // Hết vòng mà vẫn đòi tool → gọi lần cuối KHÔNG kèm tools để ép ra câu trả lời text.
+        return await _client.CompleteAsync(model, messages, null, ct);
+    }
+
+    private IReadOnlyList<AiToolSpec>? BuildToolSpecs()
+    {
+        if (!_options.EnableTools || _tools.Count == 0) return null;
+        IEnumerable<IAiTool> enabled = _tools;
+        if (_options.EnabledTools.Count > 0)
+            enabled = enabled.Where(t => _options.EnabledTools.Contains(t.Name, StringComparer.OrdinalIgnoreCase));
+        var specs = enabled.Select(t => t.ToSpec()).ToList();
+        return specs.Count > 0 ? specs : null;
+    }
+
+    private async Task<string> ExecuteToolAsync(AiToolCall call, AiToolContext ctx, CancellationToken ct)
+    {
+        var tool = _tools.FirstOrDefault(t => string.Equals(t.Name, call.Name, StringComparison.OrdinalIgnoreCase));
+        if (tool is null)
+            return $"{{\"error\":\"Tool '{call.Name}' không tồn tại.\"}}";
+
+        try
+        {
+            using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(call.ArgumentsJson) ? "{}" : call.ArgumentsJson);
+            _logger.LogInformation("[AiChat] Tool {Tool} args={Args}", call.Name, call.ArgumentsJson);
+            return await tool.ExecuteAsync(ctx, doc.RootElement, ct);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AiChat] Tool {Tool} lỗi.", call.Name);
+            return "{\"error\":\"Tool thực thi thất bại.\"}";
+        }
+    }
+
+    /// <summary>Map 1 message DB → message gửi LLM. Chỉ encode ảnh base64 cho lượt hiện tại.</summary>
     private async Task<AiChatMessage> ToOutgoingAsync(ChatMessage m, bool encodeImages, CancellationToken ct)
     {
-        var wireRole = m.IsFromAi || m.SenderRole == ChatRole.Assistant ? AiChatRoles.Assistant : AiChatRoles.User;
-
-        // Nhãn "[Role/name]" giúp AI phân biệt các bên (Ollama không có field name riêng).
-        var label = wireRole == AiChatRoles.User ? $"[{m.SenderRole}/{m.SenderName ?? "?"}] " : string.Empty;
+        var wireRole = m.SenderType == MessageSenderType.AiBot ? AiChatRoles.Assistant : AiChatRoles.User;
+        var label = wireRole == AiChatRoles.User ? $"[{m.SenderName ?? "?"}] " : string.Empty;
         var text = label + (m.Content ?? string.Empty);
 
         var imageLinks = m.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList();
@@ -156,6 +274,36 @@ public sealed class AiChatService : IAiChatService
             catch (Exception ex) { _logger.LogWarning(ex, "[AiChat] Không tải được ảnh {Url} để feed AI.", link); }
         }
         return new AiChatMessage(wireRole, text, base64.Count > 0 ? base64 : null);
+    }
+
+    /// <summary>
+    /// Gom tin gần nhất từ các phòng "chung" của user (nơi có người khác) làm ngữ cảnh tham khảo.
+    /// CHỈ dùng cho phòng riêng user↔AI — đảm bảo không rò rỉ hội thoại chéo cho bên thứ ba.
+    /// </summary>
+    private async Task<string?> BuildSharedContextAsync(Guid userId, Guid currentChatboxId, CancellationToken ct)
+    {
+        var roomIds = (await _uow.Chatboxes.GetSharedRoomIdsAsync(userId, ct))
+            .Where(id => id != currentChatboxId)
+            .Take(Math.Max(0, _options.SharedContextRoomLimit))
+            .ToList();
+        if (roomIds.Count == 0) return null;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("Ngữ cảnh tham khảo từ các cuộc trò chuyện của người dùng với cửa hàng/nhân viên " +
+                  "(chỉ để hiểu nhu cầu, đừng trích nguyên văn):");
+        var any = false;
+        foreach (var rid in roomIds)
+        {
+            var msgs = await _uow.ChatMessages.GetRecentAsync(rid, _options.SharedRoomMessages, ct);
+            foreach (var m in msgs)
+            {
+                if (string.IsNullOrWhiteSpace(m.Content)) continue;
+                var who = m.SenderType == MessageSenderType.AiBot ? "AI" : (m.SenderName ?? "người dùng");
+                sb.Append($"\n- {who}: {m.Content}");
+                any = true;
+            }
+        }
+        return any ? sb.ToString() : null;
     }
 
     private async Task<string?> BuildSystemPromptAsync(string? userDisplayName, Guid? productId, CancellationToken ct)

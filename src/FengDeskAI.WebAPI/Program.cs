@@ -68,6 +68,13 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<FengDeskAI.Application.Interfaces.External.IChatRealtimeNotifier, FengDeskAI.WebAPI.Hubs.ChatRealtimeNotifier>();
+
+// Bot AI nền (Phase 3): hàng đợi singleton + worker xử lý.
+builder.Services.AddSingleton<FengDeskAI.WebAPI.Workers.AiBotQueue>();
+builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiBotQueue>(
+    sp => sp.GetRequiredService<FengDeskAI.WebAPI.Workers.AiBotQueue>());
+builder.Services.AddHostedService<FengDeskAI.WebAPI.Workers.AiBotWorker>();
 
 builder.Services.AddSignalR();
 
