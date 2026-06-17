@@ -32,7 +32,8 @@ public sealed record ScoringContext
 {
     public required decimal PersonalWeight { get; init; }
     public required WorkPurpose Purpose { get; init; }
-    public required WorkspaceStyle Style { get; init; }
+    /// <summary>Mã phong cách mong muốn (styles.code), vd "Minimal".</summary>
+    public required string Style { get; init; }
     public required LightingType Lighting { get; init; }
     public required CompassDirection DeskOrientation { get; init; }
     public required int DeskArea { get; init; }
@@ -56,8 +57,8 @@ public sealed record ProductFacts(
     FengShuiElement? PrimaryElement,
     FengShuiElement? SecondaryElement,
     SizeClass SizeClass,
-    IReadOnlySet<Vibe> Vibes,
-    IReadOnlySet<WorkspaceStyle> Styles);
+    IReadOnlySet<string> Vibes,
+    IReadOnlySet<string> Styles);
 
 /// <summary>Kết quả chấm điểm 1 sản phẩm + các "sự thật" để AI diễn giải.</summary>
 public sealed record ScoredProduct(

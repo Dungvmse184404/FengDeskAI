@@ -118,21 +118,21 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             await set.AddAsync(new ProductElement { ProductId = productId, Element = el, IsPrimary = false }, ct);
     }
 
-    public async Task ReplaceVibesAsync(Guid productId, IEnumerable<Vibe> vibes, CancellationToken ct = default)
+    public async Task ReplaceVibesAsync(Guid productId, IEnumerable<string> vibeCodes, CancellationToken ct = default)
     {
         var set = _context.Set<ProductVibe>();
         var existing = await set.Where(v => v.ProductId == productId).ToListAsync(ct);
         set.RemoveRange(existing);
-        foreach (var vibe in vibes.Distinct())
-            await set.AddAsync(new ProductVibe { ProductId = productId, Vibe = vibe }, ct);
+        foreach (var code in vibeCodes.Distinct())
+            await set.AddAsync(new ProductVibe { ProductId = productId, VibeCode = code }, ct);
     }
 
-    public async Task ReplaceStylesAsync(Guid productId, IEnumerable<WorkspaceStyle> styles, CancellationToken ct = default)
+    public async Task ReplaceStylesAsync(Guid productId, IEnumerable<string> styleCodes, CancellationToken ct = default)
     {
         var set = _context.Set<ProductStyle>();
         var existing = await set.Where(s => s.ProductId == productId).ToListAsync(ct);
         set.RemoveRange(existing);
-        foreach (var style in styles.Distinct())
-            await set.AddAsync(new ProductStyle { ProductId = productId, Style = style }, ct);
+        foreach (var code in styleCodes.Distinct())
+            await set.AddAsync(new ProductStyle { ProductId = productId, StyleCode = code }, ct);
     }
 }

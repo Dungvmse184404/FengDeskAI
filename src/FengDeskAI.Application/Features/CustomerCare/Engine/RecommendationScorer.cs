@@ -5,6 +5,16 @@ using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
+/// <summary>Mã vibe canonical mà thuật toán quan tâm (khớp vibes.code đã seed).</summary>
+internal static class VibeCodes
+{
+    public const string Focus = "Focus";
+    public const string Relax = "Relax";
+    public const string Creative = "Creative";
+    public const string Calm = "Calm";
+    public const string Energize = "Energize";
+}
+
 /// <inheritdoc />
 public sealed class RecommendationScorer : IRecommendationScorer
 {
@@ -136,9 +146,11 @@ public sealed class RecommendationScorer : IRecommendationScorer
         return 0m;
     }
 
-    private static decimal ScoreStyle(WorkspaceStyle style, ProductFacts product, List<string> facts)
+    // ── Vibe giờ là mã chuỗi (vibes.code) thay cho enum ──
+
+    private static decimal ScoreStyle(string style, ProductFacts product, List<string> facts)
     {
-        if (product.Styles.Contains(style))
+        if (!string.IsNullOrEmpty(style) && product.Styles.Contains(style))
         {
             facts.Add($"Phong cách {style} đồng bộ với không gian.");
             return 1.0m;
@@ -151,7 +163,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         switch (lighting)
         {
             case LightingType.Dim:
-                if (product.PrimaryElement == FengShuiElement.Hoa || product.Vibes.Contains(Vibe.Energize))
+                if (product.PrimaryElement == FengShuiElement.Hoa || product.Vibes.Contains(VibeCodes.Energize))
                 {
                     facts.Add("Bổ sung sinh khí/ánh sáng cho không gian thiếu sáng.");
                     return 1.0m;
@@ -159,7 +171,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 break;
             case LightingType.Natural:
                 if (product.PrimaryElement is FengShuiElement.Thuy or FengShuiElement.Moc
-                    || product.Vibes.Contains(Vibe.Calm))
+                    || product.Vibes.Contains(VibeCodes.Calm))
                 {
                     facts.Add("Làm dịu, cân bằng không gian nhiều ánh sáng tự nhiên.");
                     return 1.0m;
@@ -186,14 +198,14 @@ public sealed class RecommendationScorer : IRecommendationScorer
         return -0.5m * diff;
     }
 
-    private static Vibe? TargetVibe(WorkPurpose purpose) => purpose switch
+    private static string? TargetVibe(WorkPurpose purpose) => purpose switch
     {
-        WorkPurpose.Office => Vibe.Focus,
-        WorkPurpose.Study => Vibe.Focus,
-        WorkPurpose.Reading => Vibe.Calm,
-        WorkPurpose.Creative => Vibe.Creative,
-        WorkPurpose.Gaming => Vibe.Energize,
-        WorkPurpose.Mixed => Vibe.Focus,
+        WorkPurpose.Office => VibeCodes.Focus,
+        WorkPurpose.Study => VibeCodes.Focus,
+        WorkPurpose.Reading => VibeCodes.Calm,
+        WorkPurpose.Creative => VibeCodes.Creative,
+        WorkPurpose.Gaming => VibeCodes.Energize,
+        WorkPurpose.Mixed => VibeCodes.Focus,
         _ => null,
     };
 
@@ -207,13 +219,13 @@ public sealed class RecommendationScorer : IRecommendationScorer
         _ => "",
     };
 
-    private static string VibePhrase(Vibe vibe) => vibe switch
+    private static string VibePhrase(string vibe) => vibe switch
     {
-        Vibe.Focus => "tập trung",
-        Vibe.Relax => "thư giãn",
-        Vibe.Creative => "khơi gợi sáng tạo",
-        Vibe.Calm => "tĩnh tại",
-        Vibe.Energize => "tràn năng lượng",
-        _ => vibe.ToString(),
+        VibeCodes.Focus => "tập trung",
+        VibeCodes.Relax => "thư giãn",
+        VibeCodes.Creative => "khơi gợi sáng tạo",
+        VibeCodes.Calm => "tĩnh tại",
+        VibeCodes.Energize => "tràn năng lượng",
+        _ => vibe,
     };
 }

@@ -57,6 +57,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITagService, TagService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<ITaxonomyService, TaxonomyService>();
 
         services.AddScoped<ICartService, CartService>();
         services.AddScoped<IOrderService, OrderService>();

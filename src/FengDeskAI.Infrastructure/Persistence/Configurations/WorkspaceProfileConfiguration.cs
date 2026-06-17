@@ -22,7 +22,7 @@ public class WorkspaceProfileConfiguration : IEntityTypeConfiguration<WorkspaceP
 
         // Lưu enum dưới dạng string trong DB cho dễ đọc + tránh phải migration khi đổi enum order
         builder.Property(w => w.LocationType).HasColumnName("location_type").HasConversion<string>().HasMaxLength(30);
-        builder.Property(w => w.Style).HasColumnName("style").HasConversion<string>().HasMaxLength(30);
+        builder.Property(w => w.StyleCode).HasColumnName("style_code").HasMaxLength(30).IsRequired();
         builder.Property(w => w.Lighting).HasColumnName("lighting").HasConversion<string>().HasMaxLength(30);
         builder.Property(w => w.DeskType).HasColumnName("desk_type").HasConversion<string>().HasMaxLength(30);
         builder.Property(w => w.DeskOrientation).HasColumnName("desk_orientation").HasConversion<string>().HasMaxLength(15);
@@ -40,6 +40,13 @@ public class WorkspaceProfileConfiguration : IEntityTypeConfiguration<WorkspaceP
         builder.Property(w => w.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
 
         builder.HasIndex(w => w.UserId);
+        builder.HasIndex(w => w.StyleCode);
+
+        // FK tới bảng tra cứu styles (Restrict).
+        builder.HasOne<FengDeskAI.Domain.Entities.Catalog.Style>()
+            .WithMany()
+            .HasForeignKey(w => w.StyleCode)
+            .OnDelete(DeleteBehavior.Restrict);
 
         // Mỗi user chỉ có 1 default profile — partial unique index (PG-specific)
         builder.HasIndex(w => w.UserId)

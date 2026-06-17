@@ -22,6 +22,9 @@ public class UnitOfWork : IUnitOfWork
         ICategoryRepository categories,
         ITagRepository tags,
         IProductRepository products,
+        IGenericRepository<Domain.Entities.Catalog.Style> styles,
+        IGenericRepository<Domain.Entities.Catalog.Vibe> vibes,
+        IGenericRepository<Domain.Entities.Catalog.Element> elements,
         ICartRepository carts,
         IOrderRepository orders,
         IShippingRepository shipping,
@@ -44,6 +47,9 @@ public class UnitOfWork : IUnitOfWork
         Categories = categories;
         Tags = tags;
         Products = products;
+        Styles = styles;
+        Vibes = vibes;
+        Elements = elements;
         Carts = carts;
         Orders = orders;
         Shipping = shipping;
@@ -65,6 +71,9 @@ public class UnitOfWork : IUnitOfWork
     public ICategoryRepository Categories { get; }
     public ITagRepository Tags { get; }
     public IProductRepository Products { get; }
+    public IGenericRepository<Domain.Entities.Catalog.Style> Styles { get; }
+    public IGenericRepository<Domain.Entities.Catalog.Vibe> Vibes { get; }
+    public IGenericRepository<Domain.Entities.Catalog.Element> Elements { get; }
     public ICartRepository Carts { get; }
     public IOrderRepository Orders { get; }
     public IShippingRepository Shipping { get; }

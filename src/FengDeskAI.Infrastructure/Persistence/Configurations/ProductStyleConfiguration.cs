@@ -10,10 +10,18 @@ public class ProductStyleConfiguration : IEntityTypeConfiguration<ProductStyle>
     {
         builder.ToTable("product_styles");
 
-        // Junction thuần: composite PK (product_id, style), enum lưu string.
-        builder.Property(ps => ps.Style).HasColumnName("style").HasConversion<string>().HasMaxLength(30);
-        builder.HasKey(ps => new { ps.ProductId, ps.Style });
+        // Junction thuần: composite PK (product_id, style_code).
+        builder.Property(ps => ps.StyleCode).HasColumnName("style_code").HasMaxLength(30);
+        builder.HasKey(ps => new { ps.ProductId, ps.StyleCode });
         builder.Property(ps => ps.ProductId).HasColumnName("product_id");
+
+        // FK tới bảng tra cứu styles (Restrict: không xoá style đang được dùng).
+        builder.HasOne(ps => ps.Style)
+            .WithMany()
+            .HasForeignKey(ps => ps.StyleCode)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasIndex(ps => ps.StyleCode);
 
         // Quan hệ tới Product cấu hình ở ProductConfiguration.
     }

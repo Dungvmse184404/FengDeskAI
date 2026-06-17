@@ -13,8 +13,10 @@ public class SetProductFengShuiRequest
     public List<FengShuiElement> SecondaryElements { get; set; } = new();
 
     public SizeClass SizeClass { get; set; }
-    public List<Vibe> Vibes { get; set; } = new();
-    public List<WorkspaceStyle> Styles { get; set; } = new();
+    /// <summary>Mã vibe (vibes.code), vd "Focus".</summary>
+    public List<string> Vibes { get; set; } = new();
+    /// <summary>Mã phong cách (styles.code), vd "Minimal".</summary>
+    public List<string> Styles { get; set; } = new();
 }
 
 public class ProductFengShuiResponse
@@ -23,6 +25,8 @@ public class ProductFengShuiResponse
     public FengShuiElement PrimaryElement { get; set; }
     public List<FengShuiElement> SecondaryElements { get; set; } = new();
     public SizeClass SizeClass { get; set; }
-    public List<Vibe> Vibes { get; set; } = new();
-    public List<WorkspaceStyle> Styles { get; set; } = new();
+    /// <summary>Mã vibe (vibes.code), vd "Focus".</summary>
+    public List<string> Vibes { get; set; } = new();
+    /// <summary>Mã phong cách (styles.code), vd "Minimal".</summary>
+    public List<string> Styles { get; set; } = new();
 }

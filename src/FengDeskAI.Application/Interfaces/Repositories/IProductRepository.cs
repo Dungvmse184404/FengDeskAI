@@ -47,6 +47,6 @@ public interface IProductRepository : IGenericRepository<Product>
 
     // Thuộc tính phong thủy (ứng viên gợi ý): set hành chính + các hành phụ (product_element) + size_class (trên products).
     Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, SizeClass size, CancellationToken ct = default);
-    Task ReplaceVibesAsync(Guid productId, IEnumerable<Vibe> vibes, CancellationToken ct = default);
-    Task ReplaceStylesAsync(Guid productId, IEnumerable<WorkspaceStyle> styles, CancellationToken ct = default);
+    Task ReplaceVibesAsync(Guid productId, IEnumerable<string> vibeCodes, CancellationToken ct = default);
+    Task ReplaceStylesAsync(Guid productId, IEnumerable<string> styleCodes, CancellationToken ct = default);
 }
