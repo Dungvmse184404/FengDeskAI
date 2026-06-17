@@ -10,7 +10,8 @@ public class CreateWorkspaceProfileRequest
     /// <summary>Loại không gian (Personal Desk, Meeting Room...). Bỏ trống → coi như riêng tư (weight 1.0).</summary>
     public Guid? WorkspaceTypeId { get; set; }
 
-    public WorkspaceStyle Style { get; set; }
+    /// <summary>Mã phong cách (styles.code), vd "Minimal".</summary>
+    public string StyleCode { get; set; } = null!;
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }
     public CompassDirection DeskOrientation { get; set; }

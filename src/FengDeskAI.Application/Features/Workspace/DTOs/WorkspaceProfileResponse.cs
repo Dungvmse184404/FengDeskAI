@@ -9,7 +9,7 @@ public class WorkspaceProfileResponse
     public string Name { get; set; } = null!;
     public Guid? WorkspaceTypeId { get; set; }
     public LocationType LocationType { get; set; }
-    public WorkspaceStyle Style { get; set; }
+    public string StyleCode { get; set; } = null!;
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }
     public CompassDirection DeskOrientation { get; set; }

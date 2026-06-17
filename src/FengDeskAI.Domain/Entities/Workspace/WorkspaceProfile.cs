@@ -21,7 +21,8 @@ public class WorkspaceProfile : BaseEntity
     /// </summary>
     public Guid? WorkspaceTypeId { get; set; }
 
-    public WorkspaceStyle Style { get; set; }
+    /// <summary>Mã phong cách (FK <c>styles.code</c>) — vd "Minimal".</summary>
+    public string StyleCode { get; set; } = null!;
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }
     public CompassDirection DeskOrientation { get; set; }

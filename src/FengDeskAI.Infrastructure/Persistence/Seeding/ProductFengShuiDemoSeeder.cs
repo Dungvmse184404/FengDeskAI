@@ -26,14 +26,14 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
     public int Order => 21; // sau CatalogDemoSeeder (20)
     public string Name => "Product feng shui (backfill demo products)";
 
-    // (Tên chứa, hành chính, vibe, kích thước, phong cách)
-    private static readonly (string Match, FengShuiElement Element, Vibe Vibe, SizeClass Size, WorkspaceStyle Style)[] Map =
+    // (Tên chứa, hành chính, mã vibe, kích thước, mã phong cách) — code khớp bảng vibes/styles.
+    private static readonly (string Match, FengShuiElement Element, string Vibe, SizeClass Size, string Style)[] Map =
     {
-        ("Kim Tiền", FengShuiElement.Moc, Vibe.Focus, SizeClass.Small, WorkspaceStyle.Scandinavian),
-        ("Lưỡi Hổ", FengShuiElement.Moc, Vibe.Calm, SizeClass.Small, WorkspaceStyle.Minimal),
-        ("thạch anh", FengShuiElement.Tho, Vibe.Calm, SizeClass.Small, WorkspaceStyle.Modern),
-        ("Tỳ Hưu", FengShuiElement.Kim, Vibe.Focus, SizeClass.Small, WorkspaceStyle.Classic),
-        ("muối Himalaya", FengShuiElement.Hoa, Vibe.Relax, SizeClass.Medium, WorkspaceStyle.Bohemian),
+        ("Kim Tiền", FengShuiElement.Moc, "Focus", SizeClass.Small, "Scandinavian"),
+        ("Lưỡi Hổ", FengShuiElement.Moc, "Calm", SizeClass.Small, "Minimal"),
+        ("thạch anh", FengShuiElement.Tho, "Calm", SizeClass.Small, "Modern"),
+        ("Tỳ Hưu", FengShuiElement.Kim, "Focus", SizeClass.Small, "Classic"),
+        ("muối Himalaya", FengShuiElement.Hoa, "Relax", SizeClass.Medium, "Bohemian"),
     };
 
     public async Task SeedAsync(CancellationToken ct = default)
@@ -54,9 +54,9 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
             var m = Map.FirstOrDefault(x => p.Name.Contains(x.Match, StringComparison.OrdinalIgnoreCase));
             // default khi không khớp tên nào
             var element = m.Match is null ? FengShuiElement.Tho : m.Element;
-            var vibe = m.Match is null ? Vibe.Focus : m.Vibe;
+            var vibe = m.Match is null ? "Focus" : m.Vibe;
             var size = m.Match is null ? SizeClass.Medium : m.Size;
-            var style = m.Match is null ? WorkspaceStyle.Modern : m.Style;
+            var style = m.Match is null ? "Modern" : m.Style;
 
             p.SizeClass = size;
             await _context.Set<ProductElement>().AddAsync(new ProductElement
@@ -65,8 +65,8 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
                 Element = element,
                 IsPrimary = true,
             }, ct);
-            await _context.Set<ProductVibe>().AddAsync(new ProductVibe { ProductId = p.Id, Vibe = vibe }, ct);
-            await _context.Set<ProductStyle>().AddAsync(new ProductStyle { ProductId = p.Id, Style = style }, ct);
+            await _context.Set<ProductVibe>().AddAsync(new ProductVibe { ProductId = p.Id, VibeCode = vibe }, ct);
+            await _context.Set<ProductStyle>().AddAsync(new ProductStyle { ProductId = p.Id, StyleCode = style }, ct);
         }
 
         await _context.SaveChangesAsync(ct);

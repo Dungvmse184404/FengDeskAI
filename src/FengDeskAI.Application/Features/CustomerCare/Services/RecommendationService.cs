@@ -76,7 +76,7 @@ public sealed class RecommendationService : IRecommendationService
         {
             PersonalWeight = personalWeight,
             Purpose = profile.WorkPurpose,
-            Style = profile.Style,
+            Style = profile.StyleCode,
             Lighting = profile.Lighting,
             DeskOrientation = profile.DeskOrientation,
             DeskArea = profile.DeskArea,
@@ -172,8 +172,8 @@ public sealed class RecommendationService : IRecommendationService
         p.Elements.Where(e => e.IsPrimary).Select(e => (FengShuiElement?)e.Element).FirstOrDefault(),
         p.Elements.Where(e => !e.IsPrimary).Select(e => (FengShuiElement?)e.Element).FirstOrDefault(),
         p.SizeClass ?? SizeClass.Medium,
-        p.Vibes.Select(v => v.Vibe).ToHashSet(),
-        p.Styles.Select(s => s.Style).ToHashSet());
+        p.Vibes.Select(v => v.VibeCode).ToHashSet(),
+        p.Styles.Select(s => s.StyleCode).ToHashSet());
 
     private static AiRecommendationRequest BuildAiRequest(
         ScoringContext ctx, WorkspaceType? wsType, PersonalProfile? personal,

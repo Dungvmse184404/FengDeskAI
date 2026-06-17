@@ -22,6 +22,9 @@ public interface IUnitOfWork
     ICategoryRepository Categories { get; }
     ITagRepository Tags { get; }
     IProductRepository Products { get; }
+    IGenericRepository<Domain.Entities.Catalog.Style> Styles { get; }
+    IGenericRepository<Domain.Entities.Catalog.Vibe> Vibes { get; }
+    IGenericRepository<Domain.Entities.Catalog.Element> Elements { get; }
 
     // Shipping
     IShippingRepository Shipping { get; }

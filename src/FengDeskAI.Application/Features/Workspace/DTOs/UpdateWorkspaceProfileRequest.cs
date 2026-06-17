@@ -7,7 +7,8 @@ public class UpdateWorkspaceProfileRequest
     public string Name { get; set; } = null!;
     public LocationType LocationType { get; set; }
     public Guid? WorkspaceTypeId { get; set; }
-    public WorkspaceStyle Style { get; set; }
+    /// <summary>Mã phong cách (styles.code), vd "Minimal".</summary>
+    public string StyleCode { get; set; } = null!;
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }
     public CompassDirection DeskOrientation { get; set; }

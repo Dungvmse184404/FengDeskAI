@@ -119,6 +119,9 @@ public static class DependencyInjection
             }
         });
 
+        // Repo generic mở (dùng cho bảng tra cứu Style/Vibe — không cần repo riêng).
+        services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
+
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IWorkspaceProfileRepository, WorkspaceProfileRepository>();
@@ -178,6 +181,7 @@ public static class DependencyInjection
         services.AddHttpClient<IFileStorage, SupabaseFileStorage>();
         services.AddHttpClient<IImageEncoder, ImageEncoder>();
 
+        services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, WorkspaceTypeSeeder>();
         services.AddScoped<IDataSeeder, FengShuiRuleSeeder>();
         services.AddScoped<IDataSeeder, GeographySeeder>();
