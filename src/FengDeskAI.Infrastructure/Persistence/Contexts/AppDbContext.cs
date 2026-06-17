@@ -61,6 +61,7 @@ public class AppDbContext : DbContext
 
     // Chat
     public DbSet<Chatbox> Chatboxes => Set<Chatbox>();
+    public DbSet<ChatboxParticipant> ChatboxParticipants => Set<ChatboxParticipant>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<ChatMessageImage> ChatMessageImages => Set<ChatMessageImage>();
 

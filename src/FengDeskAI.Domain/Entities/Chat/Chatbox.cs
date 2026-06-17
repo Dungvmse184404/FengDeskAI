@@ -1,24 +1,28 @@
 using FengDeskAI.Domain.Common;
-using FengDeskAI.Domain.Enums.Chat;
 
 namespace FengDeskAI.Domain.Entities.Chat;
 
 /// <summary>
-/// Một hội thoại. <see cref="ChatboxType.Direct"/> = giữa hai người dùng;
-/// <see cref="ChatboxType.Assistant"/> = giữa một người dùng và AI (RecipientUserId = null).
+/// Một phòng chat. Thành viên (gồm cả AI) nằm ở <see cref="Participants"/> — không còn cứng
+/// sender/recipient. Phòng "riêng" (chỉ 1 user + AiBot) hay "chung" (≥2 người) suy từ participants.
 /// </summary>
 public class Chatbox : BaseEntity
 {
-    public ChatboxType Type { get; set; } = ChatboxType.Direct;
+    /// <summary>True = nhóm; false = 1-1. Chỉ mang tính hiển thị/gợi ý.</summary>
+    public bool IsGroup { get; set; } = true;
 
-    /// <summary>Người khởi tạo hội thoại.</summary>
-    public Guid SenderUserId { get; set; }
+    /// <summary>Tên phòng (nhóm). Null cho phòng 1-1.</summary>
+    public string? Title { get; set; }
 
-    /// <summary>Người còn lại. Null khi là hội thoại với AI.</summary>
-    public Guid? RecipientUserId { get; set; }
+    /// <summary>Người tạo phòng.</summary>
+    public Guid CreatedByUserId { get; set; }
 
-    /// <summary>Sản phẩm đang được bàn tới (nếu có) — ngữ cảnh để AI hỗ trợ.</summary>
+    /// <summary>Sản phẩm đang bàn tới (nếu có) — ngữ cảnh cho AI.</summary>
     public Guid? ProductId { get; set; }
 
+    /// <summary>Bật bot AI tự trả lời mọi tin của người trong phòng (Phase 3). Mặc định tắt.</summary>
+    public bool IsAiEnabled { get; set; }
+
+    public virtual ICollection<ChatboxParticipant> Participants { get; set; } = new List<ChatboxParticipant>();
     public virtual ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }

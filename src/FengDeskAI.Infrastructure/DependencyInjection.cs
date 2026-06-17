@@ -60,6 +60,15 @@ public static class DependencyInjection
             {
                 OnMessageReceived = ctx =>
                 {
+                    // SignalR qua WebSocket không set được header Authorization → token nằm ở query "access_token".
+                    var accessToken = ctx.Request.Query["access_token"].ToString();
+                    if (!string.IsNullOrEmpty(accessToken) &&
+                        ctx.HttpContext.Request.Path.StartsWithSegments("/hubs"))
+                    {
+                        ctx.Token = accessToken;
+                        return Task.CompletedTask;
+                    }
+
                     var raw = ctx.Request.Headers.Authorization.ToString();
                     if (!string.IsNullOrEmpty(raw))
                     {

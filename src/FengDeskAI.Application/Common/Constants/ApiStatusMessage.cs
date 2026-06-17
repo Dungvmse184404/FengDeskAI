@@ -103,10 +103,12 @@ public static class ApiStatusMessages
 
         public const string ImageUrlRequired = "URL ảnh không được để trống.";
         public const string ImageFileRequired = "Vui lòng chọn tệp ảnh để tải lên.";
-        public const string ImageTypeInvalid = "Chỉ chấp nhận ảnh JPEG, PNG, WEBP hoặc GIF.";
+        public const string ImageTypeInvalid = "Chỉ chấp nhận ảnh JPG, PNG, BMP hoặc GIF.";
         public const string ImageNotFound = "Không tìm thấy ảnh.";
         public const string ImageCreated = "Thêm ảnh thành công.";
         public const string ImageDeleted = "Đã xóa ảnh.";
+        public const string StylesNotExist = "Có mã phong cách (style) không tồn tại.";
+        public const string VibesNotExist = "Có mã vibe không tồn tại.";
     }
 
     public static class Cart

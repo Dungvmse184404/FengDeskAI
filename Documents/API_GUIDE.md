@@ -122,6 +122,20 @@ PUT /api/products/{id}/feng-shui
 }
 ```
 
+### Bảng tra cứu Style / Vibe / Element (code)
+`style`/`vibe` lưu ở bảng tra cứu (admin thêm/sửa không cần deploy); `element` là ngũ hành cố định.
+Endpoint: `GET /api/styles`, `GET /api/vibes`, `GET /api/elements` (🟢 public) — đổ dropdown chọn **code**;
+`POST`/`PUT` (👮 Manager+) để thêm/sửa style·vibe (element chỉ `GET`+`PUT` sửa tên). "Xoá" = `PUT isActive=false`.
+
+| Nhóm | Code hợp lệ (seed sẵn) |
+|---|---|
+| **Style** (`styles.code`) | `Modern`, `Classic`, `Minimal`, `Industrial`, `Scandinavian`, `Bohemian`, `Other` |
+| **Vibe** (`vibes.code`) | `Focus`, `Relax`, `Creative`, `Calm`, `Energize` |
+| **Element** (ngũ hành, enum + `elements.code`) | `Kim`, `Moc`, `Thuy`, `Hoa`, `Tho` |
+
+> Gửi code sai (vd `"Minima"`) → **400** (đã validate), không còn lỗi 500. `code` bất biến; chỉ đổi `name`/`isActive`/`sortOrder`.
+> Ảnh (product/chat) chỉ nhận **JPG, PNG, BMP, GIF** (giới hạn theo AI đọc được).
+
 ---
 
 ## 5. Cart — `api/cart` (🔑 của user)

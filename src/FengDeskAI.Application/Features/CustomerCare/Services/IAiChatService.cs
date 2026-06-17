@@ -12,4 +12,10 @@ public interface IAiChatService
     Task<IServiceResult<AiChatResponse>> SendAsync(
         Guid userId, string? userRole, string? userEmail, string? userDisplayName,
         AiChatRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Bot trả lời trong 1 phòng có <c>IsAiEnabled</c> (Phase 3, do worker nền gọi). Ngữ cảnh CHỈ trong phòng đó
+    /// (không gom phòng khác — tránh rò rỉ chéo). Không dùng tool (tránh nhập nhằng user trong phòng nhiều người).
+    /// </summary>
+    Task RespondInRoomAsync(Guid chatboxId, CancellationToken ct = default);
 }

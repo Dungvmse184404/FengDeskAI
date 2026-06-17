@@ -19,6 +19,12 @@ public sealed class AiChatOptions
     /// <summary>Timeout (giây) cho 1 lượt gọi — LLM local thường chậm, để rộng.</summary>
     public int TimeoutSeconds { get; set; } = 120;
 
+    /// <summary>
+    /// Giữ model nóng trong RAM giữa các lượt (Ollama "keep_alive"), vd "30m", "1h", "-1" = vĩnh viễn.
+    /// Bỏ trống → dùng mặc định của Ollama (~5 phút). Đây là cách giảm độ trễ load model hiệu quả nhất.
+    /// </summary>
+    public string? KeepAlive { get; set; } = "30m";
+
     /// <summary>Khoá xác thực gửi kèm header (nếu LLM yêu cầu). Bỏ trống → không gửi.</summary>
     public string? ApiKey { get; set; }
 
@@ -40,4 +46,20 @@ public sealed class AiChatOptions
 
     /// <summary>Thời gian sống của một phiên hội thoại trong cache (phút).</summary>
     public int SessionTtlMinutes { get; set; } = 60;
+
+    /// <summary>Số phòng "chung" tối đa được nạp làm ngữ cảnh khi AI trả lời ở phòng riêng (chống phình token).</summary>
+    public int SharedContextRoomLimit { get; set; } = 3;
+
+    /// <summary>Số tin gần nhất lấy từ mỗi phòng chung khi gom ngữ cảnh.</summary>
+    public int SharedRoomMessages { get; set; } = 6;
+
+    // ── Tool calling ───────────────────────────────────────────────────────────
+    /// <summary>Bật function-calling (model phải hỗ trợ tools; không thì AI vẫn chat thường).</summary>
+    public bool EnableTools { get; set; } = true;
+
+    /// <summary>Số vòng gọi tool tối đa cho 1 lượt chat (chặn lặp vô hạn).</summary>
+    public int MaxToolIterations { get; set; } = 3;
+
+    /// <summary>Lọc tool được phép (theo Name). Rỗng → cho phép tất cả tool đã đăng ký.</summary>
+    public List<string> EnabledTools { get; set; } = new();
 }

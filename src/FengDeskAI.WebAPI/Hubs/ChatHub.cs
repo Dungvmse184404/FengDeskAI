@@ -52,39 +52,16 @@ public class ChatHub : Hub
             return;
         }
 
+        // Việc broadcast "messageReceived" do ChatService thực hiện qua IChatRealtimeNotifier (dùng chung REST + hub).
         var result = await _chatService.SendMessageAsync(
             userId.Value, _currentUser.Role, _currentUser.Email, chatboxId,
             new SendMessageRequest { Content = content }, Context.ConnectionAborted);
         if (!result.IsSuccess)
-        {
             await Clients.Caller.SendAsync("error", result.Message);
-            return;
-        }
-
-        // Broadcast message đến tất cả clients trong chatbox
-        var message = result.Data;
-        if (message is not null)
-        {
-            await Clients.Group($"chat-{chatboxId}").SendAsync("messageReceived", new
-            {
-                message.Id,
-                message.ChatboxId,
-                message.SenderUserId,
-                message.SenderRole,
-                message.SenderName,
-                message.Content,
-                message.IsFromAi,
-                message.IsRead,
-                message.CreatedAt,
-                message.Images,
-            });
-        }
     }
 
-    /// <summary>
-    /// Đánh dấu message đã đọc realtime.
-    /// </summary>
-    public async Task MarkAsRead(Guid messageId)
+    /// <summary>Đánh dấu cả phòng đã đọc realtime.</summary>
+    public async Task MarkChatboxRead(Guid chatboxId)
     {
         var userId = _currentUser.UserId;
         if (!userId.HasValue || userId.Value == Guid.Empty)
@@ -93,18 +70,14 @@ public class ChatHub : Hub
             return;
         }
 
-        var result = await _chatService.MarkAsReadAsync(userId.Value, messageId);
+        var result = await _chatService.MarkChatboxAsReadAsync(userId.Value, chatboxId, Context.ConnectionAborted);
         if (!result.IsSuccess)
         {
             await Clients.Caller.SendAsync("error", result.Message);
             return;
         }
 
-        var message = await _chatService.GetMessageWithChatboxAsync(messageId, Context.ConnectionAborted);
-        if (message is not null)
-        {
-            await Clients.Group($"chat-{message.ChatboxId}").SendAsync("messageMarkedAsRead", new { messageId });
-        }
+        await Clients.Group($"chat-{chatboxId}").SendAsync("chatboxRead", new { chatboxId, userId = userId.Value });
     }
 
     /// <summary>
