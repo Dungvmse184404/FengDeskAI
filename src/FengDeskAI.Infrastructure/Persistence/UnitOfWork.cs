@@ -15,6 +15,7 @@ public class UnitOfWork : IUnitOfWork
         IUserRepository users,
         IRefreshTokenRepository refreshTokens,
         IWorkspaceProfileRepository workspaceProfiles,
+        IWorkspaceTypeRepository workspaceTypes,
         ILocationRepository locations,
         IUserAddressRepository userAddresses,
         IStoreRepository stores,
@@ -28,13 +29,15 @@ public class UnitOfWork : IUnitOfWork
         INotificationRepository notifications,
         IChatboxRepository chatboxes,
         IChatMessageRepository chatMessages,
-        IReviewRepository reviews)
+        IReviewRepository reviews,
+        IRecommendationRepository recommendations)
     {
         _context = context;
         _logger = logger;
         Users = users;
         RefreshTokens = refreshTokens;
         WorkspaceProfiles = workspaceProfiles;
+        WorkspaceTypes = workspaceTypes;
         Locations = locations;
         UserAddresses = userAddresses;
         Stores = stores;
@@ -49,11 +52,13 @@ public class UnitOfWork : IUnitOfWork
         Chatboxes = chatboxes;
         ChatMessages = chatMessages;
         Reviews = reviews;
+        Recommendations = recommendations;
     }
 
     public IUserRepository Users { get; }
     public IRefreshTokenRepository RefreshTokens { get; }
     public IWorkspaceProfileRepository WorkspaceProfiles { get; }
+    public IWorkspaceTypeRepository WorkspaceTypes { get; }
     public ILocationRepository Locations { get; }
     public IUserAddressRepository UserAddresses { get; }
     public IStoreRepository Stores { get; }
@@ -68,6 +73,7 @@ public class UnitOfWork : IUnitOfWork
     public IChatboxRepository Chatboxes { get; }
     public IChatMessageRepository ChatMessages { get; }
     public IReviewRepository Reviews { get; }
+    public IRecommendationRepository Recommendations { get; }
 
     public Task<int> SaveChangesAsync(CancellationToken ct = default)
         => _context.SaveChangesAsync(ct);

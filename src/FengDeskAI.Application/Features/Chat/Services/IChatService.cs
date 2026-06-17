@@ -16,9 +16,13 @@ public interface IChatService
     Task<IServiceResult<(List<ChatMessageResponse> Items, int TotalCount, int Page, int PageSize)>> GetMessagesAsync(
         Guid userId, Guid chatboxId, PageRequest page, CancellationToken ct = default);
 
-    /// <summary>Gửi message (tự động được tạo với SenderUserId = userId).</summary>
+    /// <summary>Gửi message (SenderUserId = userId). role/email suy ra SenderRole + SenderName để AI phân biệt người gửi.</summary>
     Task<IServiceResult<ChatMessageResponse>> SendMessageAsync(
-        Guid userId, Guid chatboxId, SendMessageRequest request, CancellationToken ct = default);
+        Guid userId, string? userRole, string? userEmail, Guid chatboxId, SendMessageRequest request, CancellationToken ct = default);
+
+    /// <summary>Tải ảnh chat lên storage (Chat_images/{chatboxId}/...) và trả link để gắn vào tin nhắn.</summary>
+    Task<IServiceResult<string>> UploadImageAsync(
+        Guid userId, Guid chatboxId, Stream content, string fileName, string contentType, CancellationToken ct = default);
 
     /// <summary>Đánh dấu 1 message đã đọc.</summary>
     Task<IServiceResult> MarkAsReadAsync(Guid userId, Guid messageId, CancellationToken ct = default);

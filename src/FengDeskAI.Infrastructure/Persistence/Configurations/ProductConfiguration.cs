@@ -17,6 +17,7 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(p => p.Description).HasColumnName("description");
         builder.Property(p => p.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        builder.Property(p => p.SizeClass).HasColumnName("size_class").HasConversion<string>().HasMaxLength(10);
 
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
@@ -49,6 +50,21 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasMany(p => p.ProductTags)
             .WithOne(pt => pt.Product)
             .HasForeignKey(pt => pt.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(p => p.Elements)
+            .WithOne(e => e.Product)
+            .HasForeignKey(e => e.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(p => p.Vibes)
+            .WithOne(v => v.Product)
+            .HasForeignKey(v => v.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(p => p.Styles)
+            .WithOne(s => s.Product)
+            .HasForeignKey(s => s.ProductId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasQueryFilter(p => !p.IsDeleted);

@@ -9,6 +9,7 @@ using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Entities.CustomerCare;
+using FengDeskAI.Domain.Entities.Workspace;
 using Microsoft.EntityFrameworkCore;
 
 namespace FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -61,6 +62,17 @@ public class AppDbContext : DbContext
     // Chat
     public DbSet<Chatbox> Chatboxes => Set<Chatbox>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
+    public DbSet<ChatMessageImage> ChatMessageImages => Set<ChatMessageImage>();
+
+    // Workspace
+    public DbSet<WorkspaceProfile> WorkspaceProfiles => Set<WorkspaceProfile>();
+    public DbSet<WorkspaceType> WorkspaceTypes => Set<WorkspaceType>();
+
+    // Recommendation (AI)
+    public DbSet<FengShuiRule> FengShuiRules => Set<FengShuiRule>();
+    public DbSet<Recommendation> Recommendations => Set<Recommendation>();
+    public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
+    public DbSet<RecommendationLog> RecommendationLogs => Set<RecommendationLog>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

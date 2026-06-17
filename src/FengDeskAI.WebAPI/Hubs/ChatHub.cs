@@ -52,7 +52,9 @@ public class ChatHub : Hub
             return;
         }
 
-        var result = await _chatService.SendMessageAsync(userId.Value, chatboxId, new SendMessageRequest { Content = content }, Context.ConnectionAborted);
+        var result = await _chatService.SendMessageAsync(
+            userId.Value, _currentUser.Role, _currentUser.Email, chatboxId,
+            new SendMessageRequest { Content = content }, Context.ConnectionAborted);
         if (!result.IsSuccess)
         {
             await Clients.Caller.SendAsync("error", result.Message);
@@ -68,9 +70,13 @@ public class ChatHub : Hub
                 message.Id,
                 message.ChatboxId,
                 message.SenderUserId,
+                message.SenderRole,
+                message.SenderName,
                 message.Content,
+                message.IsFromAi,
                 message.IsRead,
                 message.CreatedAt,
+                message.Images,
             });
         }
     }

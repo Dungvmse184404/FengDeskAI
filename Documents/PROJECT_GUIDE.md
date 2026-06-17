@@ -271,13 +271,16 @@ Define trong `WebAPI/Authorization/AuthorizationPolicies.cs`:
 | ✅ | Workspace Profiles | `workspace_profiles` |
 | ✅ | Geography | `provinces`, `districts`, `wards`, `user_address` |
 | ✅ | Vendor multi-store | `garden_stores`, `garden_staff_assignments`, `stores_address` |
-| ✅ | Catalog | `products`, `product_items`, `product_images`, `categories`, `tags`, `product_categories`, `product_tags` |
+| ✅ | Catalog | `products` (+ `size_class`), `product_items`, `product_images`, `categories`, `tags`, `product_categories`, `product_tags`, `product_element`, `product_vibes`, `product_styles` |
 | ✅ | Sales (multi-store → multi-delivery) | `carts`, `cart_items`, `orders`, `order_items`, `deliveries`, `order_status_log` |
 | ✅ | Shipping (webhook ingest) | `delivery_progress_logs`, `shipping_webhook` |
+| ✅ | Chat (người↔người + người↔AI) | `chatboxes`, `chat_messages`, `chat_message_images` |
+| ✅ | Recommendation engine (.NET scorer + AI rerank) | `recommendations`, `recommendation_items`, `recommendation_logs`, `feng_shui_rules` |
 | ⏳ | Customer care | `reviews`, `support_tickets`, `after_sales_requests` |
 | ⏳ | Notification | `notification` |
-| ⏳ | Recommendation (AI) | `recommendations`, `recommendation_items`, `recommendation_logs`, `feng_shui_rules` |
 | 🔒 | Payment / Balance / 3rd-party | sẽ tính sau |
+
+> **File storage**: ảnh (product/chat) lưu trên **Supabase Storage** qua `IFileStorage` (bucket `Fengdesk_bucket`, thư mục theo `Product_images/{id}/`, `Chat_images/{chatboxId}/`). `IImageEncoder` đổi link → base64 để feed LLM đa phương thức.
 
 ---
 
@@ -303,6 +306,27 @@ workspace_profiles
   work_purpose, feng_shui_element (Ngũ hành: Kim/Moc/Thuy/Hoa/Tho),
   desk_area (int, cm²), is_default, [audit]
   PARTIAL UNIQUE INDEX (user_id) WHERE is_default = TRUE AND is_deleted = FALSE
+
+product_element                         -- junction Product ↔ ngũ hành (nhiều-nhiều)
+  product_id (FK products CASCADE), element (varchar 10), is_primary (bool)
+  PK (product_id, element); INDEX (product_id, is_primary)
+  -- thay cho bảng product_feng_shui (1-1) cũ; size_class chuyển lên products.size_class
+
+chatboxes                               -- 1 hội thoại: Direct (2 người) hoặc Assistant (người + AI)
+  id (uuid PK), type (int: Direct/Assistant),
+  sender_user_id (FK users), recipient_user_id (FK users, NULL khi chat AI),
+  product_id (FK products SET NULL — ngữ cảnh sản phẩm), [audit + soft-delete]
+  UNIQUE (sender_user_id, recipient_user_id)  -- NULL cho phép nhiều hội thoại AI/user
+
+chat_messages
+  id (uuid PK), chatbox_id (FK chatboxes CASCADE),
+  sender_user_id (FK users SET NULL, NULL = AI), sender_role (int: Customer..Admin/Assistant/System),
+  sender_name (varchar 100, prefix email — NULL cho AI),
+  content (varchar 5000, NULL nếu chỉ ảnh), is_from_ai (bool), is_read, read_at, [audit]
+  INDEX (chatbox_id, created_at)
+
+chat_message_images                     -- chỉ lưu LINK ảnh, không lưu nhị phân
+  id (uuid PK), chat_message_id (FK chat_messages CASCADE), url (text), sort_order (int)
 ```
 
 ### 8.2 Migration commands
@@ -442,6 +466,20 @@ var settings = configuration.GetSettings<XxxSettings>();
     "TtlMinutes": 10,
     "ResendCooldownSeconds": 60,
     "MaxVerifyAttempts": 5
+  },
+  "AiChat": {
+    "BaseUrl": "http://localhost:11434",   // LLM kiểu Ollama (/api/chat)
+    "ChatPath": "/api/chat",
+    "TimeoutSeconds": 120,
+    "DefaultModel": "gemma3:4b",
+    "AllowedModels": [ "gemma3:4b" ],       // rỗng = cho phép mọi model
+    "MaxHistoryTurns": 5,                    // số lượt gần nhất feed cho AI
+    "SystemPrompt": "Bạn là trợ lý phong thủy của FengDeskAI..."
+  },
+  "SupabaseStorage": {
+    "Url": "https://<project-ref>.supabase.co",
+    "Bucket": "Fengdesk_bucket",            // tạo bucket Public trên Supabase
+    "ApiKey": "SERVICE_ROLE_KEY"            // bí mật — chỉ để ở Development/secrets
   }
 }
 ```

@@ -6,6 +6,7 @@ public class UpdateWorkspaceProfileRequest
 {
     public string Name { get; set; } = null!;
     public LocationType LocationType { get; set; }
+    public Guid? WorkspaceTypeId { get; set; }
     public WorkspaceStyle Style { get; set; }
     public LightingType Lighting { get; set; }
     public DeskType DeskType { get; set; }

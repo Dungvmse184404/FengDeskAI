@@ -1,11 +1,15 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Chat.DTOs;
+using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using System.Collections.Concurrent;
+using ChatboxEntity = FengDeskAI.Domain.Entities.Chat.Chatbox;
 using ChatMessageEntity = FengDeskAI.Domain.Entities.Chat.ChatMessage;
+using ChatMessageImageEntity = FengDeskAI.Domain.Entities.Chat.ChatMessageImage;
 
 namespace FengDeskAI.Application.Features.Chat.Services;
 
@@ -13,12 +17,14 @@ public class ChatService : IChatService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly IFileStorage _storage;
     private static readonly ConcurrentDictionary<Guid, HashSet<string>> _userConnections = new();
 
-    public ChatService(IUnitOfWork uow, IMapper mapper)
+    public ChatService(IUnitOfWork uow, IMapper mapper, IFileStorage storage)
     {
         _uow = uow;
         _mapper = mapper;
+        _storage = storage;
     }
 
     public async Task<IServiceResult<ChatboxResponse>> GetOrStartAsync(Guid userId, Guid otherUserId, CancellationToken ct = default)
@@ -55,7 +61,7 @@ public class ChatService : IChatService
         if (chatbox is null)
             return ServiceResult<(List<ChatMessageResponse>, int, int, int)>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy chatbox.");
 
-        if (chatbox.SenderUserId != userId && chatbox.RecipientUserId != userId)
+        if (!IsParticipant(chatbox, userId))
             return ServiceResult<(List<ChatMessageResponse>, int, int, int)>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem chatbox này.");
 
         var (messages, total) = await _uow.ChatMessages.GetByChatboxAsync(chatboxId, page.Page, page.PageSize, ct);
@@ -66,24 +72,31 @@ public class ChatService : IChatService
     }
 
     public async Task<IServiceResult<ChatMessageResponse>> SendMessageAsync(
-        Guid userId, Guid chatboxId, SendMessageRequest request, CancellationToken ct = default)
+        Guid userId, string? userRole, string? userEmail, Guid chatboxId, SendMessageRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.Content))
-            return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.BadRequest, "Nội dung tin nhắn không được trống.");
+        var content = string.IsNullOrWhiteSpace(request.Content) ? null : request.Content.Trim();
+        var imageUrls = request.ImageUrls?.Where(u => !string.IsNullOrWhiteSpace(u)).ToList() ?? new List<string>();
+
+        if (content is null && imageUrls.Count == 0)
+            return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.BadRequest, "Tin nhắn phải có nội dung hoặc ảnh.");
 
         var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
         if (chatbox is null)
             return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy chatbox.");
 
-        if (chatbox.SenderUserId != userId && chatbox.RecipientUserId != userId)
+        if (!IsParticipant(chatbox, userId))
             return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền gửi tin nhắn trong chatbox này.");
 
         var message = new ChatMessageEntity
         {
             ChatboxId = chatboxId,
             SenderUserId = userId,
-            Content = request.Content.Trim(),
+            SenderRole = ChatSenderHelper.RoleFrom(userRole),
+            SenderName = ChatSenderHelper.NameFrom(userEmail),
+            Content = content,
+            IsFromAi = false,
             IsRead = false,
+            Images = imageUrls.Select((url, i) => new ChatMessageImageEntity { Url = url, SortOrder = i }).ToList(),
         };
 
         await _uow.ChatMessages.AddAsync(message, ct);
@@ -94,6 +107,28 @@ public class ChatService : IChatService
         return ServiceResult<ChatMessageResponse>.Success(dto);
     }
 
+    public async Task<IServiceResult<string>> UploadImageAsync(
+        Guid userId, Guid chatboxId, Stream content, string fileName, string contentType, CancellationToken ct = default)
+    {
+        var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
+        if (chatbox is null)
+            return ServiceResult<string>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy chatbox.");
+        if (!IsParticipant(chatbox, userId))
+            return ServiceResult<string>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền gửi ảnh trong chatbox này.");
+
+        if (content is null || content.Length == 0)
+            return ServiceResult<string>.Failure(ApiStatusCodes.BadRequest, "Vui lòng chọn tệp ảnh.");
+        if (!ImageUpload.IsAllowed(contentType))
+            return ServiceResult<string>.Failure(ApiStatusCodes.UnprocessableEntity, "Chỉ chấp nhận ảnh JPEG, PNG, WEBP hoặc GIF.");
+
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(contentType);
+        var objectPath = $"Chat_images/{chatboxId}/{Guid.NewGuid():N}{ext}";
+
+        var stored = await _storage.UploadAsync(objectPath, content, contentType, ct);
+        return ServiceResult<string>.Success(stored.Url, "Tải ảnh thành công.");
+    }
+
     public async Task<IServiceResult> MarkAsReadAsync(Guid userId, Guid messageId, CancellationToken ct = default)
     {
         var message = await _uow.ChatMessages.GetByIdAsync(messageId, ct);
@@ -101,7 +136,7 @@ public class ChatService : IChatService
             return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy tin nhắn.");
 
         var chatbox = await _uow.Chatboxes.GetByIdAsync(message.ChatboxId, ct);
-        if (chatbox is null || (chatbox.SenderUserId != userId && chatbox.RecipientUserId != userId))
+        if (chatbox is null || !IsParticipant(chatbox, userId))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền đánh dấu tin nhắn này.");
 
         if (!message.IsRead)
@@ -120,7 +155,7 @@ public class ChatService : IChatService
         if (chatbox is null)
             return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy chatbox.");
 
-        if (chatbox.SenderUserId != userId && chatbox.RecipientUserId != userId)
+        if (!IsParticipant(chatbox, userId))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền đánh dấu chatbox này.");
 
         var unread = await _uow.ChatMessages.GetUnreadInChatboxAsync(chatboxId, userId, ct);
@@ -144,7 +179,7 @@ public class ChatService : IChatService
         if (chatbox is null)
             return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy chatbox.");
 
-        if (chatbox.SenderUserId != userId && chatbox.RecipientUserId != userId)
+        if (!IsParticipant(chatbox, userId))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền truy cập chatbox này.");
 
         return ServiceResult.Success();
@@ -161,12 +196,20 @@ public class ChatService : IChatService
             Id = message.Id,
             ChatboxId = message.ChatboxId,
             SenderUserId = message.SenderUserId,
+            SenderRole = message.SenderRole,
+            SenderName = message.SenderName,
             Content = message.Content,
+            IsFromAi = message.IsFromAi,
             IsRead = message.IsRead,
             ReadAt = message.ReadAt,
             CreatedAt = message.CreatedAt,
+            Images = message.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList(),
         };
     }
+
+    /// <summary>User là một bên của hội thoại (sender hoặc recipient). Hội thoại AI: chỉ sender.</summary>
+    private static bool IsParticipant(ChatboxEntity chatbox, Guid userId)
+        => chatbox.SenderUserId == userId || chatbox.RecipientUserId == userId;
 
     public void RecordUserConnection(Guid userId, string connectionId)
     {

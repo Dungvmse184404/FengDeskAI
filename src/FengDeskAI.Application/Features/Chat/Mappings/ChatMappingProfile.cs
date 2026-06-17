@@ -12,6 +12,8 @@ public class ChatMappingProfile : Profile
             .ForMember(d => d.LastMessage, opt =>
                 opt.MapFrom(s => s.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault()));
 
-        CreateMap<ChatMessage, ChatMessageResponse>();
+        CreateMap<ChatMessage, ChatMessageResponse>()
+            .ForMember(d => d.Images, opt =>
+                opt.MapFrom(s => s.Images.OrderBy(i => i.SortOrder).Select(i => i.Url)));
     }
 }

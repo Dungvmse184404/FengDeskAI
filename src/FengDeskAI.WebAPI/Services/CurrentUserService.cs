@@ -23,5 +23,9 @@ public class CurrentUserService : ICurrentUserService
 
     public string? Email => _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Email);
 
+    public string? Name => _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Name);
+
+    public string? Role => _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Role);
+
     public bool IsAuthenticated => _accessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
 }

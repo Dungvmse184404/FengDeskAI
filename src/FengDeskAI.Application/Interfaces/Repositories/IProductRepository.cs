@@ -1,4 +1,6 @@
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Enums.Catalog;
+using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
 
@@ -23,6 +25,12 @@ public interface IProductRepository : IGenericRepository<Product>
 
     Task<(List<Product> Items, int Total)> SearchAsync(ProductSearchFilter filter, CancellationToken ct = default);
 
+    /// <summary>
+    /// Sản phẩm active đã khai báo thuộc tính phong thủy (<c>FengShui != null</c>) — ứng viên cho engine gợi ý.
+    /// Kèm FengShui/Vibes/Styles + Images/Items để chấm điểm và hiển thị.
+    /// </summary>
+    Task<List<Product>> GetScorableCandidatesAsync(CancellationToken ct = default);
+
     // Quản lý product item (SKU) — sub-resource
     Task<ProductItem?> GetItemAsync(Guid productId, Guid itemId, CancellationToken ct = default);
     Task AddItemAsync(ProductItem item, CancellationToken ct = default);
@@ -36,4 +44,9 @@ public interface IProductRepository : IGenericRepository<Product>
     // Thay thế toàn bộ liên kết category/tag của product
     Task ReplaceCategoriesAsync(Guid productId, IEnumerable<Guid> categoryIds, CancellationToken ct = default);
     Task ReplaceTagsAsync(Guid productId, IEnumerable<Guid> tagIds, CancellationToken ct = default);
+
+    // Thuộc tính phong thủy (ứng viên gợi ý): set hành chính + các hành phụ (product_element) + size_class (trên products).
+    Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, SizeClass size, CancellationToken ct = default);
+    Task ReplaceVibesAsync(Guid productId, IEnumerable<Vibe> vibes, CancellationToken ct = default);
+    Task ReplaceStylesAsync(Guid productId, IEnumerable<WorkspaceStyle> styles, CancellationToken ct = default);
 }
