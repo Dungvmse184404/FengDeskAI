@@ -41,6 +41,9 @@ public sealed class AiChatOptions
     /// <summary>Số lượt (user+assistant) gần nhất được nhớ. Mặc định 5.</summary>
     public int MaxHistoryTurns { get; set; } = 5;
 
+    /// <summary>Số tin gần nhất của CHÍNH phòng được nạp khi @AI ở phòng nhiều người (để nhớ ngữ cảnh trong phòng).</summary>
+    public int RoomContextMessages { get; set; } = 30;
+
     /// <summary>System prompt định hướng trợ lý. Bỏ trống → không gắn.</summary>
     public string? SystemPrompt { get; set; }
 

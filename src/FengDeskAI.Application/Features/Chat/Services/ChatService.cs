@@ -137,26 +137,11 @@ public class ChatService : IChatService
             dto.Id, dto.ChatboxId, dto.SenderId, dto.SenderType.ToString(), dto.SenderName,
             dto.Content, dto.CreatedAt, dto.Images), ct);
 
-        // Phòng bật bot AI → đẩy job nền để AI tự trả lời (không block người gửi).
-        if (chatbox.IsAiEnabled)
-            _botQueue.Enqueue(chatboxId);
+        // Có người gọi @AI → đẩy job nền để AI trả lời (scope tool/ngữ cảnh theo người gọi; không block người gửi).
+        if (AiMention.Mentions(content))
+            _botQueue.Enqueue(new AiBotJob(chatboxId, userId));
 
         return ServiceResult<ChatMessageResponse>.Success(dto);
-    }
-
-    public async Task<IServiceResult> SetAiEnabledAsync(Guid userId, Guid chatboxId, bool enabled, CancellationToken ct = default)
-    {
-        var participant = await _uow.Chatboxes.GetParticipantAsync(chatboxId, userId, ct);
-        if (participant is null || participant.Role != ParticipantRole.Owner)
-            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Chỉ chủ phòng mới được bật/tắt bot AI.");
-
-        var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
-        if (chatbox is null)
-            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phòng chat.");
-
-        chatbox.IsAiEnabled = enabled;
-        await _uow.SaveChangesAsync(ct);
-        return ServiceResult.Success(enabled ? "Đã bật bot AI cho phòng." : "Đã tắt bot AI cho phòng.");
     }
 
     public async Task<IServiceResult<string>> UploadImageAsync(

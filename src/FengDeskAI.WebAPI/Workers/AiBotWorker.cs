@@ -21,17 +21,17 @@ public sealed class AiBotWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        await foreach (var chatboxId in _queue.ReadAllAsync(stoppingToken))
+        await foreach (var job in _queue.ReadAllAsync(stoppingToken))
         {
             try
             {
                 using var scope = _scopeFactory.CreateScope();
                 var ai = scope.ServiceProvider.GetRequiredService<IAiChatService>();
-                await ai.RespondInRoomAsync(chatboxId, stoppingToken);
+                await ai.RespondInRoomAsync(job.ChatboxId, job.TriggeredByUserId, stoppingToken);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "[AiBot] Xử lý phòng {ChatboxId} lỗi.", chatboxId);
+                _logger.LogError(ex, "[AiBot] Xử lý phòng {ChatboxId} lỗi.", job.ChatboxId);
             }
         }
     }

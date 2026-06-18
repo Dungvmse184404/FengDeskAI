@@ -14,8 +14,9 @@ public interface IAiChatService
         AiChatRequest request, CancellationToken ct = default);
 
     /// <summary>
-    /// Bot trả lời trong 1 phòng có <c>IsAiEnabled</c> (Phase 3, do worker nền gọi). Ngữ cảnh CHỈ trong phòng đó
-    /// (không gom phòng khác — tránh rò rỉ chéo). Không dùng tool (tránh nhập nhằng user trong phòng nhiều người).
+    /// Bot trả lời khi có người gọi <c>@AI</c> trong phòng nhiều người (do worker nền gọi).
+    /// Ngữ cảnh = lịch sử phòng hiện tại + (chỉ) các tin của CHÍNH người gọi ở những phòng public khác —
+    /// tuyệt đối không nạp nội dung phòng private. Tool chạy theo scope của <paramref name="triggeredByUserId"/>.
     /// </summary>
-    Task RespondInRoomAsync(Guid chatboxId, CancellationToken ct = default);
+    Task RespondInRoomAsync(Guid chatboxId, Guid triggeredByUserId, CancellationToken ct = default);
 }

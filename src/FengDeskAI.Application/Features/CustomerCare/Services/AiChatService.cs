@@ -151,28 +151,37 @@ public sealed class AiChatService : IAiChatService
         });
     }
 
-    public async Task RespondInRoomAsync(Guid chatboxId, CancellationToken ct = default)
+    public async Task RespondInRoomAsync(Guid chatboxId, Guid triggeredByUserId, CancellationToken ct = default)
     {
         var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
-        if (chatbox is null || !chatbox.IsAiEnabled) return;
+        if (chatbox is null) return;
 
-        var history = await _uow.ChatMessages.GetRecentAsync(chatboxId, _options.MaxHistoryTurns * 2, ct);
+        var history = await _uow.ChatMessages.GetRecentAsync(chatboxId, _options.RoomContextMessages, ct);
         if (history.Count == 0) return;
-        // Đã có tin AI mới nhất rồi → không trả lời lần nữa (chống lặp khi nhiều job trùng).
-        if (history[^1].SenderType == MessageSenderType.AiBot) return;
+        var last = history[^1];
+        // Tin cuối phải là tin người dùng có gọi @AI; nếu AI đã trả lời rồi thì thôi (chống lặp khi job trùng).
+        if (last.SenderType == MessageSenderType.AiBot) return;
+        if (!AiMention.Mentions(last.Content)) return;
 
-        var outgoing = new List<AiChatMessage>(history.Count + 1);
+        var outgoing = new List<AiChatMessage>(history.Count + 2);
         var systemPrompt = await BuildSystemPromptAsync(userDisplayName: null, chatbox.ProductId, ct);
         if (systemPrompt is not null)
             outgoing.Add(new AiChatMessage(AiChatRoles.System, systemPrompt));
+
+        // Ngữ cảnh cross-room: CHỈ tin của chính người gọi ở các phòng public khác (không bao giờ chạm phòng private).
+        var callerContext = await BuildCallerPublicContextAsync(triggeredByUserId, chatboxId, ct);
+        if (callerContext is not null)
+            outgoing.Add(new AiChatMessage(AiChatRoles.System, callerContext));
+
         for (var i = 0; i < history.Count; i++)
             outgoing.Add(await ToOutgoingAsync(history[i], encodeImages: i == history.Count - 1, ct));
 
         AiChatCompletion completion;
         try
         {
-            // Phòng chung: KHÔNG dùng tool (tránh nhập nhằng user-scope), ngữ cảnh chỉ trong phòng.
-            completion = await _client.CompleteAsync(_options.DefaultModel, outgoing, tools: null, ct);
+            // Tool chạy theo scope của người gọi @AI (vd lấy profile/workspace của họ để đối chiếu sản phẩm).
+            var ctx = new AiToolContext(triggeredByUserId, null, null);
+            completion = await RunWithToolsAsync(_options.DefaultModel, outgoing, ctx, ct);
         }
         catch (Exception ex)
         {
@@ -306,9 +315,53 @@ public sealed class AiChatService : IAiChatService
         return any ? sb.ToString() : null;
     }
 
+    /// <summary>
+    /// Gom các tin GẦN NHẤT do CHÍNH người gọi @AI viết, lấy từ những phòng PUBLIC khác của họ
+    /// (<see cref="IChatboxRepository.GetSharedRoomIdsAsync"/> chỉ trả phòng có người thật khác → phòng private bị loại).
+    /// Chỉ lấy tin của người gọi để không kéo lời người thứ ba sang phòng hiện tại.
+    /// </summary>
+    private async Task<string?> BuildCallerPublicContextAsync(Guid callerUserId, Guid currentChatboxId, CancellationToken ct)
+    {
+        var roomIds = (await _uow.Chatboxes.GetSharedRoomIdsAsync(callerUserId, ct))
+            .Where(id => id != currentChatboxId)
+            .Take(Math.Max(0, _options.SharedContextRoomLimit))
+            .ToList();
+        if (roomIds.Count == 0) return null;
+
+        var sb = new System.Text.StringBuilder();
+        sb.Append("Ngữ cảnh từ các cuộc trò chuyện công khai khác của chính người vừa gọi bạn " +
+                  "(chỉ để hiểu nhu cầu của họ, đừng trích nguyên văn):");
+        var any = false;
+        foreach (var rid in roomIds)
+        {
+            var msgs = await _uow.ChatMessages.GetRecentAsync(rid, _options.SharedRoomMessages, ct);
+            foreach (var m in msgs)
+            {
+                if (m.SenderId != callerUserId || string.IsNullOrWhiteSpace(m.Content)) continue;
+                sb.Append($"\n- {m.Content}");
+                any = true;
+            }
+        }
+        return any ? sb.ToString() : null;
+    }
+
+    /// <summary>
+    /// Chỉ thị lõi (bắt buộc, không nằm trong config để không bị mất khi sửa appsettings):
+    /// vai trò + ép dùng tool tra dữ liệu thật + cho phép ghi nhớ thông tin user tự nói trong phòng.
+    /// </summary>
+    private const string CoreDirective =
+        "Bạn là trợ lý phong thủy của FengDeskAI. " +
+        "Khi người dùng hỏi về CHÍNH HỌ (mệnh/ngũ hành, hồ sơ không gian, đơn hàng, thanh toán, gợi ý sản phẩm), " +
+        "hãy GỌI TOOL để tra dữ liệu thật trước khi trả lời và TUYỆT ĐỐI không hỏi lại những thông tin mà tool có thể lấy được " +
+        "(ví dụ: cần ngày sinh thì tự gọi get_my_profile, đừng hỏi người dùng). Chỉ hỏi lại khi tool đã chạy mà thật sự không có dữ liệu. " +
+        "Mọi thông tin người dùng tự nói trong cuộc trò chuyện này coi như đã công khai trong phòng — " +
+        "bạn được phép ghi nhớ và nhắc lại chính xác, không từ chối vì lý do bảo mật. " +
+        "Trả lời ngắn gọn, thân thiện bằng tiếng Việt.";
+
     private async Task<string?> BuildSystemPromptAsync(string? userDisplayName, Guid? productId, CancellationToken ct)
     {
-        var parts = new List<string>(3);
+        var parts = new List<string>(5) { CoreDirective };
+        // SystemPrompt trong config chỉ còn để tinh chỉnh phong thái/tone (tùy chọn).
         if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
             parts.Add(_options.SystemPrompt!.Trim());
         if (!string.IsNullOrWhiteSpace(userDisplayName))
