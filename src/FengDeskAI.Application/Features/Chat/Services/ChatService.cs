@@ -93,15 +93,16 @@ public class ChatService : IChatService
         });
     }
 
-    public async Task<IServiceResult<(List<ChatMessageResponse> Items, int TotalCount, int Page, int PageSize)>> GetMessagesAsync(
+    public async Task<IServiceResult<PagedResult<ChatMessageResponse>>> GetMessagesAsync(
         Guid userId, Guid chatboxId, PageRequest page, CancellationToken ct = default)
     {
         if (!await _uow.Chatboxes.IsParticipantAsync(chatboxId, userId, ct))
-            return ServiceResult<(List<ChatMessageResponse>, int, int, int)>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem phòng này.");
+            return ServiceResult<PagedResult<ChatMessageResponse>>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem phòng này.");
 
         var (messages, total) = await _uow.ChatMessages.GetByChatboxAsync(chatboxId, page.Page, page.PageSize, ct);
         var dtos = _mapper.Map<List<ChatMessageResponse>>(messages);
-        return ServiceResult<(List<ChatMessageResponse>, int, int, int)>.Success((dtos, total, page.Page, page.PageSize));
+        return ServiceResult<PagedResult<ChatMessageResponse>>.Success(
+            new PagedResult<ChatMessageResponse>(dtos, page.Page, page.PageSize, total));
     }
 
     public async Task<IServiceResult<ChatMessageResponse>> SendMessageAsync(

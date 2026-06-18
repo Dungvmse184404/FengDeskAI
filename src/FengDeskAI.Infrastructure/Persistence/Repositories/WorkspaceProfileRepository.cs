@@ -21,13 +21,7 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
     public Task<WorkspaceProfile?> GetDefaultByUserIdAsync(Guid userId, CancellationToken ct = default)
         => _set.FirstOrDefaultAsync(w => w.UserId == userId && w.IsDefault, ct);
 
-    public async Task ClearDefaultsForUserAsync(Guid userId, CancellationToken ct = default)
-    {
-        var defaults = await _set
-            .Where(w => w.UserId == userId && w.IsDefault)
-            .ToListAsync(ct);
-
-        foreach (var profile in defaults)
-            profile.IsDefault = false;
-    }
+    public Task ClearDefaultsForUserAsync(Guid userId, CancellationToken ct = default)
+        => _set.Where(w => w.UserId == userId && w.IsDefault)
+               .ExecuteUpdateAsync(s => s.SetProperty(w => w.IsDefault, false), ct);
 }

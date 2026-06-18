@@ -22,7 +22,7 @@ public interface IChatService
     Task<IServiceResult<ChatboxListResponse>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default);
 
     /// <summary>Messages trong phòng (paged, mới nhất trước).</summary>
-    Task<IServiceResult<(List<ChatMessageResponse> Items, int TotalCount, int Page, int PageSize)>> GetMessagesAsync(
+    Task<IServiceResult<PagedResult<ChatMessageResponse>>> GetMessagesAsync(
         Guid userId, Guid chatboxId, PageRequest page, CancellationToken ct = default);
 
     /// <summary>Gửi message (text và/hoặc link ảnh). role/email suy ra SenderName.</summary>

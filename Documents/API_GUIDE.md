@@ -241,13 +241,16 @@ Một mô hình **`chatboxes` 1-n `chat_messages`** dùng chung cho cả chat **
 ### Người ↔ người
 | Method | Path | Ghi chú |
 |---|---|---|
-| POST | `/api/chat/chatbox/with/{otherUserId}` | lấy/tạo chatbox Direct với user khác |
-| GET | `/api/chat/chatboxes?page=&pageSize=` | danh sách hội thoại của tôi |
+| POST | `/api/chat/chatbox/with/{otherUserId}` | lấy/tạo chatbox Direct (1-1) với user khác |
+| POST | `/api/chat/groups` | tạo phòng nhóm (mình là Owner): `{ "title":"...", "memberUserIds":["...","..."] }` |
+| POST | `/api/chat/chatbox/{chatboxId}/participants` | thêm thành viên (chỉ Owner): `{ "userId":"..." }` |
+| DELETE | `/api/chat/chatbox/{chatboxId}/participants/{userId}` | xoá thành viên (chỉ Owner) |
+| GET | `/api/chat/chatboxes?page=&pageSize=` | danh sách hội thoại của tôi (kèm `lastMessage`) |
 | GET | `/api/chat/chatbox/{chatboxId}/messages?page=&pageSize=` | tin nhắn (mới nhất trước) |
 | POST | `/api/chat/chatbox/{chatboxId}/messages` | gửi tin: `{ "content":"...", "imageUrls":["..."] }` — cần **content HOẶC ảnh** |
 | POST | `/api/chat/chatbox/{chatboxId}/images` | **multipart** field `file` → trả link ảnh (`Chat_images/{chatboxId}/`) để gắn vào tin |
-| PATCH | `/api/chat/message/{messageId}/read` | đánh dấu 1 tin đã đọc |
-| PATCH | `/api/chat/chatbox/{chatboxId}/read-all` | đánh dấu cả hội thoại đã đọc |
+| PATCH | `/api/chat/chatbox/{chatboxId}/ai-enabled?enabled=true` | bật/tắt bot AI tự trả lời trong phòng (chỉ Owner) |
+| PATCH | `/api/chat/chatbox/{chatboxId}/read-all` | đánh dấu cả hội thoại đã đọc (cập nhật `LastReadAt`) |
 
 ### Người ↔ AI
 | Method | Path | Ghi chú |
@@ -269,8 +272,10 @@ POST /api/chat/ai/messages
 - Cấu hình ở section **`AiChat`** (BaseUrl/ChatPath/DefaultModel/AllowedModels/...) và storage ở section **`SupabaseStorage`** trong `appsettings`.
 
 ### Realtime — SignalR hub `/hubs/chat` (cần Bearer)
-- Gọi: `JoinChatbox(chatboxId)`, `SendMessage(chatboxId, content)`, `MarkAsRead(messageId)`, `LeaveChatbox(chatboxId)`.
-- Sự kiện nhận: `messageReceived`, `messageMarkedAsRead`, `userJoined`, `userLeft`, `error`.
+- **Kết nối** → tự `AddToGroup("user-{userId}")`; muốn nhận tin trong 1 phòng phải `JoinChatbox(chatboxId)` trước (vào group `chat-{chatboxId}`).
+- Gọi (client → server): `JoinChatbox(chatboxId)`, `SendMessage(chatboxId, content)`, `MarkChatboxRead(chatboxId)`, `LeaveChatbox(chatboxId)`.
+- Sự kiện nhận (server → client): `messageReceived`, `chatboxRead` (`{ chatboxId, userId }`), `userJoined` (`{ userId }`), `userLeft` (`{ userId }`), `error` (string).
+- `SendMessage` qua hub dùng chung `ChatService.SendMessageAsync` với REST → broadcast `messageReceived` giống nhau (qua `IChatRealtimeNotifier`); gửi tin kèm ảnh phải đi qua REST (`POST .../messages`).
 
 ---
 
@@ -329,4 +334,4 @@ Chạy `dotnet run --project src/FengDeskAI.WebAPI -- seed` (idempotent):
 
 ---
 
-*Cập nhật: 2026-06-10. Pending chưa làm: Customer care (reviews/support/after-sales), Notification, Recommendation (AI).*
+*Cập nhật: 2026-06-18. Pending chưa làm: Customer care (reviews/support/after-sales), Notification, Recommendation (AI).*
