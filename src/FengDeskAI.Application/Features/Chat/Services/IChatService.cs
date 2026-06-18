@@ -36,9 +36,6 @@ public interface IChatService
     /// <summary>Đánh dấu cả phòng đã đọc (cập nhật LastReadAt của participant).</summary>
     Task<IServiceResult> MarkChatboxAsReadAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
 
-    /// <summary>Bật/tắt bot AI tự trả lời trong phòng (chỉ Owner).</summary>
-    Task<IServiceResult> SetAiEnabledAsync(Guid userId, Guid chatboxId, bool enabled, CancellationToken ct = default);
-
     /// <summary>Kiểm tra user có là thành viên phòng không.</summary>
     Task<IServiceResult> ValidateChatboxAccessAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
 

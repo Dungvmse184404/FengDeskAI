@@ -249,8 +249,10 @@ Một mô hình **`chatboxes` 1-n `chat_messages`** dùng chung cho cả chat **
 | GET | `/api/chat/chatbox/{chatboxId}/messages?page=&pageSize=` | tin nhắn (mới nhất trước) |
 | POST | `/api/chat/chatbox/{chatboxId}/messages` | gửi tin: `{ "content":"...", "imageUrls":["..."] }` — cần **content HOẶC ảnh** |
 | POST | `/api/chat/chatbox/{chatboxId}/images` | **multipart** field `file` → trả link ảnh (`Chat_images/{chatboxId}/`) để gắn vào tin |
-| PATCH | `/api/chat/chatbox/{chatboxId}/ai-enabled?enabled=true` | bật/tắt bot AI tự trả lời trong phòng (chỉ Owner) |
 | PATCH | `/api/chat/chatbox/{chatboxId}/read-all` | đánh dấu cả hội thoại đã đọc (cập nhật `LastReadAt`) |
+
+> **Gọi AI trong phòng nhiều người bằng `@AI`**: bất kỳ thành viên nào gửi tin có chứa `@AI` (vd `@AI bạn thấy sản phẩm này thế nào <link>`) → worker nền cho AI trả lời, **scope tool/ngữ cảnh theo người gọi** (AI có thể gọi `get_my_profile`, `list_my_workspaces`, `get_product`... của chính người đó để tư vấn). Không cần bật cờ riêng — endpoint `ai-enabled` cũ đã bị **gỡ bỏ** (trigger nay hoàn toàn dựa vào `@AI`).
+> **Ngữ cảnh gửi cho AI**: (1) toàn bộ lịch sử gần đây của phòng hiện tại (`AiChat:RoomContextMessages`, mặc định 30); (2) **chỉ các tin của chính người gọi** ở những phòng **public** khác. Nội dung **phòng private (user↔AI) không bao giờ** lọt sang phòng public.
 
 ### Người ↔ AI
 | Method | Path | Ghi chú |

@@ -78,11 +78,6 @@ public class ChatController : ApiControllerBase
             CurrentUserId, chatboxId, stream, file.FileName, file.ContentType, ct));
     }
 
-    /// <summary>Bật/tắt bot AI tự trả lời trong phòng (chỉ Owner). vd ?enabled=true</summary>
-    [HttpPatch("chatbox/{chatboxId:guid}/ai-enabled")]
-    public async Task<IActionResult> SetAiEnabled(Guid chatboxId, [FromQuery] bool enabled, CancellationToken ct)
-        => ToActionResult(await _service.SetAiEnabledAsync(CurrentUserId, chatboxId, enabled, ct));
-
     /// <summary>Đánh dấu cả phòng đã đọc (cập nhật LastReadAt của bạn).</summary>
     [HttpPatch("chatbox/{chatboxId:guid}/read-all")]
     public async Task<IActionResult> MarkChatboxAsRead(Guid chatboxId, CancellationToken ct)
