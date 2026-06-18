@@ -21,9 +21,8 @@ public class UserAddressRepository : GenericRepository<UserAddress>, IUserAddres
     public Task<UserAddress?> GetDefaultForUserAsync(Guid userId, CancellationToken ct = default)
         => _set.FirstOrDefaultAsync(a => a.UserId == userId && a.IsDefault, ct);
 
-    public async Task ClearDefaultsForUserAsync(Guid userId, CancellationToken ct = default)
-    {
-        var defaults = await _set.Where(a => a.UserId == userId && a.IsDefault).ToListAsync(ct);
-        foreach (var addr in defaults) addr.IsDefault = false;
-    }
+    public Task ClearDefaultsForUserAsync(Guid userId, CancellationToken ct = default)
+        // ExecuteUpdate chạy NGAY → bỏ default cũ trước khi set default mới, tránh vỡ partial-unique index.
+        => _set.Where(a => a.UserId == userId && a.IsDefault)
+               .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsDefault, false), ct);
 }

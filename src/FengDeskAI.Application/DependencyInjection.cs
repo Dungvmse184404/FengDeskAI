@@ -85,6 +85,9 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, GetProductTool>();
         services.AddScoped<IAiTool, RecommendProductsTool>();
         services.AddScoped<IAiTool, ListMyWorkspacesTool>();
+        services.AddScoped<IAiTool, GetMyProfileTool>();
+        services.AddScoped<IAiTool, ListMyOrdersTool>();
+        services.AddScoped<IAiTool, GetPaymentStatusTool>();
 
         // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "AiChat".
         services.AddScoped<IAiChatService, AiChatService>();
