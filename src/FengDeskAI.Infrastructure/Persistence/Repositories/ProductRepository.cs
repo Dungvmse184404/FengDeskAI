@@ -44,8 +44,12 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             query = query.Where(p => p.ProductTags.Any(pt => pt.TagId == tagId));
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            var term = filter.Search.Trim().ToLower();
-            query = query.Where(p => p.Name.ToLower().Contains(term));
+            // Tìm không phân biệt dấu + hoa thường (unaccent + ILIKE), quét cả Name lẫn Description.
+            var pattern = $"%{filter.Search.Trim()}%";
+            query = query.Where(p =>
+                EF.Functions.ILike(AppDbContext.Unaccent(p.Name), AppDbContext.Unaccent(pattern))
+                || (p.Description != null
+                    && EF.Functions.ILike(AppDbContext.Unaccent(p.Description), AppDbContext.Unaccent(pattern))));
         }
 
         var total = await query.CountAsync(ct);

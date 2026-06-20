@@ -11,13 +11,22 @@ public interface IChatService
     Task<IServiceResult<ChatboxResponse>> GetOrStartDirectAsync(Guid userId, string? userRole, Guid otherUserId, CancellationToken ct = default);
 
     /// <summary>
+    /// Lấy/tạo phòng riêng user ↔ trợ lý AI và trả về (kèm ChatboxId). Dùng ở trang AI lớn để có
+    /// chatbox TRƯỚC khi upload ảnh (endpoint upload cần chatboxId + là participant) — lượt đầu chưa gửi tin.
+    /// </summary>
+    Task<IServiceResult<ChatboxResponse>> EnsureAssistantAsync(Guid userId, string? userRole, Guid? productId, CancellationToken ct = default);
+
+    /// <summary>
     /// Lấy/tạo phòng hỗ trợ của customer (Customer = Owner). <paramref name="forceNew"/> = true → luôn tạo
     /// phòng mới (nút "Trò chuyện mới"); false → tái dùng phòng đang mở nếu có (auto khi chưa có phòng).
     /// </summary>
     Task<IServiceResult<ChatboxResponse>> GetOrStartSupportAsync(Guid userId, string? userRole, bool forceNew, CancellationToken ct = default);
 
-    /// <summary>Ẩn (xóa khỏi danh sách) một phòng cho người dùng hiện tại — không xóa dữ liệu.</summary>
-    Task<IServiceResult> HideChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
+    /// <summary>
+    /// Khách "xóa" phòng: KHÔNG có tin nhắn → xóa hẳn; CÓ tin nhắn → đóng phòng (khoá, hiện mờ, không gửi
+    /// tin mới, rời khỏi hàng đợi hỗ trợ). Chỉ chủ phòng được thao tác.
+    /// </summary>
+    Task<IServiceResult> DeleteChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
 
     /// <summary>Đọc quyền chia sẻ thông tin của tôi trong phòng (mặc định tất cả false).</summary>
     Task<IServiceResult<ChatConsentResponse>> GetMyConsentAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);

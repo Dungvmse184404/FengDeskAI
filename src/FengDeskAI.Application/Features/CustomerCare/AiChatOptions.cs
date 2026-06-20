@@ -51,6 +51,13 @@ public sealed class AiChatOptions
     /// <summary>Số tin gần nhất của CHÍNH phòng được nạp khi @AI ở phòng nhiều người (để nhớ ngữ cảnh trong phòng).</summary>
     public int RoomContextMessages { get; set; } = 30;
 
+    /// <summary>
+    /// Số ảnh GẦN NHẤT (tính trên toàn cửa sổ lịch sử) được encode base64 đưa cho LLM mỗi lượt.
+    /// Trước đây chỉ encode ảnh của đúng tin cuối → khi user gửi ảnh rồi hỏi tiếp ở lượt sau, AI "mù" ảnh.
+    /// Giữ ảnh "dính" với hội thoại như Messenger, nhưng giới hạn để khỏi tràn <see cref="NumCtx"/>. 0 = không encode.
+    /// </summary>
+    public int VisionMaxImages { get; set; } = 3;
+
     /// <summary>System prompt định hướng trợ lý. Bỏ trống → không gắn.</summary>
     public string? SystemPrompt { get; set; }
 

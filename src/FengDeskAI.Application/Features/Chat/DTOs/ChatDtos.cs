@@ -16,6 +16,9 @@ public class ChatboxResponse
     public Guid Id { get; set; }
     public bool IsGroup { get; set; }
     public bool IsSupport { get; set; }
+
+    /// <summary>Phòng đã đóng (khách xóa nhưng còn tin nhắn) — suy từ Chatbox.IsDeleted. FE hiện mờ + khoá gửi.</summary>
+    public bool IsClosed { get; set; }
     public string? Title { get; set; }
     public Guid CreatedByUserId { get; set; }
     public Guid? ProductId { get; set; }

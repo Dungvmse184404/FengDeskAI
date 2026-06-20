@@ -9,6 +9,7 @@ public class ChatMappingProfile : Profile
     public ChatMappingProfile()
     {
         CreateMap<Chatbox, ChatboxResponse>()
+            .ForMember(d => d.IsClosed, opt => opt.MapFrom(s => s.IsDeleted))
             .ForMember(d => d.LastMessage, opt =>
                 opt.MapFrom(s => s.Messages.OrderByDescending(m => m.CreatedAt).FirstOrDefault()));
 

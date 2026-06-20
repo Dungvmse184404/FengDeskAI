@@ -105,10 +105,10 @@ public class ChatController : ApiControllerBase
     public async Task<IActionResult> MarkChatboxAsRead(Guid chatboxId, CancellationToken ct)
         => ToActionResult(await _service.MarkChatboxAsReadAsync(CurrentUserId, chatboxId, ct));
 
-    /// <summary>Xóa (ẩn) cuộc trò chuyện khỏi danh sách của tôi — không xóa dữ liệu phòng.</summary>
+    /// <summary>Xóa cuộc trò chuyện: rỗng → xóa hẳn; còn tin nhắn → đóng phòng (khoá, hiện mờ).</summary>
     [HttpDelete("chatbox/{chatboxId:guid}")]
-    public async Task<IActionResult> HideChatbox(Guid chatboxId, CancellationToken ct)
-        => ToActionResult(await _service.HideChatboxAsync(CurrentUserId, chatboxId, ct));
+    public async Task<IActionResult> DeleteChatbox(Guid chatboxId, CancellationToken ct)
+        => ToActionResult(await _service.DeleteChatboxAsync(CurrentUserId, chatboxId, ct));
 
     /// <summary>Quyền chia sẻ thông tin của tôi cho nhân viên hỗ trợ trong phòng.</summary>
     [HttpGet("chatbox/{chatboxId:guid}/consent")]
@@ -129,4 +129,12 @@ public class ChatController : ApiControllerBase
     public async Task<IActionResult> SendToAi([FromBody] AiChatRequest request, CancellationToken ct)
         => ToActionResult(await _aiService.SendAsync(
             CurrentUserId, CurrentUser.Role, CurrentUser.Email, CurrentUser.Name, request, ct));
+
+    /// <summary>
+    /// Lấy/tạo phòng riêng user ↔ AI và trả về ChatboxId. Trang AI lớn gọi trước khi upload ảnh
+    /// (endpoint upload cần chatboxId) ở lượt đầu chưa gửi tin nào.
+    /// </summary>
+    [HttpPost("ai/chatbox")]
+    public async Task<IActionResult> EnsureAiChatbox([FromQuery] Guid? productId, CancellationToken ct)
+        => ToActionResult(await _service.EnsureAssistantAsync(CurrentUserId, CurrentUser.Role, productId, ct));
 }
