@@ -35,6 +35,18 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
         return (items, total);
     }
 
+    public async Task<(List<Order> Items, int Total)> GetAllAsync(int skip, int take, CancellationToken ct = default)
+    {
+        var query = _set.AsNoTracking();
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Include(o => o.Deliveries)
+            .OrderByDescending(o => o.CreatedAt)
+            .Skip(skip).Take(take)
+            .ToListAsync(ct);
+        return (items, total);
+    }
+
     public Task<Order?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking()

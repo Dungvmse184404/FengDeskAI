@@ -76,7 +76,15 @@ builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiBotQ
     sp => sp.GetRequiredService<FengDeskAI.WebAPI.Workers.AiBotQueue>());
 builder.Services.AddHostedService<FengDeskAI.WebAPI.Workers.AiBotWorker>();
 
-builder.Services.AddSignalR();
+// camelCase + enum-as-string cho payload SignalR để KHỚP với FE (mặc định SignalR giữ nguyên tên
+// PascalCase → FE đọc m.chatboxId/m.content ra undefined, tin realtime bị rớt).
+builder.Services.AddSignalR()
+    .AddJsonProtocol(options =>
+    {
+        options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+        options.PayloadSerializerOptions.Converters.Add(
+            new System.Text.Json.Serialization.JsonStringEnumConverter());
+    });
 
 builder.Services.AddInfrastructure(builder.Configuration, builder.Environment.IsDevelopment());
 builder.Services.AddApplication();
@@ -85,15 +93,19 @@ builder.Services.AddApplication();
 builder.Services.AddSettings<OrderExpirationOptions>(builder.Configuration);
 builder.Services.AddHostedService<OrderExpirationWorker>();
 
+// Worker poll job sinh model 3D (Meshy) đang xử lý → hoàn tất / đánh dấu lỗi.
+builder.Services.AddHostedService<Model3DPollingWorker>();
+
 builder.Services.AddAuthorization(options =>
 {
-    // Thứ tự quyền: Customer < Manager < Staff < Admin. "...OrAbove" gồm role đó + mọi role cao hơn.
+    // Thứ tự quyền: Customer < Staff < Manager < Admin. "...OrAbove" gồm role đó + mọi role cao hơn.
+    // (Staff là tuyến hỗ trợ trực tiếp cho Customer/garden owner; Manager cao hơn Staff.)
     options.AddPolicy(AuthorizationPolicies.AdminOnly,
         p => p.RequireRole(Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.StaffOrAbove,
-        p => p.RequireRole(Roles.Staff, Roles.Admin));
+        p => p.RequireRole(Roles.Staff, Roles.Manager, Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.ManagerOrAbove,
-        p => p.RequireRole(Roles.Manager, Roles.Staff, Roles.Admin));
+        p => p.RequireRole(Roles.Manager, Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.CustomerOnly,
         p => p.RequireRole(Roles.Customer));
 });

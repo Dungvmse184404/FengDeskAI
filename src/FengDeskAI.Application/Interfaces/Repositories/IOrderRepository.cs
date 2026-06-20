@@ -16,6 +16,9 @@ public interface IOrderRepository : IGenericRepository<Order>
 
     Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default);
 
+    /// <summary>Tất cả đơn (mọi customer), paged, mới nhất trước — màn admin.</summary>
+    Task<(List<Order> Items, int Total)> GetAllAsync(int skip, int take, CancellationToken ct = default);
+
     /// <summary>Order chi tiết (Items + Deliveries.Store + StatusLogs). Lọc theo customer nếu truyền.</summary>
     Task<Order?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default);
 

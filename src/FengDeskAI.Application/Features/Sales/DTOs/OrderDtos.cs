@@ -66,6 +66,7 @@ public class OrderStatusLogResponse
 public class OrderListItemResponse
 {
     public Guid Id { get; set; }
+    public Guid CustomerId { get; set; }
     public OrderStatus Status { get; set; }
     public PaymentMethod PaymentMethod { get; set; }
     public decimal Subtotal { get; set; }

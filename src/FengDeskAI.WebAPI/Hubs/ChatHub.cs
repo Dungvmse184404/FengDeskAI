@@ -100,7 +100,7 @@ public class ChatHub : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"chat-{chatboxId}");
-        await Clients.Group($"chat-{chatboxId}").SendAsync("userJoined", new { userId = userId.Value });
+        await Clients.Group($"chat-{chatboxId}").SendAsync("userJoined", new { chatboxId, userId = userId.Value });
     }
 
     /// <summary>
@@ -112,6 +112,6 @@ public class ChatHub : Hub
         if (!userId.HasValue || userId.Value == Guid.Empty) return;
 
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"chat-{chatboxId}");
-        await Clients.Group($"chat-{chatboxId}").SendAsync("userLeft", new { userId = userId.Value });
+        await Clients.Group($"chat-{chatboxId}").SendAsync("userLeft", new { chatboxId, userId = userId.Value });
     }
 }

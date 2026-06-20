@@ -59,6 +59,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITagService, TagService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IProductModel3DService, ProductModel3DService>();
         services.AddScoped<ITaxonomyService, TaxonomyService>();
 
         services.AddScoped<ICartService, CartService>();
@@ -88,6 +89,7 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, GetMyProfileTool>();
         services.AddScoped<IAiTool, ListMyOrdersTool>();
         services.AddScoped<IAiTool, GetPaymentStatusTool>();
+        services.AddScoped<IAiTool, GetChatPartnerInfoTool>();
 
         // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "AiChat".
         services.AddScoped<IAiChatService, AiChatService>();

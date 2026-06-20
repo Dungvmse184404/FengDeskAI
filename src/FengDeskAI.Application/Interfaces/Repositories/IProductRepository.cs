@@ -38,8 +38,17 @@ public interface IProductRepository : IGenericRepository<Product>
 
     // Quản lý ảnh
     Task<ProductImage?> GetImageAsync(Guid productId, Guid imageId, CancellationToken ct = default);
+    Task<List<ProductImage>> ListImagesAsync(Guid productId, CancellationToken ct = default);
     Task AddImageAsync(ProductImage image, CancellationToken ct = default);
     void RemoveImage(ProductImage image);
+
+    // Model 3D (1–1 với product)
+    Task<ProductModel3D?> GetModel3DAsync(Guid productId, CancellationToken ct = default);
+    Task AddModel3DAsync(ProductModel3D model, CancellationToken ct = default);
+    void RemoveModel3D(ProductModel3D model);
+
+    /// <summary>Các model đang Processing — worker nền poll Meshy để hoàn tất. Tracked để cập nhật.</summary>
+    Task<List<ProductModel3D>> GetProcessingModel3DsAsync(CancellationToken ct = default);
 
     // Thay thế toàn bộ liên kết category/tag của product
     Task ReplaceCategoriesAsync(Guid productId, IEnumerable<Guid> categoryIds, CancellationToken ct = default);

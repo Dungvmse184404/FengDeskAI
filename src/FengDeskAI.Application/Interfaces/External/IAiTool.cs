@@ -11,8 +11,11 @@ public sealed record AiToolSpec(string Name, string Description, IReadOnlyDictio
 /// <summary>1 yêu cầu gọi tool do LLM trả về.</summary>
 public sealed record AiToolCall(string Name, string ArgumentsJson);
 
-/// <summary>Ngữ cảnh thực thi tool — scope theo user để không lộ dữ liệu người khác.</summary>
-public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEmail);
+/// <summary>
+/// Ngữ cảnh thực thi tool — scope theo user để không lộ dữ liệu người khác.
+/// <paramref name="ChatboxId"/>: phòng đang hội thoại (dùng cho tool đọc thông tin đối phương theo consent).
+/// </summary>
+public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEmail, Guid? ChatboxId = null);
 
 /// <summary>
 /// Một công cụ AI có thể gọi (function calling). Thuần Application: gọi lại các service nghiệp vụ,

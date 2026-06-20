@@ -23,6 +23,12 @@ public class Chatbox : BaseEntity
     /// <summary>Bật bot AI tự trả lời mọi tin của người trong phòng (Phase 3). Mặc định tắt.</summary>
     public bool IsAiEnabled { get; set; }
 
+    /// <summary>
+    /// Phòng hỗ trợ "mở": customer tạo khi chưa có phòng nào, staff thấy ở hàng đợi và join để hỗ trợ.
+    /// "Đang mở/chưa nhận" = IsSupport &amp;&amp; chưa có participant nào là Staff/Manager/Admin.
+    /// </summary>
+    public bool IsSupport { get; set; }
+
     public virtual ICollection<ChatboxParticipant> Participants { get; set; } = new List<ChatboxParticipant>();
     public virtual ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }

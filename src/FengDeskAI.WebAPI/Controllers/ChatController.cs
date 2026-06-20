@@ -5,6 +5,8 @@ using FengDeskAI.Application.Features.Chat.DTOs;
 using FengDeskAI.Application.Features.Chat.Services;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.CustomerCare.Services;
+using FengDeskAI.Domain.Enums.Chat;
+using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -28,6 +30,13 @@ public class ChatController : ApiControllerBase
         _aiService = aiService;
     }
 
+    /// <summary>Loại thành viên suy từ role cao nhất của người gọi (kiểm tra qua mọi role claim).</summary>
+    private ParticipantType CallerParticipantType =>
+        User.IsInRole(Roles.Admin) ? ParticipantType.Admin
+        : User.IsInRole(Roles.Manager) ? ParticipantType.Manager
+        : User.IsInRole(Roles.Staff) ? ParticipantType.Staff
+        : ParticipantType.Customer;
+
     // ───────────── Người ↔ người ─────────────
 
     /// <summary>Lấy hoặc tạo phòng 1-1 với user khác.</summary>
@@ -35,15 +44,28 @@ public class ChatController : ApiControllerBase
     public async Task<IActionResult> GetOrStart(Guid otherUserId, CancellationToken ct)
         => ToActionResult(await _service.GetOrStartDirectAsync(CurrentUserId, CurrentUser.Role, otherUserId, ct));
 
+    // ───────────── Phòng hỗ trợ (queue) ─────────────
+
+    /// <summary>Lấy/tạo phòng hỗ trợ (mình là Owner). forceNew=true → luôn tạo phòng mới ("Trò chuyện mới").</summary>
+    [HttpPost("support")]
+    public async Task<IActionResult> StartSupport([FromQuery] bool forceNew, CancellationToken ct)
+        => ToActionResult(await _service.GetOrStartSupportAsync(CurrentUserId, CurrentUser.Role, forceNew, ct));
+
+    /// <summary>Hàng đợi phòng hỗ trợ đang mở (chưa có nhân sự nhận) — staff trở lên.</summary>
+    [HttpGet("support/open")]
+    [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
+    public async Task<IActionResult> GetOpenSupport([FromQuery] PageRequest page, CancellationToken ct)
+        => ToActionResult(await _service.GetOpenSupportRoomsAsync(page, ct));
+
     /// <summary>Tạo phòng nhóm (mình là Owner).</summary>
     [HttpPost("groups")]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest request, CancellationToken ct)
         => ToActionResult(await _service.CreateGroupAsync(CurrentUserId, CurrentUser.Role, request, ct));
 
-    /// <summary>Thêm thành viên vào phòng (chỉ Owner).</summary>
+    /// <summary>Thêm thành viên: Owner, hoặc staff (tham gia/mời vào phòng hỗ trợ). Staff tự join → truyền UserId của chính mình.</summary>
     [HttpPost("chatbox/{chatboxId:guid}/participants")]
     public async Task<IActionResult> AddParticipant(Guid chatboxId, [FromBody] AddParticipantRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AddParticipantAsync(CurrentUserId, chatboxId, request, ct));
+        => ToActionResult(await _service.AddParticipantAsync(CurrentUserId, CallerParticipantType, chatboxId, request, ct));
 
     /// <summary>Xoá thành viên khỏi phòng (chỉ Owner).</summary>
     [HttpDelete("chatbox/{chatboxId:guid}/participants/{userId:guid}")]
@@ -82,6 +104,20 @@ public class ChatController : ApiControllerBase
     [HttpPatch("chatbox/{chatboxId:guid}/read-all")]
     public async Task<IActionResult> MarkChatboxAsRead(Guid chatboxId, CancellationToken ct)
         => ToActionResult(await _service.MarkChatboxAsReadAsync(CurrentUserId, chatboxId, ct));
+
+    /// <summary>Xóa (ẩn) cuộc trò chuyện khỏi danh sách của tôi — không xóa dữ liệu phòng.</summary>
+    [HttpDelete("chatbox/{chatboxId:guid}")]
+    public async Task<IActionResult> HideChatbox(Guid chatboxId, CancellationToken ct)
+        => ToActionResult(await _service.HideChatboxAsync(CurrentUserId, chatboxId, ct));
+
+    /// <summary>Quyền chia sẻ thông tin của tôi cho nhân viên hỗ trợ trong phòng.</summary>
+    [HttpGet("chatbox/{chatboxId:guid}/consent")]
+    public async Task<IActionResult> GetConsent(Guid chatboxId, CancellationToken ct)
+        => ToActionResult(await _service.GetMyConsentAsync(CurrentUserId, chatboxId, ct));
+
+    [HttpPut("chatbox/{chatboxId:guid}/consent")]
+    public async Task<IActionResult> SetConsent(Guid chatboxId, [FromBody] SetChatConsentRequest request, CancellationToken ct)
+        => ToActionResult(await _service.SetMyConsentAsync(CurrentUserId, chatboxId, request, ct));
 
     // ───────────── Người ↔ AI ─────────────
 

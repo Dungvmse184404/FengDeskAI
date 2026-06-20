@@ -30,6 +30,12 @@ public class OrdersController : ApiControllerBase
     public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
         => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));
 
+    /// <summary>Tất cả đơn của mọi customer (paged) — chỉ admin.</summary>
+    [HttpGet("all")]
+    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    public async Task<IActionResult> GetAll([FromQuery] PageRequest page, CancellationToken ct)
+        => ToActionResult(await _service.GetAllAsync(page, ct));
+
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, ct));

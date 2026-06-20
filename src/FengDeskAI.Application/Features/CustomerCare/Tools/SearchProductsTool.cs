@@ -14,7 +14,7 @@ public sealed class SearchProductsTool : IAiTool
     public SearchProductsTool(IProductService products) => _products = products;
 
     public string Name => "search_products";
-    public string Description => "Tìm sản phẩm phong thủy theo từ khoá (tên). Trả về danh sách id, tên, giá, ảnh.";
+    public string Description => "Tìm sản phẩm phong thủy theo từ khoá (tên). Trả về danh sách id, tên, ảnh và các biến thể kèm giá + tồn kho (items).";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {

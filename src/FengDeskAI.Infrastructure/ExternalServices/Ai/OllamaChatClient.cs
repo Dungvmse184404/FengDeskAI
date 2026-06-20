@@ -43,6 +43,7 @@ public sealed class OllamaChatClient : IAiChatClient
             KeepAlive = string.IsNullOrWhiteSpace(_options.KeepAlive) ? null : _options.KeepAlive,
             Messages = messages.Select(ToWire).ToList(),
             Tools = tools is { Count: > 0 } ? tools.Select(ToWireTool).ToList() : null,
+            Options = _options.NumCtx > 0 ? new OllamaOptions { NumCtx = _options.NumCtx } : null,
         };
 
         _logger.LogInformation("[AiChat] POST {Path} model={Model} ({Count} tin nhắn, {Tools} tools).",
@@ -127,6 +128,16 @@ public sealed class OllamaChatClient : IAiChatClient
         [JsonPropertyName("tools")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<OllamaTool>? Tools { get; init; }
+
+        [JsonPropertyName("options")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public OllamaOptions? Options { get; init; }
+    }
+
+    private sealed class OllamaOptions
+    {
+        [JsonPropertyName("num_ctx")]
+        public int NumCtx { get; init; }
     }
 
     private sealed class OllamaMessage

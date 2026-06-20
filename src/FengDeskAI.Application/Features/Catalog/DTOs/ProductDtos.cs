@@ -18,6 +18,31 @@ public class ProductImageResponse
     public int SortOrder { get; set; }
 }
 
+/// <summary>Trạng thái + kết quả model 3D của sản phẩm.</summary>
+public class ProductModel3DResponse
+{
+    public Guid Id { get; set; }
+    public Guid ProductId { get; set; }
+
+    /// <summary>Pending | Processing | Succeeded | Failed.</summary>
+    public string Status { get; set; } = null!;
+    public int Progress { get; set; }
+
+    public string SourceImageUrl { get; set; } = null!;
+
+    /// <summary>URL file GLB (đã re-host trên storage). Null tới khi Succeeded.</summary>
+    public string? ModelUrl { get; set; }
+    public string? ThumbnailUrl { get; set; }
+    public string? ErrorMessage { get; set; }
+    public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>Yêu cầu sinh model 3D. Bỏ trống <see cref="SourceImageId"/> → dùng ảnh primary (SortOrder nhỏ nhất).</summary>
+public class GenerateModel3DRequest
+{
+    public Guid? SourceImageId { get; set; }
+}
+
 public class CategoryRefResponse
 {
     public Guid Id { get; set; }
@@ -30,7 +55,7 @@ public class TagRefResponse
     public string Name { get; set; } = null!;
 }
 
-/// <summary>Card sản phẩm trong danh sách (rút gọn).</summary>
+/// <summary>Card sản phẩm trong danh sách (rút gọn). Kèm biến thể (giá + tồn kho) để FE/AI khỏi gọi chi tiết.</summary>
 public class ProductListItemResponse
 {
     public Guid Id { get; set; }
@@ -39,6 +64,9 @@ public class ProductListItemResponse
     public bool IsActive { get; set; }
     public decimal? MinPrice { get; set; }
     public string? PrimaryImageUrl { get; set; }
+
+    /// <summary>Các biến thể (SKU) của sản phẩm — mỗi cái mang giá + tồn kho riêng.</summary>
+    public List<ProductItemResponse> Items { get; set; } = new();
 }
 
 public class ProductDetailResponse
@@ -53,6 +81,9 @@ public class ProductDetailResponse
     public List<ProductImageResponse> Images { get; set; } = new();
     public List<CategoryRefResponse> Categories { get; set; } = new();
     public List<TagRefResponse> Tags { get; set; } = new();
+
+    /// <summary>Model 3D (nếu đã sinh). Null nếu sản phẩm chưa có.</summary>
+    public ProductModel3DResponse? Model3D { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

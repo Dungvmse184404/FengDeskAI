@@ -16,7 +16,8 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
     public async Task<(List<Chatbox> Items, int TotalCount)> GetByUserAsync(
         Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
-        var query = _set.Where(c => c.Participants.Any(p => p.UserId == userId));
+        // Bỏ qua phòng người dùng đã ẩn (xóa khỏi danh sách của họ — IsHidden trên participant).
+        var query = _set.Where(c => c.Participants.Any(p => p.UserId == userId && !p.IsHidden));
         var total = await query.CountAsync(ct);
         var items = await query
             .Include(c => c.Participants)
@@ -84,6 +85,65 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
         return chatbox;
     }
 
+    public async Task<Chatbox> GetOrCreateSupportRoomAsync(
+        Guid userId, ParticipantType userType, CancellationToken ct = default)
+    {
+        // Tái dùng phòng support đang MỞ (chưa có nhân sự, chưa bị ẩn) gần nhất của customer.
+        var existing = await _set
+            .Include(c => c.Participants)
+            .Where(c => c.IsSupport
+                && c.Participants.Any(p => p.UserId == userId && p.Role == ParticipantRole.Owner && !p.IsHidden)
+                && !c.Participants.Any(p =>
+                    p.ParticipantType == ParticipantType.Staff ||
+                    p.ParticipantType == ParticipantType.Manager ||
+                    p.ParticipantType == ParticipantType.Admin))
+            .OrderByDescending(c => c.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (existing != null) return existing;
+
+        return await CreateSupportRoomAsync(userId, userType, ct);
+    }
+
+    public async Task<Chatbox> CreateSupportRoomAsync(
+        Guid userId, ParticipantType userType, CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var chatbox = new Chatbox
+        {
+            IsGroup = true,
+            IsSupport = true,
+            Title = "Hỗ trợ FengDesk",
+            CreatedByUserId = userId,
+            Participants =
+            {
+                new ChatboxParticipant { UserId = userId, ParticipantType = userType, Role = ParticipantRole.Owner, JoinedAt = now },
+            },
+        };
+        await _set.AddAsync(chatbox, ct);
+        return chatbox;
+    }
+
+    public async Task<(List<Chatbox> Items, int TotalCount)> GetOpenSupportRoomsAsync(
+        int page, int pageSize, CancellationToken ct = default)
+    {
+        // "Đang mở" = phòng support chưa có nhân sự hỗ trợ (Staff/Manager/Admin) tham gia.
+        var query = _set.Where(c => c.IsSupport &&
+            !c.Participants.Any(p =>
+                p.ParticipantType == ParticipantType.Staff ||
+                p.ParticipantType == ParticipantType.Manager ||
+                p.ParticipantType == ParticipantType.Admin));
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Include(c => c.Participants)
+            .Include(c => c.Messages).ThenInclude(m => m.Images)
+            .OrderBy(c => c.UpdatedAt) // cũ nhất trước → ai chờ lâu nhất lên đầu
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+        return (items, total);
+    }
+
     public Task<bool> IsParticipantAsync(Guid chatboxId, Guid userId, CancellationToken ct = default)
         => _context.Set<ChatboxParticipant>().AnyAsync(p => p.ChatboxId == chatboxId && p.UserId == userId, ct);
 
@@ -132,6 +192,13 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
     public Task<bool> HasOtherHumanAsync(Guid chatboxId, Guid userId, CancellationToken ct = default)
         => _context.Set<ChatboxParticipant>()
             .AnyAsync(p => p.ChatboxId == chatboxId && p.UserId != null && p.UserId != userId, ct);
+
+    public Task<ChatRoomDataConsent?> GetConsentAsync(Guid chatboxId, Guid granterUserId, CancellationToken ct = default)
+        => _context.Set<ChatRoomDataConsent>()
+            .FirstOrDefaultAsync(c => c.ChatboxId == chatboxId && c.GranterUserId == granterUserId, ct);
+
+    public async Task AddConsentAsync(ChatRoomDataConsent consent, CancellationToken ct = default)
+        => await _context.Set<ChatRoomDataConsent>().AddAsync(consent, ct);
 
     public async Task<List<Guid>> GetSharedRoomIdsAsync(Guid userId, CancellationToken ct = default)
     {

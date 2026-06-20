@@ -15,6 +15,7 @@ public class ChatboxResponse
 {
     public Guid Id { get; set; }
     public bool IsGroup { get; set; }
+    public bool IsSupport { get; set; }
     public string? Title { get; set; }
     public Guid CreatedByUserId { get; set; }
     public Guid? ProductId { get; set; }
@@ -59,6 +60,21 @@ public class SendMessageRequest
 
     /// <summary>Link ảnh đã upload (qua endpoint upload ảnh chat). Không gửi nhị phân ở đây.</summary>
     public List<string>? ImageUrls { get; set; }
+}
+
+/// <summary>Quyền chia sẻ thông tin cá nhân của tôi cho nhân viên hỗ trợ trong phòng.</summary>
+public class ChatConsentResponse
+{
+    public bool ShareProfile { get; set; }
+    public bool ShareWorkspaces { get; set; }
+    public bool ShareOrders { get; set; }
+}
+
+public class SetChatConsentRequest
+{
+    public bool ShareProfile { get; set; }
+    public bool ShareWorkspaces { get; set; }
+    public bool ShareOrders { get; set; }
 }
 
 public class ChatboxListResponse

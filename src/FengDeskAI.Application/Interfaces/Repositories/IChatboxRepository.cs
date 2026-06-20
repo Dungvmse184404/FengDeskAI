@@ -17,6 +17,18 @@ public interface IChatboxRepository : IGenericRepository<Chatbox>
     /// <summary>Lấy/tạo phòng riêng user ↔ AI (theo productId). Participants = user (Owner) + AiBot.</summary>
     Task<Chatbox> GetOrCreateAssistantAsync(Guid userId, ParticipantType userType, Guid? productId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lấy/tạo phòng hỗ trợ "mở" của customer (IsSupport, customer = Owner). Tái dùng phòng support
+    /// đang mở (chưa có nhân sự, chưa ẩn) gần nhất của customer; nếu chưa có thì tạo mới.
+    /// </summary>
+    Task<Chatbox> GetOrCreateSupportRoomAsync(Guid userId, ParticipantType userType, CancellationToken ct = default);
+
+    /// <summary>Luôn tạo MỘT phòng hỗ trợ mới (cho nút "Trò chuyện mới").</summary>
+    Task<Chatbox> CreateSupportRoomAsync(Guid userId, ParticipantType userType, CancellationToken ct = default);
+
+    /// <summary>Hàng đợi: các phòng support đang mở (chưa có Staff/Manager/Admin tham gia), paged.</summary>
+    Task<(List<Chatbox> Items, int TotalCount)> GetOpenSupportRoomsAsync(int page, int pageSize, CancellationToken ct = default);
+
     Task<bool> IsParticipantAsync(Guid chatboxId, Guid userId, CancellationToken ct = default);
     Task<ChatboxParticipant?> GetParticipantAsync(Guid chatboxId, Guid userId, CancellationToken ct = default);
 
@@ -33,4 +45,11 @@ public interface IChatboxRepository : IGenericRepository<Chatbox>
 
     /// <summary>Id các phòng "chung" (có người khác) mà user tham gia — cho ngữ cảnh multi-room.</summary>
     Task<List<Guid>> GetSharedRoomIdsAsync(Guid userId, CancellationToken ct = default);
+
+    // ----- Consent chia sẻ thông tin cá nhân trong phòng -----
+
+    /// <summary>Bản ghi consent của 1 người cấp trong 1 phòng (null nếu chưa cấp gì). Tracked để cập nhật.</summary>
+    Task<ChatRoomDataConsent?> GetConsentAsync(Guid chatboxId, Guid granterUserId, CancellationToken ct = default);
+
+    Task AddConsentAsync(ChatRoomDataConsent consent, CancellationToken ct = default);
 }

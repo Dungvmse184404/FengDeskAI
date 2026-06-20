@@ -25,6 +25,10 @@ public class CatalogMappingProfile : Profile
         // Product items & images
         CreateMap<ProductItem, ProductItemResponse>();
         CreateMap<ProductImage, ProductImageResponse>();
+
+        // Model 3D — Status enum → tên chuỗi.
+        CreateMap<ProductModel3D, ProductModel3DResponse>()
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()));
         CreateMap<CreateProductItemRequest, ProductItem>()
             .ForMember(d => d.Id, o => o.Ignore())
             .ForMember(d => d.ProductId, o => o.Ignore())

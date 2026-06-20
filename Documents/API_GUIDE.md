@@ -79,7 +79,7 @@
 ### Products — `api/products`
 | Method | Path | Quyền | Ghi chú |
 |---|---|---|---|
-| GET | `/api/products?storeId=&categoryId=&tagId=&search=&page=&pageSize=` | 🟢 | list card (có `minPrice`, ảnh chính) + paging |
+| GET | `/api/products?storeId=&categoryId=&tagId=&search=&page=&pageSize=` | 🟢 | list card (`minPrice`, ảnh chính, **`items[]` kèm giá+tồn kho mỗi SKU**) + paging |
 | GET | `/api/products/{id}` | 🟢 | detail: items (SKU), images, categories, tags |
 | POST | `/api/products` | 🏪 | tạo product kèm items/images/links (xem body dưới) |
 | PUT | `/api/products/{id}` | 🏪 | `{ "name":"...", "description":"...", "isActive":true }` |
@@ -181,6 +181,7 @@ POST /api/orders
 |---|---|---|---|
 | POST | `/api/orders` | 🔑 customer | checkout (trên) |
 | GET | `/api/orders?page=&pageSize=` | 🔑 customer | đơn của tôi (paged) |
+| GET | `/api/orders/all?page=&pageSize=` | 🛡️ Admin | tất cả đơn của mọi customer (paged, kèm `customerId`) |
 | GET | `/api/orders/{id}` | 🔑 customer | chi tiết: items + deliveries + statusLogs |
 | POST | `/api/orders/{id}/cancel` | 🔑 customer | hủy đơn (chỉ khi `Pending`, chưa thanh toán) → hủy cả link PayOS/transaction còn treo + hoàn kho |
 | GET | `/api/orders/stores/{storeId}/deliveries?page=&pageSize=` | 🏪 vendor | delivery của store mình |

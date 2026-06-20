@@ -107,8 +107,8 @@ public sealed class AiChatService : IAiChatService
         AiChatCompletion completion;
         try
         {
-            var ctx = new AiToolContext(userId, userRole, userEmail);
-            completion = await RunWithToolsAsync(model, outgoing, ctx, ct);
+            var ctx = new AiToolContext(userId, userRole, userEmail, chatbox.Id);
+            completion = await RunWithToolsAsync(model, outgoing, ctx, chatbox.Id, ct);
         }
         catch (Exception ex)
         {
@@ -134,6 +134,7 @@ public sealed class AiChatService : IAiChatService
         await _notifier.MessageReceivedAsync(new ChatMessageBroadcast(
             aiMessage.Id, chatbox.Id, null, nameof(MessageSenderType.AiBot), null,
             aiMessage.Content, aiMessage.CreatedAt, Array.Empty<string>()), ct);
+        await EmitActivityAsync(chatbox.Id, "done", null, ct);
 
         // 6) Trả lịch sử gần nhất (link ảnh để hiển thị).
         var recent = await _uow.ChatMessages.GetRecentAsync(chatbox.Id, _options.MaxHistoryTurns * 2, ct);
@@ -164,7 +165,9 @@ public sealed class AiChatService : IAiChatService
         if (!AiMention.Mentions(last.Content)) return;
 
         var outgoing = new List<AiChatMessage>(history.Count + 2);
-        var systemPrompt = await BuildSystemPromptAsync(userDisplayName: null, chatbox.ProductId, ct);
+        // Phòng nhỏ (widget) → áp giới hạn độ dài (− 100 ký tự chừa biên). Trang AI lớn dùng SendAsync (không giới hạn).
+        var roomLimit = _options.RoomReplyMaxChars > 0 ? _options.RoomReplyMaxChars - 100 : (int?)null;
+        var systemPrompt = await BuildSystemPromptAsync(userDisplayName: null, chatbox.ProductId, ct, roomLimit);
         if (systemPrompt is not null)
             outgoing.Add(new AiChatMessage(AiChatRoles.System, systemPrompt));
 
@@ -180,8 +183,8 @@ public sealed class AiChatService : IAiChatService
         try
         {
             // Tool chạy theo scope của người gọi @AI (vd lấy profile/workspace của họ để đối chiếu sản phẩm).
-            var ctx = new AiToolContext(triggeredByUserId, null, null);
-            completion = await RunWithToolsAsync(_options.DefaultModel, outgoing, ctx, ct);
+            var ctx = new AiToolContext(triggeredByUserId, null, null, chatboxId);
+            completion = await RunWithToolsAsync(_options.DefaultModel, outgoing, ctx, chatboxId, ct);
         }
         catch (Exception ex)
         {
@@ -205,32 +208,65 @@ public sealed class AiChatService : IAiChatService
         await _notifier.MessageReceivedAsync(new ChatMessageBroadcast(
             aiMessage.Id, chatboxId, null, nameof(MessageSenderType.AiBot), null,
             aiMessage.Content, aiMessage.CreatedAt, Array.Empty<string>()), ct);
+        await EmitActivityAsync(chatboxId, "done", null, ct);
     }
 
     /// <summary>Vòng lặp tool calling: gọi LLM → nếu có tool_calls thì chạy tool, nối kết quả, gọi lại (tối đa N vòng).</summary>
     private async Task<AiChatCompletion> RunWithToolsAsync(
-        string model, List<AiChatMessage> messages, AiToolContext ctx, CancellationToken ct)
+        string model, List<AiChatMessage> messages, AiToolContext ctx, Guid chatboxId, CancellationToken ct)
     {
         var tools = BuildToolSpecs();
         var maxRounds = tools is { Count: > 0 } ? Math.Max(1, _options.MaxToolIterations) : 1;
 
+        // Giữ content non-empty mới nhất: nhiều model (vd qwen) trả lời KÈM tool_calls trong cùng
+        // lượt — đừng để mất câu trả lời đó nếu lượt ép cuối trả rỗng/lỗi.
+        AiChatCompletion? lastWithContent = null;
+
         for (var round = 0; round < maxRounds; round++)
         {
+            await EmitActivityAsync(chatboxId, "thinking", null, ct);
             var completion = await _client.CompleteAsync(model, messages, tools, ct);
+            if (!string.IsNullOrWhiteSpace(completion.Content))
+                lastWithContent = completion;
+
             if (completion.ToolCalls is not { Count: > 0 })
+            {
+                await EmitActivityAsync(chatboxId, "writing", null, ct);
                 return completion; // câu trả lời cuối (không gọi tool)
+            }
 
             // Echo lời gọi tool của assistant + chạy từng tool → nối kết quả role=tool.
             messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content, ToolCalls: completion.ToolCalls));
             foreach (var call in completion.ToolCalls)
             {
+                await EmitActivityAsync(chatboxId, "calling_tool", call.Name, ct);
                 var output = await ExecuteToolAsync(call, ctx, ct);
                 messages.Add(new AiChatMessage(AiChatRoles.Tool, output, ToolName: call.Name));
             }
         }
 
         // Hết vòng mà vẫn đòi tool → gọi lần cuối KHÔNG kèm tools để ép ra câu trả lời text.
-        return await _client.CompleteAsync(model, messages, null, ct);
+        await EmitActivityAsync(chatboxId, "writing", null, ct);
+        try
+        {
+            var forced = await _client.CompleteAsync(model, messages, null, ct);
+            if (!string.IsNullOrWhiteSpace(forced.Content)) return forced;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[AiChat] Lượt trả lời cuối (no-tools) lỗi — dùng content đã có nếu có.");
+        }
+
+        // Fallback: câu trả lời non-empty model đã đưa ra ở các lượt trước (kèm tool_calls).
+        return lastWithContent
+            ?? new AiChatCompletion("Xin lỗi, mình chưa tổng hợp được câu trả lời. Bạn thử hỏi lại nhé.", model);
+    }
+
+    /// <summary>Phát trạng thái AI realtime (best-effort — lỗi không chặn hội thoại).</summary>
+    private async Task EmitActivityAsync(Guid chatboxId, string phase, string? toolName, CancellationToken ct)
+    {
+        try { await _notifier.AiActivityAsync(chatboxId, phase, toolName, ct); }
+        catch (Exception ex) { _logger.LogDebug(ex, "[AiChat] Emit aiStatus {Phase} lỗi (bỏ qua).", phase); }
     }
 
     private IReadOnlyList<AiToolSpec>? BuildToolSpecs()
@@ -350,20 +386,29 @@ public sealed class AiChatService : IAiChatService
     /// vai trò + ép dùng tool tra dữ liệu thật + cho phép ghi nhớ thông tin user tự nói trong phòng.
     /// </summary>
     private const string CoreDirective =
-        "Bạn là trợ lý phong thủy của FengDeskAI. " +
-        "Khi người dùng hỏi về CHÍNH HỌ (mệnh/ngũ hành, hồ sơ không gian, đơn hàng, thanh toán, gợi ý sản phẩm), " +
-        "hãy GỌI TOOL để tra dữ liệu thật trước khi trả lời và TUYỆT ĐỐI không hỏi lại những thông tin mà tool có thể lấy được " +
-        "(ví dụ: cần ngày sinh thì tự gọi get_my_profile, đừng hỏi người dùng). Chỉ hỏi lại khi tool đã chạy mà thật sự không có dữ liệu. " +
-        "Mọi thông tin người dùng tự nói trong cuộc trò chuyện này coi như đã công khai trong phòng — " +
-        "bạn được phép ghi nhớ và nhắc lại chính xác, không từ chối vì lý do bảo mật. " +
-        "Trả lời ngắn gọn, thân thiện bằng tiếng Việt.";
+        "Bạn là **trợ lý mua sắm Phong Thủy** của FengDeskAI. Hãy phản hồi bằng **tiếng Việt một cách tự nhiên, năng động và thân thiện** như một người bạn thân thiết; **bỏ qua hoàn toàn các lời chào hỏi xã giao, đi thẳng vào trọng tâm câu hỏi**. " +
+        "**ƯU TIÊN GỌI CÔNG CỤ (TOOLS FIRST):** Khi người dùng hỏi về bản thân họ, hoặc một sản phẩm có hợp với họ không, bạn **BẮT BUỘC phải GỌI CÔNG CỤ** để lấy dữ liệu thực tế trước khi trả lời — " +
+        "get_my_profile (ngày sinh -> mệnh Nạp Âm, giới tính), list_my_workspaces (hồ sơ không gian của họ: phong cách, mục đích, hành/hướng chủ đạo), " +
+        "get_product / search_products (thuộc tính phong thủy, giá cả, tồn kho của sản phẩm), recommend_products (gợi ý được chấm điểm từ server kèm lý do cho không gian làm việc). " +
+        "**Tuyệt đối không hỏi** những thông tin mà công cụ có thể tự tra cứu (ví dụ: không hỏi ngày sinh — hãy gọi get_my_profile). **Chỉ hỏi người dùng** khi công cụ đã chạy và thực sự không trả về kết quả gì. " +
+        "**TƯ VẤN SẢN PHẨM PHẢI THỂ HIỆN CHUỖI LOGIC RÕ RÀNG**, không chỉ đưa ra kết luận suông: " +
+        "(1) mệnh/hành của khách hàng và những gì không gian của họ đang cần (phong cách, mục đích, hành còn thiếu); " +
+        "(2) hành và thuộc tính của sản phẩm; " +
+        "(3) mối quan hệ giữa chúng (tương sinh / tương khắc / hòa) và cách nó khớp với phong cách, mục đích của không gian làm việc; " +
+        "(4) một kết luận rõ ràng, thẳng thắn. Nếu hợp, hãy giải thích thật thuyết phục; nếu không hợp, hãy nói rõ và **chủ động đề xuất các phương án thay thế tốt hơn** thông qua recommend_products hoặc search_products. " +
+        "**Mọi khẳng định về phong thủy phải dựa trên dữ liệu từ công cụ** (recommend_products trả về điểm số + lý do) — **không tự bịa ra** các quy tắc hoặc con số. " +
+        "Tất cả thông tin người dùng đưa ra trong cuộc trò chuyện này là **công khai trong phòng**: hãy ghi nhớ và nhắc lại chính xác, **tuyệt đối không từ chối trả lời vì lý do bảo mật**. " +
+        "Nếu người đang trò chuyện là **nhân viên hỗ trợ** và cần thông tin của khách trong phòng (hồ sơ/mệnh, không gian, đơn hàng), hãy gọi **get_chat_partner_info** — công cụ chỉ trả về phần khách đã cho phép; nếu phần nào không có dữ liệu nghĩa là khách chưa đồng ý chia sẻ, hãy nói rõ điều đó. " +
+        "**KHI ĐỀ XUẤT/NHẮC ĐẾN SẢN PHẨM, LUÔN kèm link** dạng Markdown `[Tên sản phẩm](/products/{id})` (dùng đúng id sản phẩm từ kết quả công cụ) để khách bấm vào xem chi tiết.";
 
-    private async Task<string?> BuildSystemPromptAsync(string? userDisplayName, Guid? productId, CancellationToken ct)
+    private async Task<string?> BuildSystemPromptAsync(string? userDisplayName, Guid? productId, CancellationToken ct, int? maxReplyChars = null)
     {
-        var parts = new List<string>(5) { CoreDirective };
+        var parts = new List<string>(6) { CoreDirective };
         // SystemPrompt trong config chỉ còn để tinh chỉnh phong thái/tone (tùy chọn).
         if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
             parts.Add(_options.SystemPrompt!.Trim());
+        if (maxReplyChars is { } limit && limit > 0)
+            parts.Add($"**Đây là khung chat nhỏ — trả lời NGẮN GỌN, súc tích, KHÔNG vượt quá {limit} ký tự.** Nếu cần nói dài hơn, tóm tắt ý chính và mời khách mở trang trợ lý lớn.");
         if (!string.IsNullOrWhiteSpace(userDisplayName))
             parts.Add($"Người dùng bạn đang trò chuyện tên là {userDisplayName!.Trim()}.");
 

@@ -9,6 +9,7 @@ using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure.Authentication;
 using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.ExternalServices.Mail;
+using FengDeskAI.Infrastructure.ExternalServices.Model3D;
 using FengDeskAI.Infrastructure.ExternalServices.Shipping;
 using FengDeskAI.Infrastructure.ExternalServices.Storage;
 using FengDeskAI.Infrastructure.Persistence;
@@ -189,6 +190,14 @@ public static class DependencyInjection
         services.AddSettings<SupabaseStorageOptions>(configuration);
         services.AddHttpClient<IFileStorage, SupabaseFileStorage>();
         services.AddHttpClient<IImageEncoder, ImageEncoder>();
+
+        // Sinh model 3D từ ảnh (Meshy AI). Mock mặc định để khỏi tốn credit; toggle MeshySettings:UseMock.
+        services.AddSettings<MeshySettings>(configuration);
+        var meshySettings = configuration.GetSettings<MeshySettings>();
+        if (meshySettings.UseMock)
+            services.AddHttpClient<IModel3DGenerator, MockModel3DGenerator>();
+        else
+            services.AddHttpClient<IModel3DGenerator, MeshyModel3DGenerator>();
 
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, WorkspaceTypeSeeder>();
