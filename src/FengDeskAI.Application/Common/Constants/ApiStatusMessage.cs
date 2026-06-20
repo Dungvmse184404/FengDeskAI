@@ -109,6 +109,15 @@ public static class ApiStatusMessages
         public const string ImageDeleted = "Đã xóa ảnh.";
         public const string StylesNotExist = "Có mã phong cách (style) không tồn tại.";
         public const string VibesNotExist = "Có mã vibe không tồn tại.";
+
+        // Model 3D
+        public const string Model3DSourceImageRequired = "Sản phẩm chưa có ảnh để sinh model 3D.";
+        public const string Model3DSourceImageNotFound = "Không tìm thấy ảnh nguồn đã chọn.";
+        public const string Model3DAlreadyProcessing = "Model 3D đang được xử lý, vui lòng đợi hoàn tất.";
+        public const string Model3DNotFound = "Sản phẩm chưa có model 3D.";
+        public const string Model3DStarted = "Đã gửi yêu cầu sinh model 3D, đang xử lý nền.";
+        public const string Model3DDeleted = "Đã xóa model 3D.";
+        public const string Model3DProviderError = "Dịch vụ sinh 3D gặp lỗi, vui lòng thử lại sau.";
     }
 
     public static class Cart

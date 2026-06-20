@@ -42,6 +42,40 @@ public class ChatService : IChatService
         return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
     }
 
+    public async Task<IServiceResult<ChatboxResponse>> GetOrStartSupportAsync(Guid userId, string? userRole, bool forceNew, CancellationToken ct = default)
+    {
+        var type = ChatSenderHelper.TypeFrom(userRole);
+        var chatbox = forceNew
+            ? await _uow.Chatboxes.CreateSupportRoomAsync(userId, type, ct)
+            : await _uow.Chatboxes.GetOrCreateSupportRoomAsync(userId, type, ct);
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
+    }
+
+    public async Task<IServiceResult> HideChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default)
+    {
+        var participant = await _uow.Chatboxes.GetParticipantAsync(chatboxId, userId, ct);
+        if (participant is null)
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có trong phòng này.");
+
+        participant.IsHidden = true;
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult.Success("Đã xóa cuộc trò chuyện khỏi danh sách.");
+    }
+
+    public async Task<IServiceResult<ChatboxListResponse>> GetOpenSupportRoomsAsync(PageRequest page, CancellationToken ct = default)
+    {
+        var (rooms, total) = await _uow.Chatboxes.GetOpenSupportRoomsAsync(page.Page, page.PageSize, ct);
+        return ServiceResult<ChatboxListResponse>.Success(new ChatboxListResponse
+        {
+            Items = _mapper.Map<List<ChatboxResponse>>(rooms),
+            Page = page.Page,
+            PageSize = page.PageSize,
+            TotalCount = total,
+            TotalPages = (int)Math.Ceiling(total / (double)page.PageSize),
+        });
+    }
+
     public async Task<IServiceResult<ChatboxResponse>> CreateGroupAsync(Guid userId, string? userRole, CreateGroupRequest request, CancellationToken ct = default)
     {
         var members = (request.MemberUserIds ?? new List<Guid>()).Where(id => id != Guid.Empty).Distinct().ToList();
@@ -50,15 +84,29 @@ public class ChatService : IChatService
         return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox), "Đã tạo phòng nhóm.", ApiStatusCodes.Created);
     }
 
-    public async Task<IServiceResult> AddParticipantAsync(Guid userId, Guid chatboxId, AddParticipantRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult> AddParticipantAsync(Guid callerId, ParticipantType callerType, Guid chatboxId, AddParticipantRequest request, CancellationToken ct = default)
     {
-        var owner = await _uow.Chatboxes.GetParticipantAsync(chatboxId, userId, ct);
-        if (owner is null || owner.Role != ParticipantRole.Owner)
-            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Chỉ chủ phòng mới được thêm thành viên.");
         if (request.UserId == Guid.Empty)
             return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Thiếu UserId.");
 
-        await _uow.Chatboxes.AddParticipantAsync(chatboxId, request.UserId, ParticipantType.Customer, ct);
+        var room = await _uow.Chatboxes.GetWithParticipantsAsync(chatboxId, ct);
+        if (room is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phòng chat.");
+
+        var caller = room.Participants.FirstOrDefault(p => p.UserId == callerId);
+        var callerIsStaff = callerType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin;
+        var isOwner = caller?.Role == ParticipantRole.Owner;
+        var isStaffMember = caller is not null &&
+            caller.ParticipantType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin;
+
+        // Owner luôn được; staff đã ở trong phòng được; staff (theo JWT) được tham gia/mời vào phòng hỗ trợ.
+        var canManage = isOwner || isStaffMember || (callerIsStaff && room.IsSupport);
+        if (!canManage)
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền thêm thành viên vào phòng này.");
+
+        // Staff tự tham gia → gắn đúng type của họ; mời người khác → mặc định Customer.
+        var newType = request.UserId == callerId && callerIsStaff ? callerType : ParticipantType.Customer;
+        await _uow.Chatboxes.AddParticipantAsync(chatboxId, request.UserId, newType, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success("Đã thêm thành viên.");
     }
@@ -178,6 +226,45 @@ public class ChatService : IChatService
         if (!await _uow.Chatboxes.IsParticipantAsync(chatboxId, userId, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền truy cập phòng này.");
         return ServiceResult.Success();
+    }
+
+    public async Task<IServiceResult<ChatConsentResponse>> GetMyConsentAsync(Guid userId, Guid chatboxId, CancellationToken ct = default)
+    {
+        if (!await _uow.Chatboxes.IsParticipantAsync(chatboxId, userId, ct))
+            return ServiceResult<ChatConsentResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có trong phòng này.");
+
+        var consent = await _uow.Chatboxes.GetConsentAsync(chatboxId, userId, ct);
+        // Mặc định CHIA SẺ (opt-out): chưa có bản ghi → coi như cho phép tất cả.
+        return ServiceResult<ChatConsentResponse>.Success(new ChatConsentResponse
+        {
+            ShareProfile = consent?.ShareProfile ?? true,
+            ShareWorkspaces = consent?.ShareWorkspaces ?? true,
+            ShareOrders = consent?.ShareOrders ?? true,
+        });
+    }
+
+    public async Task<IServiceResult<ChatConsentResponse>> SetMyConsentAsync(Guid userId, Guid chatboxId, SetChatConsentRequest request, CancellationToken ct = default)
+    {
+        if (!await _uow.Chatboxes.IsParticipantAsync(chatboxId, userId, ct))
+            return ServiceResult<ChatConsentResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có trong phòng này.");
+
+        var consent = await _uow.Chatboxes.GetConsentAsync(chatboxId, userId, ct);
+        if (consent is null)
+        {
+            consent = new Domain.Entities.Chat.ChatRoomDataConsent { ChatboxId = chatboxId, GranterUserId = userId };
+            await _uow.Chatboxes.AddConsentAsync(consent, ct);
+        }
+        consent.ShareProfile = request.ShareProfile;
+        consent.ShareWorkspaces = request.ShareWorkspaces;
+        consent.ShareOrders = request.ShareOrders;
+        await _uow.SaveChangesAsync(ct);
+
+        return ServiceResult<ChatConsentResponse>.Success(new ChatConsentResponse
+        {
+            ShareProfile = consent.ShareProfile,
+            ShareWorkspaces = consent.ShareWorkspaces,
+            ShareOrders = consent.ShareOrders,
+        }, "Đã cập nhật quyền chia sẻ.");
     }
 
     public void RecordUserConnection(Guid userId, string connectionId)

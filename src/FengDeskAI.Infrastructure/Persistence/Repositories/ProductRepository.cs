@@ -21,6 +21,7 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Elements)
             .Include(p => p.Vibes)
             .Include(p => p.Styles)
+            .Include(p => p.Model3D)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<Product?> GetForUpdateAsync(Guid id, CancellationToken ct = default)
@@ -79,10 +80,31 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
     public Task<ProductImage?> GetImageAsync(Guid productId, Guid imageId, CancellationToken ct = default)
         => _context.Set<ProductImage>().FirstOrDefaultAsync(i => i.Id == imageId && i.ProductId == productId, ct);
 
+    public Task<List<ProductImage>> ListImagesAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<ProductImage>().AsNoTracking()
+            .Where(i => i.ProductId == productId)
+            .OrderBy(i => i.SortOrder)
+            .ToListAsync(ct);
+
     public async Task AddImageAsync(ProductImage image, CancellationToken ct = default)
         => await _context.Set<ProductImage>().AddAsync(image, ct);
 
     public void RemoveImage(ProductImage image) => _context.Set<ProductImage>().Remove(image);
+
+    // ----- Model 3D (1–1 với product). Tracked để service/worker cập nhật trạng thái. -----
+
+    public Task<ProductModel3D?> GetModel3DAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<ProductModel3D>().FirstOrDefaultAsync(m => m.ProductId == productId, ct);
+
+    public async Task AddModel3DAsync(ProductModel3D model, CancellationToken ct = default)
+        => await _context.Set<ProductModel3D>().AddAsync(model, ct);
+
+    public void RemoveModel3D(ProductModel3D model) => _context.Set<ProductModel3D>().Remove(model);
+
+    public Task<List<ProductModel3D>> GetProcessingModel3DsAsync(CancellationToken ct = default)
+        => _context.Set<ProductModel3D>()
+            .Where(m => m.Status == Model3DStatus.Processing)
+            .ToListAsync(ct);
 
     public async Task ReplaceCategoriesAsync(Guid productId, IEnumerable<Guid> categoryIds, CancellationToken ct = default)
     {

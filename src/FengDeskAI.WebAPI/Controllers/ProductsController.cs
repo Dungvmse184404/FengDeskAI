@@ -18,8 +18,13 @@ namespace FengDeskAI.WebAPI.Controllers;
 public class ProductsController : ApiControllerBase
 {
     private readonly IProductService _service;
+    private readonly IProductModel3DService _model3DService;
 
-    public ProductsController(IProductService service) => _service = service;
+    public ProductsController(IProductService service, IProductModel3DService model3DService)
+    {
+        _service = service;
+        _model3DService = model3DService;
+    }
 
     private bool IsAdmin => User.IsInRole(Roles.Admin);
 
@@ -77,6 +82,23 @@ public class ProductsController : ApiControllerBase
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
     public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
         => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, IsAdmin, ct));
+
+    // ----- Model 3D (sinh từ ảnh qua Meshy AI) -----
+
+    /// <summary>Trạng thái/kết quả model 3D của sản phẩm.</summary>
+    [HttpGet("{id:guid}/model-3d")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetModel3D(Guid id, CancellationToken ct)
+        => ToActionResult(await _model3DService.GetAsync(id, ct));
+
+    /// <summary>Yêu cầu sinh model 3D từ một ảnh sản phẩm (xử lý nền). Trả về 202 + trạng thái Processing.</summary>
+    [HttpPost("{id:guid}/model-3d")]
+    public async Task<IActionResult> GenerateModel3D(Guid id, [FromBody] GenerateModel3DRequest request, CancellationToken ct)
+        => ToActionResult(await _model3DService.GenerateAsync(id, CurrentUserId, IsAdmin, request ?? new GenerateModel3DRequest(), ct));
+
+    [HttpDelete("{id:guid}/model-3d")]
+    public async Task<IActionResult> DeleteModel3D(Guid id, CancellationToken ct)
+        => ToActionResult(await _model3DService.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
 
     // ----- Category / Tag links -----
 

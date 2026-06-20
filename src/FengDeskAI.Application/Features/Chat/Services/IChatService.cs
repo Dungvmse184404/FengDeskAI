@@ -1,6 +1,7 @@
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Chat.DTOs;
+using FengDeskAI.Domain.Enums.Chat;
 
 namespace FengDeskAI.Application.Features.Chat.Services;
 
@@ -9,11 +10,32 @@ public interface IChatService
     /// <summary>Lấy hoặc tạo phòng 1-1 với user khác (không cần biết trước — chỉ truyền otherUserId).</summary>
     Task<IServiceResult<ChatboxResponse>> GetOrStartDirectAsync(Guid userId, string? userRole, Guid otherUserId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Lấy/tạo phòng hỗ trợ của customer (Customer = Owner). <paramref name="forceNew"/> = true → luôn tạo
+    /// phòng mới (nút "Trò chuyện mới"); false → tái dùng phòng đang mở nếu có (auto khi chưa có phòng).
+    /// </summary>
+    Task<IServiceResult<ChatboxResponse>> GetOrStartSupportAsync(Guid userId, string? userRole, bool forceNew, CancellationToken ct = default);
+
+    /// <summary>Ẩn (xóa khỏi danh sách) một phòng cho người dùng hiện tại — không xóa dữ liệu.</summary>
+    Task<IServiceResult> HideChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
+
+    /// <summary>Đọc quyền chia sẻ thông tin của tôi trong phòng (mặc định tất cả false).</summary>
+    Task<IServiceResult<ChatConsentResponse>> GetMyConsentAsync(Guid userId, Guid chatboxId, CancellationToken ct = default);
+
+    /// <summary>Cập nhật quyền chia sẻ thông tin của tôi trong phòng.</summary>
+    Task<IServiceResult<ChatConsentResponse>> SetMyConsentAsync(Guid userId, Guid chatboxId, SetChatConsentRequest request, CancellationToken ct = default);
+
+    /// <summary>Hàng đợi phòng hỗ trợ đang mở (chưa có nhân sự hỗ trợ) — cho staff trở lên.</summary>
+    Task<IServiceResult<ChatboxListResponse>> GetOpenSupportRoomsAsync(PageRequest page, CancellationToken ct = default);
+
     /// <summary>Tạo phòng nhóm (creator = Owner). MemberUserIds tuỳ chọn.</summary>
     Task<IServiceResult<ChatboxResponse>> CreateGroupAsync(Guid userId, string? userRole, CreateGroupRequest request, CancellationToken ct = default);
 
-    /// <summary>Thêm thành viên vào phòng (chỉ Owner).</summary>
-    Task<IServiceResult> AddParticipantAsync(Guid userId, Guid chatboxId, AddParticipantRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Thêm thành viên vào phòng. Cho phép: Owner; staff thành viên của phòng; hoặc staff (theo
+    /// <paramref name="callerType"/>) tham gia/ mời vào phòng hỗ trợ (IsSupport). callerType suy từ JWT role.
+    /// </summary>
+    Task<IServiceResult> AddParticipantAsync(Guid callerId, ParticipantType callerType, Guid chatboxId, AddParticipantRequest request, CancellationToken ct = default);
 
     /// <summary>Xoá thành viên khỏi phòng (chỉ Owner; không tự xoá Owner cuối).</summary>
     Task<IServiceResult> RemoveParticipantAsync(Guid userId, Guid chatboxId, Guid targetUserId, CancellationToken ct = default);

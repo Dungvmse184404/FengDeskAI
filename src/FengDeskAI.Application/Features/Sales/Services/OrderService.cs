@@ -169,6 +169,14 @@ public class OrderService : IOrderService
             new PagedResult<OrderListItemResponse>(items, page.Page, page.PageSize, total));
     }
 
+    public async Task<IServiceResult<PagedResult<OrderListItemResponse>>> GetAllAsync(PageRequest page, CancellationToken ct = default)
+    {
+        var (orders, total) = await _uow.Orders.GetAllAsync(page.Skip, page.PageSize, ct);
+        var items = _mapper.Map<List<OrderListItemResponse>>(orders);
+        return ServiceResult<PagedResult<OrderListItemResponse>>.Success(
+            new PagedResult<OrderListItemResponse>(items, page.Page, page.PageSize, total));
+    }
+
     public async Task<IServiceResult<OrderDetailResponse>> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         var order = await _uow.Orders.GetDetailAsync(id, userId, ct);

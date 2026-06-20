@@ -3,6 +3,7 @@ using System;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FengDeskAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260620060703_ProductModel3D")]
+    partial class ProductModel3D
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -752,69 +755,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.ToTable("chat_message_images", (string)null);
                 });
 
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.ChatRoomDataConsent", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("ChatboxId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("chatbox_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<Guid>("GranterUserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("granter_user_id");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_deleted");
-
-                    b.Property<bool>("ShareOrders")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("share_orders");
-
-                    b.Property<bool>("ShareProfile")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("share_profile");
-
-                    b.Property<bool>("ShareWorkspaces")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("share_workspaces");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ChatboxId", "GranterUserId")
-                        .IsUnique();
-
-                    b.ToTable("chat_room_data_consents", (string)null);
-                });
-
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.Chatbox", b =>
                 {
                     b.Property<Guid>("Id")
@@ -851,12 +791,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("boolean")
                         .HasDefaultValue(true)
                         .HasColumnName("is_group");
-
-                    b.Property<bool>("IsSupport")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_support");
 
                     b.Property<Guid?>("ProductId")
                         .HasColumnType("uuid")
@@ -2817,17 +2751,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Message");
-                });
-
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.ChatRoomDataConsent", b =>
-                {
-                    b.HasOne("FengDeskAI.Domain.Entities.Chat.Chatbox", "Chatbox")
-                        .WithMany()
-                        .HasForeignKey("ChatboxId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Chatbox");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Chat.Chatbox", b =>

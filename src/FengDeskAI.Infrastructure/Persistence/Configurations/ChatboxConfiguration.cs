@@ -20,6 +20,7 @@ public class ChatboxConfiguration : IEntityTypeConfiguration<Chatbox>
         builder.Property(c => c.CreatedByUserId).HasColumnName("created_by_user_id").IsRequired();
         builder.Property(c => c.ProductId).HasColumnName("product_id");
         builder.Property(c => c.IsAiEnabled).HasColumnName("is_ai_enabled").HasDefaultValue(false);
+        builder.Property(c => c.IsSupport).HasColumnName("is_support").HasDefaultValue(false);
 
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
         builder.Property(c => c.UpdatedAt).HasColumnName("updated_at");

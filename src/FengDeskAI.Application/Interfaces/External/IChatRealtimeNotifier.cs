@@ -18,4 +18,10 @@ public sealed record ChatMessageBroadcast(
 public interface IChatRealtimeNotifier
 {
     Task MessageReceivedAsync(ChatMessageBroadcast message, CancellationToken ct = default);
+
+    /// <summary>
+    /// Phát trạng thái trợ lý AI tới phòng (group "chat-{chatboxId}"): phase = thinking | calling_tool | writing | done.
+    /// <paramref name="toolName"/> chỉ có khi phase = calling_tool. Best-effort — lỗi không chặn hội thoại.
+    /// </summary>
+    Task AiActivityAsync(Guid chatboxId, string phase, string? toolName = null, CancellationToken ct = default);
 }

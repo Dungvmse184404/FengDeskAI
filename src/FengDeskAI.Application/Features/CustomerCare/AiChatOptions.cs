@@ -20,6 +20,13 @@ public sealed class AiChatOptions
     public int TimeoutSeconds { get; set; } = 120;
 
     /// <summary>
+    /// Cửa sổ ngữ cảnh (token) gửi Ollama qua options.num_ctx. Mặc định Ollama ~2048 → hội thoại dài
+    /// (RoomContextMessages=30 + system prompt + tools) bị tràn → model trả rỗng → mất lượt trả lời.
+    /// Đặt rộng để chứa lịch sử. 0 = không gửi (dùng mặc định model).
+    /// </summary>
+    public int NumCtx { get; set; } = 8192;
+
+    /// <summary>
     /// Giữ model nóng trong RAM giữa các lượt (Ollama "keep_alive"), vd "30m", "1h", "-1" = vĩnh viễn.
     /// Bỏ trống → dùng mặc định của Ollama (~5 phút). Đây là cách giảm độ trễ load model hiệu quả nhất.
     /// </summary>
@@ -46,6 +53,12 @@ public sealed class AiChatOptions
 
     /// <summary>System prompt định hướng trợ lý. Bỏ trống → không gắn.</summary>
     public string? SystemPrompt { get; set; }
+
+    /// <summary>
+    /// Giới hạn độ dài câu trả lời AI khi @AI trong phòng nhỏ (widget). Prompt sẽ yêu cầu ≤ (giá trị này − 100)
+    /// để chừa biên an toàn. Trang AI lớn (assistant) KHÔNG áp giới hạn này. 0 = không giới hạn.
+    /// </summary>
+    public int RoomReplyMaxChars { get; set; } = 1200;
 
     /// <summary>Thời gian sống của một phiên hội thoại trong cache (phút).</summary>
     public int SessionTtlMinutes { get; set; } = 60;
