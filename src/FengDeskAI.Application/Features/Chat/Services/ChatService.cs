@@ -42,6 +42,15 @@ public class ChatService : IChatService
         return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
     }
 
+    public async Task<IServiceResult<ChatboxResponse>> EnsureAssistantAsync(
+        Guid userId, string? userRole, Guid? productId, CancellationToken ct = default)
+    {
+        var chatbox = await _uow.Chatboxes.GetOrCreateAssistantAsync(
+            userId, ChatSenderHelper.TypeFrom(userRole), productId, ct);
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
+    }
+
     public async Task<IServiceResult<ChatboxResponse>> GetOrStartSupportAsync(Guid userId, string? userRole, bool forceNew, CancellationToken ct = default)
     {
         var type = ChatSenderHelper.TypeFrom(userRole);
@@ -52,15 +61,21 @@ public class ChatService : IChatService
         return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
     }
 
-    public async Task<IServiceResult> HideChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default)
+    public async Task<IServiceResult> DeleteChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default)
     {
         var participant = await _uow.Chatboxes.GetParticipantAsync(chatboxId, userId, ct);
-        if (participant is null)
-            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có trong phòng này.");
+        if (participant is null || participant.Role != ParticipantRole.Owner)
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Chỉ chủ phòng mới được xóa cuộc trò chuyện.");
 
-        participant.IsHidden = true;
+        var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
+        if (chatbox is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phòng.");
+
+        // Soft-delete (IsDeleted=true) cho mọi phòng. Phân biệt ở lúc đọc: phòng còn tin nhắn → hiện mờ (đóng);
+        // phòng rỗng → biến mất khỏi danh sách + hàng đợi (coi như xóa hẳn).
+        _uow.Chatboxes.Remove(chatbox);
         await _uow.SaveChangesAsync(ct);
-        return ServiceResult.Success("Đã xóa cuộc trò chuyện khỏi danh sách.");
+        return ServiceResult.Success("Đã xóa cuộc trò chuyện.");
     }
 
     public async Task<IServiceResult<ChatboxListResponse>> GetOpenSupportRoomsAsync(PageRequest page, CancellationToken ct = default)
@@ -164,6 +179,8 @@ public class ChatService : IChatService
         var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
         if (chatbox is null)
             return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phòng chat.");
+        if (chatbox.IsDeleted)
+            return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.Conflict, "Cuộc trò chuyện đã đóng, không thể gửi tin mới.");
         if (!await _uow.Chatboxes.IsParticipantAsync(chatboxId, userId, ct))
             return ServiceResult<ChatMessageResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền gửi tin trong phòng này.");
 

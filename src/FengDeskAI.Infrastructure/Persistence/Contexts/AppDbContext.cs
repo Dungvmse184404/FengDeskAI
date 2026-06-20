@@ -75,10 +75,17 @@ public class AppDbContext : DbContext
     public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
     public DbSet<RecommendationLog> RecommendationLogs => Set<RecommendationLog>();
 
+    /// <summary>Map tới hàm Postgres <c>unaccent()</c> (extension unaccent) — chỉ dùng trong truy vấn EF
+    /// để tìm kiếm không phân biệt dấu. Cần CREATE EXTENSION unaccent (đã bật trong migration).</summary>
+    public static string Unaccent(string input) => throw new InvalidOperationException("Chỉ dùng trong truy vấn EF.");
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(AppDbContext).Assembly);
+
+        modelBuilder.HasDbFunction(typeof(AppDbContext).GetMethod(nameof(Unaccent), new[] { typeof(string) })!)
+            .HasName("unaccent");
     }
 
     public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)

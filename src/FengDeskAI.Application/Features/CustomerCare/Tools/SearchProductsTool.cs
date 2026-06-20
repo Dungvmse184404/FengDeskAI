@@ -14,11 +14,11 @@ public sealed class SearchProductsTool : IAiTool
     public SearchProductsTool(IProductService products) => _products = products;
 
     public string Name => "search_products";
-    public string Description => "Tìm sản phẩm phong thủy theo từ khoá (tên). Trả về danh sách id, tên, ảnh và các biến thể kèm giá + tồn kho (items).";
+    public string Description => "Tìm sản phẩm phong thủy theo từ khoá (quét cả TÊN lẫn MÔ TẢ, KHÔNG phân biệt dấu/hoa thường). Trả về danh sách id, tên, ảnh và các biến thể kèm giá + tồn kho (items).";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
-        ["query"] = new("string", "Từ khoá tìm kiếm (tên sản phẩm).", Required: true),
+        ["query"] = new("string", "Từ khoá tìm kiếm (tên hoặc mô tả; vd 'Hỏa', 'để bàn', 'kim loại').", Required: true),
         ["limit"] = new("integer", $"Số kết quả tối đa (mặc định {MaxLimit})."),
     };
 

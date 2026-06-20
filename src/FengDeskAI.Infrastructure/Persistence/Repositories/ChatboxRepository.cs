@@ -16,8 +16,11 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
     public async Task<(List<Chatbox> Items, int TotalCount)> GetByUserAsync(
         Guid userId, int page, int pageSize, CancellationToken ct = default)
     {
-        // Bỏ qua phòng người dùng đã ẩn (xóa khỏi danh sách của họ — IsHidden trên participant).
-        var query = _set.Where(c => c.Participants.Any(p => p.UserId == userId && !p.IsHidden));
+        // Hiện phòng bình thường + phòng đã đóng (IsDeleted nhưng CÒN tin nhắn → hiện mờ). Phòng xóa rỗng
+        // (IsDeleted, không tin nhắn) bị loại. IgnoreQueryFilters để lấy được phòng IsDeleted khi cần.
+        var query = _set.IgnoreQueryFilters()
+            .Where(c => c.Participants.Any(p => p.UserId == userId && !p.IsHidden))
+            .Where(c => !c.IsDeleted || c.Messages.Any(m => !m.IsDeleted));
         var total = await query.CountAsync(ct);
         var items = await query
             .Include(c => c.Participants)
@@ -126,7 +129,7 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
     public async Task<(List<Chatbox> Items, int TotalCount)> GetOpenSupportRoomsAsync(
         int page, int pageSize, CancellationToken ct = default)
     {
-        // "Đang mở" = phòng support chưa có nhân sự hỗ trợ (Staff/Manager/Admin) tham gia.
+        // "Đang mở" = phòng support chưa có nhân sự hỗ trợ. Phòng đã xóa/đóng (IsDeleted) tự bị loại bởi query filter.
         var query = _set.Where(c => c.IsSupport &&
             !c.Participants.Any(p =>
                 p.ParticipantType == ParticipantType.Staff ||
