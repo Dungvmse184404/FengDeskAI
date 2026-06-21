@@ -1,0 +1,34 @@
+# Build output (sẽ build lại bên trong image)
+**/bin/
+**/obj/
+**/out/
+publish/
+artifacts/
+
+# IDE / VS
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# Git & CI
+.git/
+.github/
+.gitignore
+
+# Claude / codegraph
+.claude/
+.claude-code/
+.codegraph/
+
+# Docs & misc không cần cho build
+Documents/
+README.md
+*.md
+**/*.log
+
+# Docker files chính nó
+Dockerfile
+.dockerignore
+docker-compose*.yml

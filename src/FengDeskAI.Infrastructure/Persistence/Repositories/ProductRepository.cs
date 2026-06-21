@@ -44,12 +44,18 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             query = query.Where(p => p.ProductTags.Any(pt => pt.TagId == tagId));
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            // Tìm không phân biệt dấu + hoa thường (unaccent + ILIKE), quét cả Name lẫn Description.
-            var pattern = $"%{filter.Search.Trim()}%";
-            query = query.Where(p =>
-                EF.Functions.ILike(AppDbContext.Unaccent(p.Name), AppDbContext.Unaccent(pattern))
-                || (p.Description != null
-                    && EF.Functions.ILike(AppDbContext.Unaccent(p.Description), AppDbContext.Unaccent(pattern))));
+            // Tách query thành từng từ — MỖI từ phải khớp (AND) ở Name HOẶC Description.
+            // Không phân biệt dấu + hoa thường (unaccent + ILIKE). VD "đèn ngủ" → SP phải chứa cả "đèn" lẫn "ngủ"
+            // (theo bất kỳ thứ tự nào, ở tên hoặc mô tả), thay vì phải khớp nguyên cụm.
+            var tokens = filter.Search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            foreach (var token in tokens)
+            {
+                var pattern = $"%{token}%";
+                query = query.Where(p =>
+                    EF.Functions.ILike(AppDbContext.Unaccent(p.Name), AppDbContext.Unaccent(pattern))
+                    || (p.Description != null
+                        && EF.Functions.ILike(AppDbContext.Unaccent(p.Description), AppDbContext.Unaccent(pattern))));
+            }
         }
 
         var total = await query.CountAsync(ct);

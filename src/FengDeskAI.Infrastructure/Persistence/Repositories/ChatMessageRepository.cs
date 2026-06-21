@@ -12,11 +12,14 @@ public class ChatMessageRepository : GenericRepository<ChatMessage>, IChatMessag
     public async Task<(List<ChatMessage> Items, int TotalCount)> GetByChatboxAsync(
         Guid chatboxId, int page, int pageSize, CancellationToken ct = default)
     {
-        var query = _set.Where(m => m.ChatboxId == chatboxId);
+        var query = _set.AsNoTracking().Where(m => m.ChatboxId == chatboxId);
         var total = await query.CountAsync(ct);
         var items = await query
             .Include(m => m.Images)
+            // ThenBy Id: CreatedAt không duy nhất (nhiều tin cùng mốc) → thêm khóa phụ để phân trang ỔN ĐỊNH,
+            // tránh cùng 1 tin lọt 2 trang (gốc gây "two children with the same key" ở FE).
             .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
@@ -28,6 +31,7 @@ public class ChatMessageRepository : GenericRepository<ChatMessage>, IChatMessag
         var items = await _set.Where(m => m.ChatboxId == chatboxId)
             .Include(m => m.Images)
             .OrderByDescending(m => m.CreatedAt)
+            .ThenByDescending(m => m.Id)
             .Take(count)
             .ToListAsync(ct);
         items.Reverse();

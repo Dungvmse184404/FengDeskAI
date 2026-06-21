@@ -16,7 +16,7 @@ namespace FengDeskAI.Application.Features.CustomerCare.Tools;
 /// </summary>
 public sealed class GetChatPartnerInfoTool : IAiTool
 {
-    private const string Denied = "Khách chưa cho phép chia sẻ mục này.";
+    private const string Denied = "The customer has not allowed sharing this item.";
 
     private readonly IUnitOfWork _uow;
     private readonly IAuthService _auth;
@@ -34,32 +34,32 @@ public sealed class GetChatPartnerInfoTool : IAiTool
 
     public string Name => "get_chat_partner_info";
     public string Description =>
-        "lấy thông tin khách hàng trong phòng (hồ sơ/mệnh, không gian làm việc, lịch sử đơn) " +
-        "Nếu không có dữ liệu, trả lời là: có thể do khách hàng chưa đồng thuận chia sẻ thông tin cá nhân của họ";
+        "Get the customer's information in the room (profile/mệnh, workspace, order history). " +
+        "If there is no data, reply that it may be because the customer has not consented to share their personal information.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>();
 
     public async Task<string> ExecuteAsync(AiToolContext context, JsonElement arguments, CancellationToken ct = default)
     {
         if (context.ChatboxId is not { } chatboxId)
-            return ToolArgs.Error("Không xác định được phòng chat.");
+            return ToolArgs.Error("Could not determine the chat room.");
 
         var room = await _uow.Chatboxes.GetWithParticipantsAsync(chatboxId, ct);
         if (room is null)
-            return ToolArgs.Error("Không tìm thấy phòng.");
+            return ToolArgs.Error("Room not found.");
 
         // Người gọi phải là nhân viên hỗ trợ trong phòng.
         var caller = room.Participants.FirstOrDefault(p => p.UserId == context.UserId);
         var callerIsStaff = caller is not null &&
             caller.ParticipantType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin;
         if (!callerIsStaff)
-            return ToolArgs.Error("Công cụ này chỉ dùng cho nhân viên hỗ trợ trong phòng có khách.");
+            return ToolArgs.Error("This tool is only for support staff in a room that has a customer.");
 
         // "Khách" = chủ phòng (Owner) là người dùng thật khác người gọi.
         var granter = room.Participants.FirstOrDefault(p =>
             p.Role == ParticipantRole.Owner && p.UserId.HasValue && p.UserId != context.UserId);
         if (granter?.UserId is not { } granterId)
-            return ToolArgs.Error("Phòng này không có khách để tra cứu.");
+            return ToolArgs.Error("This room has no customer to look up.");
 
         var consent = await _uow.Chatboxes.GetConsentAsync(chatboxId, granterId, ct);
 
@@ -69,19 +69,19 @@ public sealed class GetChatPartnerInfoTool : IAiTool
         if (consent?.ShareProfile ?? true)
         {
             var r = await _auth.GetMeAsync(granterId, ct);
-            profile = r.IsSuccess && r.Data is not null ? r.Data : "Không lấy được hồ sơ.";
+            profile = r.IsSuccess && r.Data is not null ? r.Data : "Could not load the profile.";
         }
         if (consent?.ShareWorkspaces ?? true)
         {
             var r = await _workspaces.GetMineAsync(granterId, ct);
-            workspaces = r.IsSuccess && r.Data is not null ? r.Data : "Không lấy được không gian.";
+            workspaces = r.IsSuccess && r.Data is not null ? r.Data : "Could not load the workspaces.";
         }
         if (consent?.ShareOrders ?? true)
         {
             var r = await _orders.GetMineAsync(granterId, new PageRequest { Page = 1, PageSize = 5 }, ct);
             orders = r.IsSuccess && r.Data is not null
                 ? new { total = r.Data.TotalCount, items = r.Data.Items }
-                : (object)"Không lấy được đơn hàng.";
+                : (object)"Could not load the orders.";
         }
 
         return ToolArgs.Json(new { profile, workspaces, orders });

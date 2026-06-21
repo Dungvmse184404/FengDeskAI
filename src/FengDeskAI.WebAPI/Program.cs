@@ -12,6 +12,14 @@ using Microsoft.OpenApi.Models;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Railway (và nhiều PaaS) inject biến PORT động → bind Kestrel vào cổng đó nếu có.
+// Local/Docker không set PORT → giữ nguyên ASPNETCORE_URLS (cổng 8080).
+var port = Environment.GetEnvironmentVariable("PORT");
+if (!string.IsNullOrWhiteSpace(port))
+{
+    builder.WebHost.UseUrls($"http://0.0.0.0:{port}");
+}
+
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<UnauthorizedExceptionFilter>();
