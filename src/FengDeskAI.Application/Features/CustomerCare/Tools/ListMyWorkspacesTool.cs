@@ -12,7 +12,7 @@ public sealed class ListMyWorkspacesTool : IAiTool
     public ListMyWorkspacesTool(IWorkspaceProfileService workspaces) => _workspaces = workspaces;
 
     public string Name => "list_my_workspaces";
-    public string Description => "Liệt kê các hồ sơ không gian làm việc của người dùng hiện tại (id, tên, phong cách...). Dùng id này cho recommend_products.";
+    public string Description => "List the current user's workspace profiles (id, name, style...). Use this id for recommend_products.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>();
 
@@ -20,7 +20,7 @@ public sealed class ListMyWorkspacesTool : IAiTool
     {
         var result = await _workspaces.GetMineAsync(context.UserId, ct);
         if (!result.IsSuccess || result.Data is null)
-            return ToolArgs.Error(result.Message ?? "Không lấy được hồ sơ.");
+            return ToolArgs.Error(result.Message ?? "Could not load the profiles.");
 
         return ToolArgs.Json(result.Data);
     }

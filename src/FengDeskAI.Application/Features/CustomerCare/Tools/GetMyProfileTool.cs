@@ -12,7 +12,7 @@ public sealed class GetMyProfileTool : IAiTool
     public GetMyProfileTool(IAuthService auth) => _auth = auth;
 
     public string Name => "get_my_profile";
-    public string Description => "Lấy thông tin tài khoản người dùng hiện tại (tên, email, SĐT, vai trò, ngày sinh, giới tính).";
+    public string Description => "Get the current user's account information (name, email, phone, role, date of birth, gender).";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>();
 
@@ -20,7 +20,7 @@ public sealed class GetMyProfileTool : IAiTool
     {
         var result = await _auth.GetMeAsync(context.UserId, ct);
         if (!result.IsSuccess || result.Data is null)
-            return ToolArgs.Error(result.Message ?? "Không lấy được thông tin tài khoản.");
+            return ToolArgs.Error(result.Message ?? "Could not load the account information.");
 
         return ToolArgs.Json(result.Data);
     }

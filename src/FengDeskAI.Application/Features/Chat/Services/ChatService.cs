@@ -146,9 +146,21 @@ public class ChatService : IChatService
     public async Task<IServiceResult<ChatboxListResponse>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default)
     {
         var (chatboxes, total) = await _uow.Chatboxes.GetByUserAsync(userId, page.Page, page.PageSize, ct);
+        var items = _mapper.Map<List<ChatboxResponse>>(chatboxes);
+
+        // Tính UnreadCount cho NGƯỜI GỌI: tin của người khác có CreatedAt > LastReadAt của họ.
+        // AutoMapper giữ thứ tự → Zip khớp entity ↔ dto.
+        foreach (var (entity, dto) in chatboxes.Zip(items))
+        {
+            var me = entity.Participants.FirstOrDefault(p => p.UserId == userId);
+            var lastRead = me?.LastReadAt ?? DateTime.MinValue;
+            dto.UnreadCount = entity.Messages.Count(
+                m => !m.IsDeleted && m.SenderId != userId && m.CreatedAt > lastRead);
+        }
+
         return ServiceResult<ChatboxListResponse>.Success(new ChatboxListResponse
         {
-            Items = _mapper.Map<List<ChatboxResponse>>(chatboxes),
+            Items = items,
             Page = page.Page,
             PageSize = page.PageSize,
             TotalCount = total,

@@ -12,22 +12,22 @@ public sealed class GetProductTool : IAiTool
     public GetProductTool(IProductService products) => _products = products;
 
     public string Name => "get_product";
-    public string Description => "Lấy chi tiết một sản phẩm theo id: tên, mô tả, biến thể/giá, ảnh, danh mục.";
+    public string Description => "Get a product's details by id: name, description, variants/price, images, category.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
-        ["productId"] = new("string", "Id (GUID) của sản phẩm.", Required: true),
+        ["productId"] = new("string", "Product id (GUID).", Required: true),
     };
 
     public async Task<string> ExecuteAsync(AiToolContext context, JsonElement arguments, CancellationToken ct = default)
     {
         var id = ToolArgs.GetGuid(arguments, "productId");
         if (id is null)
-            return ToolArgs.Error("Thiếu hoặc sai 'productId' (phải là GUID).");
+            return ToolArgs.Error("Missing or invalid 'productId' (must be a GUID).");
 
         var result = await _products.GetByIdAsync(id.Value, ct);
         if (!result.IsSuccess || result.Data is null)
-            return ToolArgs.Error(result.Message ?? "Không tìm thấy sản phẩm.");
+            return ToolArgs.Error(result.Message ?? "Product not found.");
 
         return ToolArgs.Json(result.Data);
     }

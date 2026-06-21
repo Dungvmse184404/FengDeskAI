@@ -136,7 +136,8 @@ public sealed class RecommendationService : IRecommendationService
             {
                 _logger.LogError(ex, "AI explain thất bại cho recommendation {RecId}.", rec.Id);
                 rec.Status = RecommendationStatus.Failed;
-                rec.Logs.Add(new RecommendationLog { Stage = "Error", Detail = ex.Message });
+                // Detail là cột jsonb → PHẢI serialize JSON; ex.Message trần sẽ gây 22P02 invalid input syntax for type json.
+                rec.Logs.Add(new RecommendationLog { Stage = "Error", Detail = JsonSerializer.Serialize(new { error = ex.Message }) });
                 return ServiceResult<RecommendationResponse>.Success(
                     BuildResponse(rec, top, productById),
                     "Đã chấm điểm nhưng AI diễn giải gặp lỗi.", ApiStatusCodes.Ok);

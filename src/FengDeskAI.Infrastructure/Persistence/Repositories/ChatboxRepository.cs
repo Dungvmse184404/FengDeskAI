@@ -25,7 +25,12 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
         var items = await query
             .Include(c => c.Participants)
             .Include(c => c.Messages).ThenInclude(m => m.Images)
+            // AsSplitQuery: 2 collection include (Participants + Messages) tạo tích Descartes trong 1 SQL
+            // → mỗi phòng nhân (số participant × số message) dòng. Tách truy vấn để tránh phình + nguy cơ trùng.
+            // ThenBy Id: UpdatedAt không duy nhất → khóa phụ cho phân trang ổn định.
+            .AsSplitQuery()
             .OrderByDescending(c => c.UpdatedAt)
+            .ThenByDescending(c => c.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);

@@ -1,0 +1,42 @@
+# =====================================================================
+# FengDeskAI — docker-compose
+# Build từ Dockerfile. Secret nạp từ .env (env_file) → override appsettings
+# qua biến môi trường "Section__Key". KHÔNG có secret trong image.
+#
+#   docker compose up -d --build          # chạy API (cổng 8080)
+#   docker compose run --rm migrate        # apply migrations + seed rồi thoát
+#
+# DB là Supabase/Postgres ngoài (cấu hình trong .env) nên compose này
+# không kèm container Postgres.
+# =====================================================================
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: fengdeskai-api:latest
+    container_name: fengdeskai-api
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+
+  # Service một lần: apply migrations + chạy seeder (Program.cs xử lý arg "seed").
+  migrate:
+    image: fengdeskai-api:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fengdeskai-migrate
+    env_file:
+      - .env
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+    command: ["dotnet", "FengDeskAI.WebAPI.dll", "seed"]
+    restart: "no"
+    profiles:
+      - tools

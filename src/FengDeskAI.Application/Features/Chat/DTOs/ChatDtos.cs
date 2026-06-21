@@ -27,6 +27,12 @@ public class ChatboxResponse
 
     public List<ChatParticipantResponse> Participants { get; set; } = new();
 
+    /// <summary>
+    /// Số tin CHƯA ĐỌC của người gọi: tin của người khác có CreatedAt &gt; LastReadAt của họ.
+    /// Dùng so sánh &gt; (không phải ==) nên không lệch ms. FE suy badge/pulse từ tổng các phòng.
+    /// </summary>
+    public int UnreadCount { get; set; }
+
     /// <summary>Tin nhắn gần nhất trong phòng.</summary>
     public ChatMessageResponse? LastMessage { get; set; }
 }
