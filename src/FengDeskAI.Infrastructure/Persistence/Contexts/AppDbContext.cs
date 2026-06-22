@@ -45,6 +45,10 @@ public class AppDbContext : DbContext
     public DbSet<OrderItem> OrderItems => Set<OrderItem>();
     public DbSet<Delivery> Deliveries => Set<Delivery>();
     public DbSet<OrderStatusLog> OrderStatusLogs => Set<OrderStatusLog>();
+    public DbSet<ReturnRequest> ReturnRequests => Set<ReturnRequest>();
+    public DbSet<ReturnItem> ReturnItems => Set<ReturnItem>();
+    public DbSet<ReturnRequestImage> ReturnRequestImages => Set<ReturnRequestImage>();
+    public DbSet<ReturnStatusLog> ReturnStatusLogs => Set<ReturnStatusLog>();
 
     // Shipping
     public DbSet<DeliveryProgressLog> DeliveryProgressLogs => Set<DeliveryProgressLog>();
@@ -52,6 +56,7 @@ public class AppDbContext : DbContext
 
     // Payment
     public DbSet<Transaction> Transactions => Set<Transaction>();
+    public DbSet<Refund> Refunds => Set<Refund>();
 
     // CustomerCare
     public DbSet<Review> Reviews => Set<Review>();

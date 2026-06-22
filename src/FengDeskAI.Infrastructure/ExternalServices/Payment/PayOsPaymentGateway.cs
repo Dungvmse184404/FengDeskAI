@@ -112,6 +112,21 @@ public class PayOsPaymentGateway : IPaymentGateway
         }
     }
 
+    /// <summary>
+    /// PayOS chưa mở API hoàn tiền tự động cho tích hợp REST hiện tại — trả success giả lập kèm
+    /// mã tham chiếu để luồng nghiệp vụ chạy trọn vẹn. Khi có API/credential refund thật, thay
+    /// phần thân bằng lời gọi HTTP tương tự CreatePaymentLinkAsync.
+    /// </summary>
+    public Task<RefundResult> RefundAsync(RefundRequest request, CancellationToken ct = default)
+    {
+        var refundId = $"REFUND-{request.OrderCode}-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+        return Task.FromResult(new RefundResult(
+            Success: true,
+            ProviderRefundId: refundId,
+            Code: "00",
+            Message: "Đã ghi nhận hoàn tiền (giả lập)."));
+    }
+
     public PaymentWebhookResult VerifyWebhook(string rawJsonBody)
     {
         using var doc = JsonDocument.Parse(rawJsonBody);

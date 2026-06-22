@@ -17,6 +17,7 @@ public interface IUnitOfWork
     // Sales
     ICartRepository Carts { get; }
     IOrderRepository Orders { get; }
+    IReturnRepository Returns { get; }
 
     // Catalog
     ICategoryRepository Categories { get; }

@@ -16,6 +16,15 @@ public enum NotificationType
     DeliveryReturned,
     DeliveryCancelled,
 
+    // Return / Refund / Exchange
+    ReturnRequested,
+    ReturnApproved,
+    ReturnRejected,
+    ReturnReceived,
+    ReturnCancelled,
+    RefundCompleted,
+    ExchangeShipped,
+
     // System
     SystemAlert,
 }

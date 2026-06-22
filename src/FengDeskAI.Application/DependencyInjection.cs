@@ -7,6 +7,8 @@ using FengDeskAI.Application.Features.Geography.Services;
 using FengDeskAI.Application.Features.Announcement.Mappings;
 using FengDeskAI.Application.Features.Announcement.Services;
 using FengDeskAI.Application.Features.Payment.Services;
+using FengDeskAI.Application.Features.Returns.Mappings;
+using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.Application.Features.Sales.Mappings;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.Mappings;
@@ -40,6 +42,7 @@ public static class DependencyInjection
             cfg.AddProfile<VendorMappingProfile>();
             cfg.AddProfile<CatalogMappingProfile>();
             cfg.AddProfile<SalesMappingProfile>();
+            cfg.AddProfile<ReturnMappingProfile>();
             cfg.AddProfile<ShippingMappingProfile>();
             cfg.AddProfile<ReviewMappingProfile>();
             cfg.AddProfile<NotificationMappingProfile>();
@@ -66,6 +69,9 @@ public static class DependencyInjection
         services.AddScoped<IOrderService, OrderService>();
         services.AddScoped<IOrderCancellationService, OrderCancellationService>();
         services.AddScoped<IOrderExpirationService, OrderExpirationService>();
+
+        services.AddScoped<IReturnService, ReturnService>();
+        services.AddScoped<IRefundService, RefundService>();
 
         services.AddScoped<IShippingService, ShippingService>();
 

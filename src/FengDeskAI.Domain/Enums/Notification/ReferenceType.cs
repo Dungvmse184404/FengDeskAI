@@ -14,6 +14,10 @@
 
         Promotion = 5,      // Thông báo hệ thống (Tặng Voucher mới, Chiến dịch khuyến mãi)
 
-        System = 6          // Các thông báo bảo trì, cảnh báo tài khoản chung
+        System = 6,         // Các thông báo bảo trì, cảnh báo tài khoản chung
+
+        Return = 7,         // Thông báo yêu cầu trả hàng/đổi trả (Đã duyệt, Từ chối, Đã nhận hàng trả...)
+
+        Refund = 8          // Thông báo hoàn tiền (Đã hoàn tiền về nguồn/chuyển khoản)
     }
 }

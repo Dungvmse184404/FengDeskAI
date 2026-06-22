@@ -228,6 +228,40 @@ public static class ApiStatusMessages
         public const string Unassigned = "Đã gỡ phân công nhân viên.";
     }
 
+    public static class Returns
+    {
+        public const string NotFound = "Không tìm thấy yêu cầu trả hàng.";
+        public const string DeliveryNotFound = "Không tìm thấy đơn giao để trả hàng.";
+        public const string NotDelivered = "Chỉ có thể trả hàng sau khi đơn giao đã được giao thành công.";
+        public const string OutsideWindow = "Đã quá thời hạn yêu cầu trả hàng/đổi trả.";
+        public const string NoItems = "Vui lòng chọn ít nhất một sản phẩm để trả.";
+        public const string ItemNotInDelivery = "Có sản phẩm không thuộc đơn giao này.";
+        public const string QuantityInvalid = "Số lượng trả phải lớn hơn 0.";
+        /// <summary>{0} = tên sản phẩm, {1} = số lượng còn có thể trả.</summary>
+        public const string QuantityExceededFormat = "Sản phẩm '{0}' vượt quá số lượng có thể trả (còn {1}).";
+        public const string BankInfoRequired = "Đơn COD cần thông tin tài khoản ngân hàng để hoàn tiền.";
+        public const string ExchangeItemRequired = "Đổi hàng cần chọn biến thể thay thế cho mỗi sản phẩm.";
+        public const string ExchangeItemNotFound = "Không tìm thấy biến thể thay thế hợp lệ của cửa hàng.";
+        public const string ExchangeMoreExpensive = "Biến thể đổi có giá cao hơn — vui lòng trả hàng rồi đặt đơn mới.";
+        /// <summary>{0} = tên biến thể, {1} = số lượng tồn còn lại.</summary>
+        public const string ExchangeOutOfStockFormat = "Biến thể đổi '{0}' không đủ tồn kho (còn {1}).";
+        public const string ManageForbidden = "Bạn không có quyền xử lý yêu cầu trả hàng của cửa hàng này.";
+        public const string ViewForbidden = "Bạn không có quyền xem yêu cầu trả hàng này.";
+        /// <summary>{0} = trạng thái hiện tại, {1} = trạng thái muốn chuyển.</summary>
+        public const string InvalidTransitionFormat = "Không thể chuyển trạng thái yêu cầu từ {0} sang {1}.";
+        public const string CancelNotAllowed = "Chỉ có thể hủy yêu cầu khi đang chờ duyệt hoặc đã duyệt.";
+        public const string NoRefundToComplete = "Yêu cầu này chưa có lệnh hoàn tiền để xác nhận.";
+
+        public const string Created = "Đã gửi yêu cầu trả hàng/đổi trả.";
+        public const string Approved = "Đã duyệt yêu cầu trả hàng.";
+        public const string Rejected = "Đã từ chối yêu cầu trả hàng.";
+        public const string ShippedBack = "Đã ghi nhận thông tin gửi hàng trả.";
+        public const string Received = "Đã nhận hàng trả, đang xử lý.";
+        public const string Resolved = "Đã xử lý yêu cầu trả hàng.";
+        public const string RefundCompleted = "Đã hoàn tất hoàn tiền.";
+        public const string Cancelled = "Đã hủy yêu cầu trả hàng.";
+    }
+
     public static class Review
     {
         public const string NotFound = "Không tìm thấy đánh giá.";
