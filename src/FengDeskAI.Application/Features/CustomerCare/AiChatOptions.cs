@@ -24,7 +24,7 @@ public sealed class AiChatOptions
     /// (RoomContextMessages=30 + system prompt + tools) bị tràn → model trả rỗng → mất lượt trả lời.
     /// Đặt rộng để chứa lịch sử. 0 = không gửi (dùng mặc định model).
     /// </summary>
-    public int NumCtx { get; set; } = 8192;
+    public int NumCtx { get; set; } = 16384;
 
     /// <summary>
     /// Giữ model nóng trong RAM giữa các lượt (Ollama "keep_alive"), vd "30m", "1h", "-1" = vĩnh viễn.
@@ -56,7 +56,7 @@ public sealed class AiChatOptions
     /// Trước đây chỉ encode ảnh của đúng tin cuối → khi user gửi ảnh rồi hỏi tiếp ở lượt sau, AI "mù" ảnh.
     /// Giữ ảnh "dính" với hội thoại như Messenger, nhưng giới hạn để khỏi tràn <see cref="NumCtx"/>. 0 = không encode.
     /// </summary>
-    public int VisionMaxImages { get; set; } = 3;
+    public int VisionMaxImages { get; set; } = 1;
 
     /// <summary>System prompt định hướng trợ lý. Bỏ trống → không gắn.</summary>
     public string? SystemPrompt { get; set; }
@@ -81,7 +81,7 @@ public sealed class AiChatOptions
     public bool EnableTools { get; set; } = true;
 
     /// <summary>Số vòng gọi tool tối đa cho 1 lượt chat (chặn lặp vô hạn).</summary>
-    public int MaxToolIterations { get; set; } = 3;
+    public int MaxToolIterations { get; set; } = 5;
 
     /// <summary>Lọc tool được phép (theo Name). Rỗng → cho phép tất cả tool đã đăng ký.</summary>
     public List<string> EnabledTools { get; set; } = new();
