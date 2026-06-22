@@ -67,11 +67,23 @@ builder.Services.AddSwaggerGen(options =>
     });
 });
 
+// CORS đọc từ section "Cors:AllowedOrigins" trong appsettings.
+// Rỗng → mở cho mọi origin (tiện dev). Có origin → khoá đúng danh sách + cho credentials
+// (cần khi FE gửi cookie/SignalR auth; AllowAnyOrigin KHÔNG đi kèm AllowCredentials được).
+var corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
+    ?? Array.Empty<string>();
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowAll", policy =>
     {
-        policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        if (corsOrigins.Length == 0)
+        {
+            policy.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod();
+        }
+        else
+        {
+            policy.WithOrigins(corsOrigins).AllowAnyHeader().AllowAnyMethod().AllowCredentials();
+        }
     });
 });
 
