@@ -237,7 +237,9 @@ public class OrderService : IOrderService
                 case DeliveryStatus.Delivered: delivery.DeliveredAt = now; break;
             }
 
-            delivery.ProgressLogs.Add(new DeliveryProgressLog
+            // Add tường minh qua repo (Added → INSERT). Add qua navigation vào delivery đã-tracked
+            // bị EF đánh Modified (UPDATE 0 rows) vì BaseEntity set sẵn Id — xem ghi chú ở PaymentService.
+            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
             {
                 DeliveryId = delivery.Id,
                 SourceType = DeliverySource.Manual,
@@ -245,7 +247,7 @@ public class OrderService : IOrderService
                 ToStatus = request.Status.ToString(),
                 Note = request.Note,
                 LoggedAt = now,
-            });
+            }, ct);
 
             var preRollupStatus = delivery.Order.Status;
             RecomputeOrderStatus(delivery.Order, userId);
@@ -298,15 +300,10 @@ public class OrderService : IOrderService
         var next = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
         if (next == order.Status) return;
 
-        var from = order.Status;
+        // Đổi trạng thái + đặt note; OrderStatusLog do AppDbContext.ApplyAuditInformation tự sinh khi
+        // phát hiện Order.Status đổi (Added → INSERT). KHÔNG add qua navigation vào order đã-tracked
+        // (EF đánh Modified → UPDATE 0 rows) — đồng bộ cách PaymentService/OrderCancellationService log.
         order.Status = next;
-        order.StatusLogs.Add(new OrderStatusLog
-        {
-            FromStatus = from.ToString(),
-            ToStatus = next.ToString(),
-            ChangedBy = actorId,
-            ChangedAt = DateTime.UtcNow,
-            Note = "Tự động cập nhật theo tiến trình giao hàng",
-        });
+        order.StatusChangeNote = "Tự động cập nhật theo tiến trình giao hàng";
     }
 }

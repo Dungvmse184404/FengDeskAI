@@ -27,6 +27,7 @@ public class UnitOfWork : IUnitOfWork
         IGenericRepository<Domain.Entities.Catalog.Element> elements,
         ICartRepository carts,
         IOrderRepository orders,
+        IReturnRepository returns,
         IShippingRepository shipping,
         ITransactionRepository transactions,
         INotificationRepository notifications,
@@ -52,6 +53,7 @@ public class UnitOfWork : IUnitOfWork
         Elements = elements;
         Carts = carts;
         Orders = orders;
+        Returns = returns;
         Shipping = shipping;
         Transactions = transactions;
         Notifications = notifications;
@@ -76,6 +78,7 @@ public class UnitOfWork : IUnitOfWork
     public IGenericRepository<Domain.Entities.Catalog.Element> Elements { get; }
     public ICartRepository Carts { get; }
     public IOrderRepository Orders { get; }
+    public IReturnRepository Returns { get; }
     public IShippingRepository Shipping { get; }
     public ITransactionRepository Transactions { get; }
     public INotificationRepository Notifications { get; }

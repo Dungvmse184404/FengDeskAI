@@ -7,3 +7,7 @@ public record PaymentLinkRequest(long OrderCode, int Amount, string Description,
 public record PaymentLinkResult(string CheckoutUrl, string PaymentLinkId, long OrderCode, string? QrCode);
 
 public record PaymentWebhookResult(bool Success, long OrderCode, int Amount, string? ProviderReference, string? Code, string? Description);
+
+public record RefundRequest(long OrderCode, int Amount, string Reason);
+
+public record RefundResult(bool Success, string? ProviderRefundId, string? Code, string? Message);
