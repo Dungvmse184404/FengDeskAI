@@ -47,3 +47,4 @@ public class ShippingController : ApiControllerBase
     public async Task<IActionResult> GetProgress(Guid deliveryId, CancellationToken ct)
         => ToActionResult(await _service.GetProgressLogsAsync(deliveryId, CurrentUserId, IsAdmin, ct));
 }
+  

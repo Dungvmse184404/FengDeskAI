@@ -17,6 +17,12 @@ public enum UserRole
     Manager  = 1 << 1, // 2
     Staff    = 1 << 2, // 4
     Admin    = 1 << 3, // 8
+
+    /// <summary>
+    /// Người bán tự mở garden store (marketplace). Là flag cộng thêm — user thường vừa
+    /// <see cref="Customer"/> vừa <see cref="GardenOwner"/>. Cấp tự động khi tạo store đầu tiên.
+    /// </summary>
+    GardenOwner = 1 << 4, // 16
 }
 
 public static class UserRoleExtensions

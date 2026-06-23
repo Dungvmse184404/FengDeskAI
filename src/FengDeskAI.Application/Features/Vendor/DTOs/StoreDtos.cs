@@ -14,24 +14,36 @@ public class StoreAddressResponse
 public class StoreResponse
 {
     public Guid Id { get; set; }
-    public Guid OwnerUserId { get; set; }
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public string Hotline { get; set; } = null!;
     public string? OpeningHours { get; set; }
     public bool IsActive { get; set; }
     public StoreAddressResponse? Address { get; set; }
+    public List<StoreOwnerResponse> Owners { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }
 
-public class CreateStoreRequest
+public class StoreOwnerResponse
 {
     public Guid OwnerUserId { get; set; }
+    public bool IsPrimary { get; set; }
+    public DateTime AssignedAt { get; set; }
+}
+
+public class CreateStoreRequest
+{
+    // Owner = người gọi (self-service); không nhận OwnerUserId từ client.
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
     public string Hotline { get; set; } = null!;
     public string? OpeningHours { get; set; }
+}
+
+public class AddOwnerRequest
+{
+    public Guid OwnerUserId { get; set; }
 }
 
 public class UpdateStoreRequest

@@ -199,6 +199,14 @@ public static class ApiStatusMessages
         public const string Deleted = "Đã xóa cửa hàng.";
         public const string HardDeleted = "Đã xóa vĩnh viễn cửa hàng.";
         public const string HardDeleteConflict = "Không thể xóa vĩnh viễn vì cửa hàng còn dữ liệu liên quan (sản phẩm/đơn hàng).";
+
+        // ===== Owner (đồng sở hữu) =====
+        public const string ManageOwnersForbidden = "Bạn không có quyền quản lý chủ sở hữu cửa hàng này.";
+        public const string AlreadyOwner = "Người dùng đã là chủ sở hữu cửa hàng này.";
+        public const string OwnerAdded = "Đã thêm chủ sở hữu.";
+        public const string OwnerRemoved = "Đã gỡ chủ sở hữu.";
+        public const string OwnerNotInStore = "Người dùng không phải chủ sở hữu cửa hàng này.";
+        public const string CannotRemoveLastPrimary = "Không thể gỡ chủ sở hữu chính cuối cùng của cửa hàng.";
     }
 
     public static class StoreAddress

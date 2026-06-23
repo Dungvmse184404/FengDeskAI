@@ -1,4 +1,3 @@
-using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Vendor;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
@@ -13,7 +12,6 @@ public class GardenStoreConfiguration : IEntityTypeConfiguration<GardenStore>
 
         builder.HasKey(s => s.Id);
         builder.Property(s => s.Id).HasColumnName("id");
-        builder.Property(s => s.OwnerUserId).HasColumnName("owner_id").IsRequired();
 
         builder.Property(s => s.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(s => s.Description).HasColumnName("description");
@@ -26,13 +24,6 @@ public class GardenStoreConfiguration : IEntityTypeConfiguration<GardenStore>
         builder.Property(s => s.CreatedBy).HasColumnName("created_by");
         builder.Property(s => s.UpdatedBy).HasColumnName("updated_by");
         builder.Property(s => s.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
-
-        builder.HasIndex(s => s.OwnerUserId);
-
-        builder.HasOne<User>()
-            .WithMany()
-            .HasForeignKey(s => s.OwnerUserId)
-            .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne(s => s.Address)
             .WithOne(a => a.Store)

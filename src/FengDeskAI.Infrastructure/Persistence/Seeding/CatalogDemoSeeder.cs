@@ -44,13 +44,18 @@ public class CatalogDemoSeeder : IDataSeeder
         var owner = await EnsureVendorAsync(ct);
         var store = new GardenStore
         {
-            OwnerUserId = owner.Id,
             Name = "Vườn Phong Thủy Demo",
             Description = "Cửa hàng mẫu phục vụ test luồng đặt hàng.",
             Hotline = "1900 1234",
             OpeningHours = "08:00 - 21:00",
             IsActive = true,
         };
+        store.Owners.Add(new GardenStoreOwner
+        {
+            OwnerUserId = owner.Id,
+            IsPrimary = true,
+            AssignedAt = DateTime.UtcNow,
+        });
         await _context.Set<GardenStore>().AddAsync(store, ct);
 
         // Mỗi store có 1 địa chỉ (1-1). Gắn vào ward bất kỳ đã được GeographySeeder (Order 10) seed trước.
@@ -130,7 +135,7 @@ public class CatalogDemoSeeder : IDataSeeder
             PasswordHash = _passwords.Hash(VendorPassword),
             FullName = "Demo Vendor",
             Gender = Gender.Unspecified,
-            Role = UserRole.Manager,
+            Role = UserRole.Manager | UserRole.GardenOwner,
             IsActive = true,
         };
         await _context.Set<User>().AddAsync(user, ct);

@@ -8,8 +8,9 @@ using Microsoft.AspNetCore.Mvc;
 namespace FengDeskAI.WebAPI.Controllers;
 
 /// <summary>
-/// Quản lý garden store (multi-vendor). Public xem danh sách/chi tiết;
-/// Admin tạo store + gán owner; owner/admin sửa store, địa chỉ, phân công nhân viên.
+/// Quản lý garden store (marketplace). Public xem danh sách/chi tiết;
+/// user đã đăng nhập tự mở store (self-service, thành owner chính);
+/// owner/admin sửa store, địa chỉ, đồng sở hữu, phân công nhân viên.
 /// </summary>
 [Route("api/stores")]
 [Authorize]
@@ -31,8 +32,8 @@ public class StoresController : ApiControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, ct));
 
+    /// <summary>Tự mở store (self-service). Người tạo trở thành owner chính + được cấp role GardenOwner.</summary>
     [HttpPost]
-    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
     public async Task<IActionResult> Create([FromBody] CreateStoreRequest request, CancellationToken ct)
         => ToActionResult(await _service.CreateAsync(CurrentUserId, request, ct));
 
@@ -69,6 +70,22 @@ public class StoresController : ApiControllerBase
     [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
     public async Task<IActionResult> HardDeleteAddress(Guid id, CancellationToken ct)
         => ToActionResult(await _service.HardDeleteAddressAsync(id, ct));
+
+    // ===== Đồng sở hữu (owners) =====
+
+    [HttpGet("{id:guid}/owners")]
+    public async Task<IActionResult> GetOwners(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.GetOwnersAsync(id, ct));
+
+    /// <summary>Thêm đồng sở hữu (chỉ owner hiện tại hoặc Admin).</summary>
+    [HttpPost("{id:guid}/owners")]
+    public async Task<IActionResult> AddOwner(Guid id, [FromBody] AddOwnerRequest request, CancellationToken ct)
+        => ToActionResult(await _service.AddOwnerAsync(id, CurrentUserId, IsAdmin, request, ct));
+
+    /// <summary>Gỡ đồng sở hữu (chỉ owner hiện tại hoặc Admin; không gỡ owner chính).</summary>
+    [HttpDelete("{id:guid}/owners/{userId:guid}")]
+    public async Task<IActionResult> RemoveOwner(Guid id, Guid userId, CancellationToken ct)
+        => ToActionResult(await _service.RemoveOwnerAsync(id, userId, CurrentUserId, IsAdmin, ct));
 
     [HttpGet("{id:guid}/staff")]
     public async Task<IActionResult> GetStaff(Guid id, CancellationToken ct)

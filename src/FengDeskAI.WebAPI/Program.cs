@@ -128,6 +128,9 @@ builder.Services.AddAuthorization(options =>
         p => p.RequireRole(Roles.Manager, Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.CustomerOnly,
         p => p.RequireRole(Roles.Customer));
+    // Người bán tự vận hành shop (marketplace). Admin luôn được phép.
+    options.AddPolicy(AuthorizationPolicies.GardenOwnerOrAbove,
+        p => p.RequireRole(Roles.GardenOwner, Roles.Admin));
 });
 
 var app = builder.Build();

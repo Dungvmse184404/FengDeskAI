@@ -10,6 +10,15 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     /// <summary>True nếu user là owner hoặc nhân viên đang active của store.</summary>
     Task<bool> CanManageAsync(Guid storeId, Guid userId, CancellationToken ct = default);
 
+    // ===== Owner (quan hệ nhiều-nhiều garden_store_owners) =====
+    /// <summary>True nếu user là owner của store.</summary>
+    Task<bool> IsOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default);
+    Task<List<GardenStoreOwner>> GetOwnersAsync(Guid storeId, CancellationToken ct = default);
+    /// <summary>Owner record (tracked) để cập nhật/gỡ.</summary>
+    Task<GardenStoreOwner?> GetOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default);
+    Task<int> CountOwnersAsync(Guid storeId, CancellationToken ct = default);
+    Task AddOwnerAsync(GardenStoreOwner owner, CancellationToken ct = default);
+
     Task<List<GardenStaffAssignment>> GetStaffAsync(Guid storeId, CancellationToken ct = default);
     Task<GardenStaffAssignment?> GetActiveAssignmentAsync(Guid storeId, Guid staffId, CancellationToken ct = default);
     Task<GardenStaffAssignment?> GetAssignmentByIdAsync(Guid assignmentId, Guid storeId, CancellationToken ct = default);

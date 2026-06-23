@@ -21,6 +21,9 @@ public static class AuthorizationPolicies
 
     /// <summary>Chỉ Customer.</summary>
     public const string CustomerOnly = nameof(CustomerOnly);
+
+    /// <summary>Người bán (GardenOwner) hoặc Admin — gắn lên endpoint vận hành shop của vendor.</summary>
+    public const string GardenOwnerOrAbove = nameof(GardenOwnerOrAbove);
 }
 
 public static class Roles
@@ -29,4 +32,5 @@ public static class Roles
     public const string Manager = nameof(Manager);
     public const string Staff = nameof(Staff);
     public const string Admin = nameof(Admin);
+    public const string GardenOwner = nameof(GardenOwner);
 }
