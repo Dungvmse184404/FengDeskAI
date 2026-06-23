@@ -14,15 +14,35 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
 
     public Task<GardenStore?> GetDetailAsync(Guid id, CancellationToken ct = default)
         => _set.Include(s => s.Address).ThenInclude(a => a!.Ward)
+               .Include(s => s.Owners)
                .FirstOrDefaultAsync(s => s.Id == id, ct);
 
     public async Task<bool> CanManageAsync(Guid storeId, Guid userId, CancellationToken ct = default)
     {
-        var isOwner = await _set.AnyAsync(s => s.Id == storeId && s.OwnerUserId == userId, ct);
-        if (isOwner) return true;
+        if (await IsOwnerAsync(storeId, userId, ct)) return true;
         return await _context.Set<GardenStaffAssignment>()
             .AnyAsync(a => a.GardenStoreId == storeId && a.StaffId == userId && a.IsActive, ct);
     }
+
+    public Task<bool> IsOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default)
+        => _context.Set<GardenStoreOwner>()
+            .AnyAsync(o => o.GardenStoreId == storeId && o.OwnerUserId == userId, ct);
+
+    public Task<List<GardenStoreOwner>> GetOwnersAsync(Guid storeId, CancellationToken ct = default)
+        => _context.Set<GardenStoreOwner>().AsNoTracking()
+            .Where(o => o.GardenStoreId == storeId)
+            .OrderByDescending(o => o.IsPrimary).ThenBy(o => o.AssignedAt)
+            .ToListAsync(ct);
+
+    public Task<GardenStoreOwner?> GetOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default)
+        => _context.Set<GardenStoreOwner>()
+            .FirstOrDefaultAsync(o => o.GardenStoreId == storeId && o.OwnerUserId == userId, ct);
+
+    public Task<int> CountOwnersAsync(Guid storeId, CancellationToken ct = default)
+        => _context.Set<GardenStoreOwner>().CountAsync(o => o.GardenStoreId == storeId, ct);
+
+    public async Task AddOwnerAsync(GardenStoreOwner owner, CancellationToken ct = default)
+        => await _context.Set<GardenStoreOwner>().AddAsync(owner, ct);
 
     public Task<List<GardenStaffAssignment>> GetStaffAsync(Guid storeId, CancellationToken ct = default)
         => _context.Set<GardenStaffAssignment>().AsNoTracking()
@@ -62,6 +82,8 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             .Where(a => a.StoreId == id).ExecuteDeleteAsync(ct);
         await _context.Set<GardenStaffAssignment>().IgnoreQueryFilters()
             .Where(a => a.GardenStoreId == id).ExecuteDeleteAsync(ct);
+        await _context.Set<GardenStoreOwner>().IgnoreQueryFilters()
+            .Where(o => o.GardenStoreId == id).ExecuteDeleteAsync(ct);
         await _set.IgnoreQueryFilters()
             .Where(s => s.Id == id).ExecuteDeleteAsync(ct);
     }

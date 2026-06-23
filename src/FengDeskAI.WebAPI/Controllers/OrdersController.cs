@@ -22,6 +22,9 @@ public class OrdersController : ApiControllerBase
 
     private bool IsAdmin => User.IsInRole(Roles.Admin);
 
+    /// <summary>Staff trở lên (Staff/Manager/Admin) — được xem chi tiết đơn của mọi customer.</summary>
+    private bool IsStaffOrAbove => User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Manager) || User.IsInRole(Roles.Admin);
+
     [HttpPost]
     public async Task<IActionResult> Checkout([FromBody] CheckoutRequest request, CancellationToken ct)
         => ToActionResult(await _service.CheckoutAsync(CurrentUserId, request, ct));
@@ -38,7 +41,7 @@ public class OrdersController : ApiControllerBase
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, ct));
+        => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, IsStaffOrAbove, ct));
 
     [HttpPost("{id:guid}/cancel")]
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)

@@ -116,6 +116,31 @@ public static class FengShuiCalculator
     public static KuaGroup GetKuaGroup(int kuaNumber)
         => kuaNumber is 1 or 3 or 4 or 9 ? KuaGroup.East : KuaGroup.West;
 
+    /// <summary>
+    /// Dựng hồ sơ phong thủy cá nhân từ ngày sinh + giới tính — NGUỒN CHÂN LÝ DUY NHẤT cho việc gating:
+    /// không có ngày sinh → null (bỏ phần cá nhân); có ngày sinh nhưng giới tính không Nam/Nữ → chỉ có mệnh
+    /// (Nạp Âm), không có Kua/hướng. Dùng chung bởi engine chấm điểm và phần hiển thị hồ sơ (get_my_profile).
+    /// </summary>
+    public static PersonalProfile? BuildPersonalProfile(DateTime? dateOfBirth, Gender gender)
+    {
+        if (dateOfBirth is null)
+            return null;
+
+        int year = dateOfBirth.Value.Year;
+        var element = GetNapAmElement(year); // mệnh Nạp Âm: chỉ cần năm sinh
+
+        // Kua + hướng tốt cần giới tính Nam/Nữ.
+        if (gender is Gender.Male or Gender.Female)
+        {
+            int kua = GetKuaNumber(year, gender);
+            var group = GetKuaGroup(kua);
+            return new PersonalProfile(element, kua, group, GetFavorableDirections(group));
+        }
+
+        // Thiếu giới tính → vẫn có mệnh, không có hướng.
+        return new PersonalProfile(element, null, null, new HashSet<CompassDirection>());
+    }
+
     public static IReadOnlySet<CompassDirection> GetFavorableDirections(KuaGroup group)
         => (group == KuaGroup.East ? EastGroupDirections : WestGroupDirections).ToHashSet();
 

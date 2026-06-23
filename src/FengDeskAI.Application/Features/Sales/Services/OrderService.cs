@@ -158,7 +158,7 @@ public class OrderService : IOrderService
             return order.Id;
         }, ct);
 
-        return await GetByIdAsync(orderId, userId, ct);
+        return await GetByIdAsync(orderId, userId, isPrivileged: false, ct);
     }
 
     public async Task<IServiceResult<PagedResult<OrderListItemResponse>>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default)
@@ -177,9 +177,10 @@ public class OrderService : IOrderService
             new PagedResult<OrderListItemResponse>(items, page.Page, page.PageSize, total));
     }
 
-    public async Task<IServiceResult<OrderDetailResponse>> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default)
+    public async Task<IServiceResult<OrderDetailResponse>> GetByIdAsync(Guid id, Guid userId, bool isPrivileged, CancellationToken ct = default)
     {
-        var order = await _uow.Orders.GetDetailAsync(id, userId, ct);
+        // Staff trở lên (Staff/Manager/Admin) xem được mọi đơn → bỏ lọc chủ sở hữu; Customer chỉ xem đơn của mình.
+        var order = await _uow.Orders.GetDetailAsync(id, isPrivileged ? null : userId, ct);
         if (order is null)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
         return ServiceResult<OrderDetailResponse>.Success(_mapper.Map<OrderDetailResponse>(order));
@@ -198,7 +199,7 @@ public class OrderService : IOrderService
         // Hủy cả giao dịch thanh toán còn treo + link PayOS (nếu có) — tránh đơn đã hủy mà vẫn trả tiền được.
         await _cancellation.CancelAsync(order, userId, "Khách hàng hủy đơn", expired: false, ct);
 
-        return await GetByIdAsync(id, userId, ct);
+        return await GetByIdAsync(id, userId, isPrivileged: false, ct);
     }
 
     public async Task<IServiceResult<PagedResult<StoreDeliveryResponse>>> GetStoreDeliveriesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default)

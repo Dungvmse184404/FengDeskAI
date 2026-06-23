@@ -4,6 +4,7 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Vendor.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Vendor;
+using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Application.Features.Vendor.Services;
 
@@ -36,14 +37,21 @@ public class StoreService : IStoreService
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.NameRequired);
         if (string.IsNullOrWhiteSpace(request.Hotline))
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineRequired);
-        if (!await _uow.Users.AnyAsync(u => u.Id == request.OwnerUserId, ct))
-            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.OwnerNotFound);
 
         var entity = _mapper.Map<GardenStore>(request);
         entity.Name = request.Name.Trim();
         entity.IsActive = true;
 
+        // Self-service: người tạo trở thành owner chính (primary). EF gắn GardenStoreId qua quan hệ.
+        entity.Owners.Add(new GardenStoreOwner
+        {
+            OwnerUserId = actorUserId,
+            IsPrimary = true,
+            AssignedAt = DateTime.UtcNow,
+        });
+
         await _uow.Stores.AddAsync(entity, ct);
+        await GrantGardenOwnerRoleAsync(actorUserId, ct);
         await _uow.SaveChangesAsync(ct);
 
         return ServiceResult<StoreResponse>.Success(
@@ -55,7 +63,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null)
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.EditForbidden);
         if (string.IsNullOrWhiteSpace(request.Name))
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.NameRequired);
@@ -76,7 +84,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null || store.IsDeleted)
             return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.DeleteForbidden);
 
         // Soft-delete địa chỉ kèm theo (nếu có) rồi soft-delete store.
@@ -116,7 +124,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null || store.IsDeleted)
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.EditForbidden);
         if (string.IsNullOrWhiteSpace(request.StreetAddress))
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreAddress.StreetRequired);
@@ -153,7 +161,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null || store.IsDeleted)
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.EditForbidden);
         if (string.IsNullOrWhiteSpace(request.StreetAddress))
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreAddress.StreetRequired);
@@ -178,7 +186,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null || store.IsDeleted)
             return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.EditForbidden);
 
         var address = await _uow.Stores.GetAddressAsync(id, ct);
@@ -204,7 +212,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null)
             return ServiceResult<List<StaffAssignmentResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult<List<StaffAssignmentResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.ViewForbidden);
 
         var staff = await _uow.Stores.GetStaffAsync(id, ct);
@@ -216,7 +224,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null)
             return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.AssignForbidden);
         if (!await _uow.Users.AnyAsync(u => u.Id == request.StaffId, ct))
             return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Staff.StaffNotFound);
@@ -243,7 +251,7 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null)
             return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        if (!IsOwnerOrAdmin(store, actorUserId, isAdmin))
+        if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.UnassignForbidden);
 
         var assignment = await _uow.Stores.GetAssignmentByIdAsync(assignmentId, id, ct);
@@ -256,6 +264,76 @@ public class StoreService : IStoreService
         return ServiceResult.Success(ApiStatusMessages.Staff.Unassigned);
     }
 
-    private static bool IsOwnerOrAdmin(GardenStore store, Guid userId, bool isAdmin)
-        => isAdmin || store.OwnerUserId == userId;
+    // ===== Owner (đồng sở hữu — marketplace) =====
+
+    public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default)
+    {
+        if (!await _uow.Stores.ExistsAsync(id, ct))
+            return ServiceResult<List<StoreOwnerResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+
+        var owners = await _uow.Stores.GetOwnersAsync(id, ct);
+        return ServiceResult<List<StoreOwnerResponse>>.Success(_mapper.Map<List<StoreOwnerResponse>>(owners));
+    }
+
+    public async Task<IServiceResult<StoreOwnerResponse>> AddOwnerAsync(Guid id, Guid actorUserId, bool isAdmin, AddOwnerRequest request, CancellationToken ct = default)
+    {
+        var store = await _uow.Stores.GetByIdAsync(id, ct);
+        if (store is null || store.IsDeleted)
+            return ServiceResult<StoreOwnerResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+        if (!await IsOwnerOrAdminAsync(id, actorUserId, isAdmin, ct))
+            return ServiceResult<StoreOwnerResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.ManageOwnersForbidden);
+        if (!await _uow.Users.AnyAsync(u => u.Id == request.OwnerUserId, ct))
+            return ServiceResult<StoreOwnerResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.OwnerNotFound);
+        if (await _uow.Stores.IsOwnerAsync(id, request.OwnerUserId, ct))
+            return ServiceResult<StoreOwnerResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Store.AlreadyOwner);
+
+        var owner = new GardenStoreOwner
+        {
+            GardenStoreId = id,
+            OwnerUserId = request.OwnerUserId,
+            IsPrimary = false,
+            AssignedAt = DateTime.UtcNow,
+        };
+        await _uow.Stores.AddOwnerAsync(owner, ct);
+        await GrantGardenOwnerRoleAsync(request.OwnerUserId, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        return ServiceResult<StoreOwnerResponse>.Success(
+            _mapper.Map<StoreOwnerResponse>(owner), ApiStatusMessages.Store.OwnerAdded, ApiStatusCodes.Created);
+    }
+
+    public async Task<IServiceResult> RemoveOwnerAsync(Guid id, Guid ownerUserId, Guid actorUserId, bool isAdmin, CancellationToken ct = default)
+    {
+        var store = await _uow.Stores.GetByIdAsync(id, ct);
+        if (store is null || store.IsDeleted)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+        if (!await IsOwnerOrAdminAsync(id, actorUserId, isAdmin, ct))
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.ManageOwnersForbidden);
+
+        var owner = await _uow.Stores.GetOwnerAsync(id, ownerUserId, ct);
+        if (owner is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.OwnerNotInStore);
+        // Store luôn cần owner chính — không cho gỡ owner primary (muốn đổi thì cần luồng chuyển nhượng riêng).
+        if (owner.IsPrimary)
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.CannotRemoveLastPrimary);
+
+        owner.IsDeleted = true; // tracked → soft-delete
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult.Success(ApiStatusMessages.Store.OwnerRemoved);
+    }
+
+    /// <summary>Owner của store hoặc Admin (KHÔNG gồm nhân viên — staff không được sửa store).</summary>
+    private async Task<bool> IsOwnerOrAdminAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
+        => isAdmin || await _uow.Stores.IsOwnerAsync(storeId, userId, ct);
+
+    /// <summary>Cấp flag <see cref="UserRole.GardenOwner"/> cho user nếu chưa có (không SaveChanges).</summary>
+    private async Task GrantGardenOwnerRoleAsync(Guid userId, CancellationToken ct)
+    {
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        if (user is not null && !user.Role.Has(UserRole.GardenOwner))
+        {
+            user.Role = user.Role.Add(UserRole.GardenOwner);
+            _uow.Users.Update(user);
+        }
+    }
 }

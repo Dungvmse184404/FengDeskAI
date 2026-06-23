@@ -23,24 +23,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
     private const int MediumDeskMax = 8000;
 
     public PersonalProfile? BuildPersonalProfile(DateTime? dateOfBirth, Gender gender)
-    {
-        if (dateOfBirth is null)
-            return null; // không có năm sinh → bỏ toàn bộ phần cá nhân
-
-        int year = dateOfBirth.Value.Year;
-        var element = FengShuiCalculator.GetNapAmElement(year); // mệnh Nạp Âm: chỉ cần năm sinh
-
-        // Kua + hướng tốt cần giới tính Nam/Nữ.
-        if (gender is Gender.Male or Gender.Female)
-        {
-            int kua = FengShuiCalculator.GetKuaNumber(year, gender);
-            var group = FengShuiCalculator.GetKuaGroup(kua);
-            return new PersonalProfile(element, kua, group, FengShuiCalculator.GetFavorableDirections(group));
-        }
-
-        // Thiếu giới tính → vẫn có mệnh, không có hướng.
-        return new PersonalProfile(element, null, null, new HashSet<CompassDirection>());
-    }
+        => FengShuiCalculator.BuildPersonalProfile(dateOfBirth, gender);
 
     public IReadOnlyList<ScoredProduct> Score(ScoringContext context, IReadOnlyList<ProductFacts> candidates)
     {

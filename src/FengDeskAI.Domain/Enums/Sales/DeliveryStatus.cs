@@ -11,6 +11,7 @@ public enum DeliveryStatus
     Preparing,  // đang chuẩn bị hàng
     Shipped,    // đã bàn giao vận chuyển
     Delivered,  // đã giao thành công
+    DeliveryFailed,
     Cancelled,  // đã hủy
     Returned,   // hoàn hàng
 }

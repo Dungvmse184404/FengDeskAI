@@ -8,7 +8,8 @@
 - **Auth**: gửi header `Authorization: Bearer <accessToken>` (lấy từ login/finalize). Swagger có nút Authorize.
 - **Response bọc** trong `ServiceResult`: `{ isSuccess, statusCode, message, errors, data }`.
 - **Phân trang**: query `?page=1&pageSize=20`. Kết quả `PagedResult`: `{ items, page, pageSize, totalCount, totalPages }`.
-- **Phân quyền**: 🟢 public · 🔑 cần đăng nhập · 👮 Manager/Admin · 🛡️ Admin · 🏪 owner/staff của store (kiểm tra ở service).
+- **Phân quyền**: 🟢 public · 🔑 cần đăng nhập · 👮 Manager/Admin · 🛡️ Admin · 🌱 GardenOwner (người bán) · 🏪 owner/staff của store (kiểm tra ở service).
+- **Role `GardenOwner`** (`UserRole=16`): người bán sở hữu store, được cấp tự động khi tạo store đầu tiên (self-service). "Nhân viên store" KHÔNG có role riêng — chỉ là `garden_staff_assignments`; phân biệt với `Staff` = nhân viên sàn. Chi tiết: `Documents/FIX_GARDEN_OWNER_FLOW.md`.
 
 ---
 
@@ -61,6 +62,8 @@
 | GET | `/api/stores/{id}/staff` | 🏪 owner/admin | danh sách nhân viên |
 | POST | `/api/stores/{id}/staff` | 🏪 owner/admin | `{ "staffId":"<userId>" }` |
 | DELETE | `/api/stores/{id}/staff/{assignmentId}` | 🏪 owner/admin | gỡ phân công |
+
+> ⚠️ **Sắp thay đổi (per `FIX_GARDEN_OWNER_FLOW.md`):** `POST /api/stores` chuyển sang self-service 🌱 — người tạo tự thành owner (bỏ `ownerUserId` trong body) và được cấp role `GardenOwner`. Sở hữu chuyển sang nhiều-nhiều qua bảng `garden_store_owners`; sẽ có thêm `POST/DELETE /api/stores/{id}/owners`.
 
 ---
 

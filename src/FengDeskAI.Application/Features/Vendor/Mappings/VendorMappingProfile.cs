@@ -10,12 +10,14 @@ public class VendorMappingProfile : Profile
     {
         CreateMap<StoreAddress, StoreAddressResponse>();
         CreateMap<GardenStore, StoreResponse>();
+        CreateMap<GardenStoreOwner, StoreOwnerResponse>();
         CreateMap<GardenStaffAssignment, StaffAssignmentResponse>();
 
         CreateMap<CreateStoreRequest, GardenStore>()
             .ForMember(d => d.Id, opt => opt.Ignore())
             .ForMember(d => d.IsActive, opt => opt.Ignore())
             .ForMember(d => d.Address, opt => opt.Ignore())
+            .ForMember(d => d.Owners, opt => opt.Ignore())
             .ForMember(d => d.StaffAssignments, opt => opt.Ignore());
     }
 }

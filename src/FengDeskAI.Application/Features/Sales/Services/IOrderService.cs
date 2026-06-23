@@ -11,7 +11,8 @@ public interface IOrderService
 
     /// <summary>Tất cả đơn của mọi customer (paged) — chỉ admin.</summary>
     Task<IServiceResult<PagedResult<OrderListItemResponse>>> GetAllAsync(PageRequest page, CancellationToken ct = default);
-    Task<IServiceResult<OrderDetailResponse>> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
+    /// <summary>Chi tiết đơn. Customer chỉ xem đơn của mình; Staff trở lên (isPrivileged) xem được mọi đơn.</summary>
+    Task<IServiceResult<OrderDetailResponse>> GetByIdAsync(Guid id, Guid userId, bool isPrivileged, CancellationToken ct = default);
     Task<IServiceResult<OrderDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);
 
     Task<IServiceResult<PagedResult<StoreDeliveryResponse>>> GetStoreDeliveriesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);

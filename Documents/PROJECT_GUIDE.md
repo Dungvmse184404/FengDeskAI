@@ -133,7 +133,7 @@ Tổng hợp các enum đã có trong codebase. Dùng để:
 | Enum | Values | DB type | Note |
 |---|---|---|---|
 | `Gender` | `Unspecified`, `Male`, `Female`, `Other` | `int` | Set ổn định, hiếm query bằng tay |
-| `UserRole` `[Flags]` | `None=0`, `Customer=1`, `Manager=2`, `Staff=4`, `Admin=8` | `int` (bit-mask) | 1 user có nhiều role: `Manager &#124; Staff = 6`. Chi tiết ở mục 6.3 |
+| `UserRole` `[Flags]` | `None=0`, `Customer=1`, `Manager=2`, `Staff=4`, `Admin=8`, `GardenOwner=16` | `int` (bit-mask) | 1 user có nhiều role: `Manager &#124; Staff = 6`. `GardenOwner` = người bán (sở hữu store). Chi tiết ở mục 6.3 |
 
 ##### Workspace (`Domain/Enums/Workspace/`)
 
@@ -239,16 +239,21 @@ POST /api/auth/register/finalize   { registrationToken, password, fullName, phon
 public enum UserRole
 {
     None     = 0,
-    Customer = 1 << 0,  // 1
-    Manager  = 1 << 1,  // 2
-    Staff    = 1 << 2,  // 4
-    Admin    = 1 << 3,  // 8
+    Customer    = 1 << 0,  // 1
+    Manager     = 1 << 1,  // 2
+    Staff       = 1 << 2,  // 4
+    Admin       = 1 << 3,  // 8
+    GardenOwner = 1 << 4,  // 16 — người bán: sở hữu store, được up sản phẩm
 }
 ```
 
 1 user có nhiều role: `Manager | Staff = 6`. JWT có 1 `role` claim per flag → `RequireRole("Staff", "Admin")` hoạt động đúng.
 
-Thứ tự quyền (thấp → cao): **Customer < Manager < Staff < Admin**. Policy `...OrAbove` gồm role đó + mọi role cao hơn.
+Thứ tự quyền platform (thấp → cao): **Customer < Manager < Staff < Admin**. Policy `...OrAbove` gồm role đó + mọi role cao hơn.
+
+**`GardenOwner` là role năng lực (capability), nằm NGOÀI thứ tự trên** — không "cao/thấp" hơn Customer mà song song. Một user thường là `Customer | GardenOwner`. Flag này được **cấp tự động (self-service)** khi user tạo store đầu tiên (xem `Documents/FIX_GARDEN_OWNER_FLOW.md`); quyền thao tác trên một store cụ thể vẫn check theo sở hữu ở service layer (`garden_store_owners`).
+
+> **Lưu ý — KHÔNG có role cho garden staff.** "Nhân viên store" chỉ là quan hệ dữ liệu trong `garden_staff_assignments` (nguồn sự thật duy nhất), không phải một flag `UserRole`. Đừng nhầm với `UserRole.Staff` = nhân viên *sàn/platform*.
 
 ### 6.4 Authorization policies
 
@@ -260,6 +265,7 @@ Define trong `WebAPI/Authorization/AuthorizationPolicies.cs`:
 | `StaffOrAbove` | Staff, Admin |
 | `ManagerOrAbove` | Manager, Staff, Admin |
 | `CustomerOnly` | Customer |
+| `GardenOwnerOrAbove` | GardenOwner, Admin |
 
 ---
 

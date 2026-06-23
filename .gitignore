@@ -1,8 +1,9 @@
 # =====================
 # Secrets — NEVER commit
 # =====================
-# appsettings.json gốc ĐÃ làm sạch (secret để rỗng) → cho phép commit làm base config cho Railway.
-# Mọi secret thật nằm trong .env (local) / Railway Variables, override env var lúc runtime.
+# Một appsettings.json DUY NHẤT chứa secret thật → KHÔNG commit (kể cả base lẫn các môi trường).
+# Khi deploy Railway: nạp lại toàn bộ config qua Railway Variables (env var override lúc runtime).
+**/appsettings.json
 **/appsettings.*.json
 **/secrets.json
 .env

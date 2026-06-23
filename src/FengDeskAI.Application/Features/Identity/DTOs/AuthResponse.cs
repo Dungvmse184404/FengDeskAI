@@ -24,4 +24,26 @@ public class UserSummary
 
     /// <summary>0=Unspecified, 1=Male, 2=Female, 3=Other (cần cho Kua/hướng).</summary>
     public Gender Gender { get; set; }
+
+    /// <summary>
+    /// Phong thủy ĐÃ TÍNH SẴN từ ngày sinh + giới tính (mệnh/cung/hướng). Null nếu chưa có ngày sinh.
+    /// AI đọc thẳng các giá trị này, KHÔNG tự tính. Đây là giá trị phái sinh, không lưu DB.
+    /// </summary>
+    public UserFengShuiInfo? FengShui { get; set; }
+}
+
+/// <summary>Hồ sơ phong thủy cá nhân hiển thị cho client/AI (enum đưa dưới dạng chuỗi cho dễ đọc).</summary>
+public class UserFengShuiInfo
+{
+    /// <summary>Mệnh Nạp Âm: Kim/Moc/Thuy/Hoa/Tho.</summary>
+    public string Element { get; set; } = null!;
+
+    /// <summary>Số Kua (1..9, không có 5). Null nếu giới tính không Nam/Nữ.</summary>
+    public int? KuaNumber { get; set; }
+
+    /// <summary>Nhóm trạch: "East" (Đông tứ trạch) hoặc "West" (Tây tứ trạch). Null nếu không tính được.</summary>
+    public string? KuaGroup { get; set; }
+
+    /// <summary>Các hướng tốt (Bắc/Đông Nam/...). Rỗng nếu chưa đủ dữ kiện tính Kua.</summary>
+    public IReadOnlyList<string> FavorableDirections { get; set; } = Array.Empty<string>();
 }
