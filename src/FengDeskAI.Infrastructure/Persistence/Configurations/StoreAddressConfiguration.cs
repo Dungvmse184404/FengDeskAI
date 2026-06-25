@@ -20,6 +20,8 @@ public class StoreAddressConfiguration : IEntityTypeConfiguration<StoreAddress>
         builder.Property(a => a.Latitude).HasColumnName("latitude").HasPrecision(10, 8);
         builder.Property(a => a.Longitude).HasColumnName("longitude").HasPrecision(11, 8);
         builder.Property(a => a.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        builder.Property(a => a.SenderName).HasColumnName("sender_name").HasMaxLength(100);
+        builder.Property(a => a.SenderPhone).HasColumnName("sender_phone").HasMaxLength(20);
 
         builder.Property(a => a.CreatedAt).HasColumnName("created_at");
         builder.Property(a => a.UpdatedAt).HasColumnName("updated_at");

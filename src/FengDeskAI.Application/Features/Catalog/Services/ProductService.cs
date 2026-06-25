@@ -29,7 +29,6 @@ public class ProductService : IProductService
         {
             StoreId = query.StoreId,
             CategoryId = query.CategoryId,
-            TagId = query.TagId,
             Search = query.Search,
             ActiveOnly = true,
             Skip = query.Skip,
@@ -55,9 +54,16 @@ public class ProductService : IProductService
             return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.NameRequired);
         if (!await CanManageStoreAsync(request.GardenStoreId, userId, isAdmin, ct))
             return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.CreateForbidden);
-        var linkError = await ValidateLinksAsync(request.CategoryIds, request.TagIds, ct);
-        if (linkError is not null)
-            return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, linkError);
+        if (!await _uow.Categories.AllExistAsync(request.CategoryIds, ct))
+            return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.CategoriesNotExist);
+        // Nếu khai báo phong thủy ngay khi tạo: kiểm style/vibe code có trong bảng tra cứu (element là enum nên luôn hợp lệ).
+        if (request.PrimaryElement is not null)
+        {
+            if (!await AllCodesExistAsync(_uow.Styles, request.Styles, ct))
+                return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.StylesNotExist);
+            if (!await AllCodesExistAsync(_uow.Vibes, request.Vibes, ct))
+                return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.VibesNotExist);
+        }
 
         var product = new Product
         {
@@ -67,13 +73,12 @@ public class ProductService : IProductService
             IsActive = true,
         };
         foreach (var i in request.Items)
-            product.Items.Add(new ProductItem { Name = i.Name, Price = i.Price, Stock = i.Stock, Sku = i.Sku });
+            product.Items.Add(new ProductItem { Name = i.Name, Price = i.Price, Stock = i.Stock, Sku = i.Sku, WeightGram = i.WeightGram, LengthCm = i.LengthCm, WidthCm = i.WidthCm, HeightCm = i.HeightCm });
         foreach (var img in request.Images)
             product.Images.Add(new ProductImage { Url = img.Url, SortOrder = img.SortOrder });
         foreach (var cid in request.CategoryIds.Distinct())
             product.ProductCategories.Add(new ProductCategory { CategoryId = cid });
-        foreach (var tid in request.TagIds.Distinct())
-            product.ProductTags.Add(new ProductTag { TagId = tid });
+        ApplyFengShui(product, request);
 
         await _uow.Products.AddAsync(product, ct);
         await _uow.SaveChangesAsync(ct);
@@ -121,7 +126,7 @@ public class ProductService : IProductService
         if (request.Price < 0)
             return ServiceResult<ProductItemResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.PriceInvalid);
 
-        var item = new ProductItem { ProductId = productId, Name = request.Name, Price = request.Price, Stock = request.Stock, Sku = request.Sku };
+        var item = new ProductItem { ProductId = productId, Name = request.Name, Price = request.Price, Stock = request.Stock, Sku = request.Sku, WeightGram = request.WeightGram, LengthCm = request.LengthCm, WidthCm = request.WidthCm, HeightCm = request.HeightCm };
         await _uow.Products.AddItemAsync(item, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult<ProductItemResponse>.Success(_mapper.Map<ProductItemResponse>(item), ApiStatusMessages.Product.ItemCreated, ApiStatusCodes.Created);
@@ -140,6 +145,10 @@ public class ProductService : IProductService
         item.Price = request.Price;
         item.Stock = request.Stock;
         item.Sku = request.Sku;
+        item.WeightGram = request.WeightGram;
+        item.LengthCm = request.LengthCm;
+        item.WidthCm = request.WidthCm;
+        item.HeightCm = request.HeightCm;
         // item được track bởi DbContext (GetItemAsync không AsNoTracking) → SaveChanges tự persist
         await _uow.SaveChangesAsync(ct);
         return ServiceResult<ProductItemResponse>.Success(_mapper.Map<ProductItemResponse>(item), ApiStatusMessages.Product.ItemUpdated);
@@ -221,19 +230,6 @@ public class ProductService : IProductService
         return ServiceResult<ProductDetailResponse>.Success(_mapper.Map<ProductDetailResponse>(detail), ApiStatusMessages.Product.CategoriesUpdated);
     }
 
-    public async Task<IServiceResult<ProductDetailResponse>> SetTagsAsync(Guid productId, Guid userId, bool isAdmin, SetTagsRequest request, CancellationToken ct = default)
-    {
-        var guard = await GuardProductAsync<ProductDetailResponse>(productId, userId, isAdmin, ct);
-        if (guard.Error is not null) return guard.Error;
-        if (!await _uow.Tags.AllExistAsync(request.TagIds, ct))
-            return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.TagsNotExist);
-
-        await _uow.Products.ReplaceTagsAsync(productId, request.TagIds, ct);
-        await _uow.SaveChangesAsync(ct);
-        var detail = await _uow.Products.GetDetailAsync(productId, ct);
-        return ServiceResult<ProductDetailResponse>.Success(_mapper.Map<ProductDetailResponse>(detail), ApiStatusMessages.Product.TagsUpdated);
-    }
-
     public async Task<IServiceResult<ProductFengShuiResponse>> SetFengShuiAsync(Guid productId, Guid userId, bool isAdmin, SetProductFengShuiRequest request, CancellationToken ct = default)
     {
         var guard = await GuardProductAsync<ProductFengShuiResponse>(productId, userId, isAdmin, ct);
@@ -278,11 +274,19 @@ public class ProductService : IProductService
     private async Task<bool> CanManageStoreAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
         => isAdmin || await _uow.Stores.CanManageAsync(storeId, userId, ct);
 
-    private async Task<string?> ValidateLinksAsync(IEnumerable<Guid> categoryIds, IEnumerable<Guid> tagIds, CancellationToken ct)
+    /// <summary>Gắn thuộc tính phong thủy lên product mới (in-memory) nếu request có khai báo PrimaryElement.</summary>
+    private static void ApplyFengShui(Product product, CreateProductRequest request)
     {
-        if (!await _uow.Categories.AllExistAsync(categoryIds, ct)) return ApiStatusMessages.Product.CategoriesNotExist;
-        if (!await _uow.Tags.AllExistAsync(tagIds, ct)) return ApiStatusMessages.Product.TagsNotExist;
-        return null;
+        if (request.PrimaryElement is not { } primary) return;
+
+        product.SizeClass = request.SizeClass;
+        product.Elements.Add(new ProductElement { Element = primary, IsPrimary = true });
+        foreach (var el in request.SecondaryElements.Distinct().Where(e => e != primary))
+            product.Elements.Add(new ProductElement { Element = el, IsPrimary = false });
+        foreach (var code in request.Vibes.Distinct())
+            product.Vibes.Add(new ProductVibe { VibeCode = code });
+        foreach (var code in request.Styles.Distinct())
+            product.Styles.Add(new ProductStyle { StyleCode = code });
     }
 
     /// <summary>Load product + check quyền quản lý. Trả về Error đã set nếu fail.</summary>

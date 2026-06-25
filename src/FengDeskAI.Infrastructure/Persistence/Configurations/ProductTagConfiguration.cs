@@ -21,6 +21,12 @@ public class ProductTagConfiguration : IEntityTypeConfiguration<ProductTag>
             .WithMany()
             .HasForeignKey(pt => pt.TagId)
             .OnDelete(DeleteBehavior.Cascade);
-        // Quan hệ tới Product cấu hình ở ProductConfiguration.
+
+        // Tags đã ngừng dùng ở luồng product (bảng ma): Product không còn nav ProductTags,
+        // quan hệ tới Product khai báo phía junction để giữ nguyên FK/bảng product_tags.
+        builder.HasOne(pt => pt.Product)
+            .WithMany()
+            .HasForeignKey(pt => pt.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

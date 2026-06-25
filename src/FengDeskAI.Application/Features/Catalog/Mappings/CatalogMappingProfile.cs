@@ -17,9 +17,8 @@ public class CatalogMappingProfile : Profile
             .ForMember(d => d.Parent, o => o.Ignore())
             .ForMember(d => d.Children, o => o.Ignore());
 
-        // Tag
+        // Tag (CRUD độc lập — đã ngừng dùng ở luồng product)
         CreateMap<Tag, TagResponse>();
-        CreateMap<Tag, TagRefResponse>();
         CreateMap<CreateTagRequest, Tag>().ForMember(d => d.Id, o => o.Ignore());
 
         // Product items & images
@@ -42,7 +41,13 @@ public class CatalogMappingProfile : Profile
         CreateMap<Product, ProductDetailResponse>()
             .ForMember(d => d.StoreName, o => o.MapFrom(s => s.Store != null ? s.Store.Name : null))
             .ForMember(d => d.Categories, o => o.MapFrom(s => s.ProductCategories.Select(pc => pc.Category)))
-            .ForMember(d => d.Tags, o => o.MapFrom(s => s.ProductTags.Select(pt => pt.Tag)));
+            .ForMember(d => d.PrimaryElement, o => o.MapFrom(s =>
+                s.Elements.Where(e => e.IsPrimary).Select(e => e.Element.ToString()).FirstOrDefault()))
+            .ForMember(d => d.SecondaryElements, o => o.MapFrom(s =>
+                s.Elements.Where(e => !e.IsPrimary).Select(e => e.Element.ToString()).ToList()))
+            .ForMember(d => d.SizeClass, o => o.MapFrom(s => s.SizeClass != null ? s.SizeClass.ToString() : null))
+            .ForMember(d => d.Vibes, o => o.MapFrom(s => s.Vibes.Select(v => v.VibeCode).ToList()))
+            .ForMember(d => d.Styles, o => o.MapFrom(s => s.Styles.Select(st => st.StyleCode).ToList()));
 
         // Product list card
         CreateMap<Product, ProductListItemResponse>()

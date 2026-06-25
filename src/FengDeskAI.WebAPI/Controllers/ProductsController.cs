@@ -100,15 +100,11 @@ public class ProductsController : ApiControllerBase
     public async Task<IActionResult> DeleteModel3D(Guid id, CancellationToken ct)
         => ToActionResult(await _model3DService.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
 
-    // ----- Category / Tag links -----
+    // ----- Category links -----
 
     [HttpPut("{id:guid}/categories")]
     public async Task<IActionResult> SetCategories(Guid id, [FromBody] SetCategoriesRequest request, CancellationToken ct)
         => ToActionResult(await _service.SetCategoriesAsync(id, CurrentUserId, IsAdmin, request, ct));
-
-    [HttpPut("{id:guid}/tags")]
-    public async Task<IActionResult> SetTags(Guid id, [FromBody] SetTagsRequest request, CancellationToken ct)
-        => ToActionResult(await _service.SetTagsAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     // ----- Thuộc tính phong thủy (ứng viên gợi ý) -----
 

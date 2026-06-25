@@ -6,7 +6,8 @@ namespace FengDeskAI.Domain.Entities.Catalog;
 
 /// <summary>
 /// Sản phẩm (mặt hàng cha) thuộc một garden store. Giá + tồn kho nằm ở các
-/// <see cref="ProductItem"/> (biến thể/SKU). Thuộc tính phong thủy đánh dấu qua tags.
+/// <see cref="ProductItem"/> (biến thể/SKU). Thuộc tính phong thủy khai báo qua
+/// <see cref="Elements"/>/<see cref="Vibes"/>/<see cref="Styles"/> (tags đã ngừng dùng).
 /// </summary>
 public class Product : BaseEntity
 {
@@ -19,7 +20,6 @@ public class Product : BaseEntity
     public ICollection<ProductItem> Items { get; set; } = new List<ProductItem>();
     public ICollection<ProductImage> Images { get; set; } = new List<ProductImage>();
     public ICollection<ProductCategory> ProductCategories { get; set; } = new List<ProductCategory>();
-    public ICollection<ProductTag> ProductTags { get; set; } = new List<ProductTag>();
 
     /// <summary>Phân loại kích thước (so với diện tích mặt bàn khi chấm điểm). Null nếu chưa khai báo phong thủy.</summary>
     public SizeClass? SizeClass { get; set; }

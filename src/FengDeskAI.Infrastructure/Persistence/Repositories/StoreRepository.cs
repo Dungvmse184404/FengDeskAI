@@ -28,6 +28,14 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
         => _context.Set<GardenStoreOwner>()
             .AnyAsync(o => o.GardenStoreId == storeId && o.OwnerUserId == userId, ct);
 
+    public Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default)
+        => _set.AsNoTracking()
+            .Where(s => s.Owners.Any(o => o.OwnerUserId == ownerUserId))
+            .Include(s => s.Address).ThenInclude(a => a!.Ward)
+            .Include(s => s.Owners)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+
     public Task<List<GardenStoreOwner>> GetOwnersAsync(Guid storeId, CancellationToken ct = default)
         => _context.Set<GardenStoreOwner>().AsNoTracking()
             .Where(o => o.GardenStoreId == storeId)

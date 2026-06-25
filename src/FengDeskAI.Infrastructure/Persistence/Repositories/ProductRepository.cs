@@ -17,7 +17,6 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Items)
             .Include(p => p.Images)
             .Include(p => p.ProductCategories).ThenInclude(pc => pc.Category)
-            .Include(p => p.ProductTags).ThenInclude(pt => pt.Tag)
             .Include(p => p.Elements)
             .Include(p => p.Vibes)
             .Include(p => p.Styles)
@@ -29,7 +28,6 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Items)
             .Include(p => p.Images)
             .Include(p => p.ProductCategories)
-            .Include(p => p.ProductTags)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public async Task<(List<Product> Items, int Total)> SearchAsync(ProductSearchFilter filter, CancellationToken ct = default)
@@ -40,8 +38,6 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         if (filter.StoreId is { } storeId) query = query.Where(p => p.GardenStoreId == storeId);
         if (filter.CategoryId is { } categoryId)
             query = query.Where(p => p.ProductCategories.Any(pc => pc.CategoryId == categoryId));
-        if (filter.TagId is { } tagId)
-            query = query.Where(p => p.ProductTags.Any(pt => pt.TagId == tagId));
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             // Tách query thành từng từ — MỖI từ phải khớp (AND) ở Name HOẶC Description.
@@ -123,15 +119,6 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         set.RemoveRange(existing);
         foreach (var cid in categoryIds.Distinct())
             await set.AddAsync(new ProductCategory { ProductId = productId, CategoryId = cid }, ct);
-    }
-
-    public async Task ReplaceTagsAsync(Guid productId, IEnumerable<Guid> tagIds, CancellationToken ct = default)
-    {
-        var set = _context.Set<ProductTag>();
-        var existing = await set.Where(pt => pt.ProductId == productId).ToListAsync(ct);
-        set.RemoveRange(existing);
-        foreach (var tid in tagIds.Distinct())
-            await set.AddAsync(new ProductTag { ProductId = productId, TagId = tid }, ct);
     }
 
     public async Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, SizeClass size, CancellationToken ct = default)

@@ -1,4 +1,6 @@
 using FengDeskAI.Application.Common.Models;
+using FengDeskAI.Domain.Enums.Catalog;
+using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.Catalog.DTOs;
 
@@ -9,6 +11,10 @@ public class ProductItemResponse
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+    public int WeightGram { get; set; }
+    public int LengthCm { get; set; }
+    public int WidthCm { get; set; }
+    public int HeightCm { get; set; }
 }
 
 public class ProductImageResponse
@@ -49,12 +55,6 @@ public class CategoryRefResponse
     public string Name { get; set; } = null!;
 }
 
-public class TagRefResponse
-{
-    public Guid Id { get; set; }
-    public string Name { get; set; } = null!;
-}
-
 /// <summary>Card sản phẩm trong danh sách (rút gọn). Kèm biến thể (giá + tồn kho) để FE/AI khỏi gọi chi tiết.</summary>
 public class ProductListItemResponse
 {
@@ -80,7 +80,15 @@ public class ProductDetailResponse
     public List<ProductItemResponse> Items { get; set; } = new();
     public List<ProductImageResponse> Images { get; set; } = new();
     public List<CategoryRefResponse> Categories { get; set; } = new();
-    public List<TagRefResponse> Tags { get; set; } = new();
+
+    // ===== Thuộc tính phong thủy (thay cho tags) =====
+    /// <summary>Hành chính (Kim/Moc/Thuy/Hoa/Tho). Null nếu chưa khai báo phong thủy.</summary>
+    public string? PrimaryElement { get; set; }
+    public List<string> SecondaryElements { get; set; } = new();
+    /// <summary>Small/Medium/Large. Null nếu chưa khai báo.</summary>
+    public string? SizeClass { get; set; }
+    public List<string> Vibes { get; set; } = new();
+    public List<string> Styles { get; set; } = new();
 
     /// <summary>Model 3D (nếu đã sinh). Null nếu sản phẩm chưa có.</summary>
     public ProductModel3DResponse? Model3D { get; set; }
@@ -94,6 +102,12 @@ public class CreateProductItemRequest
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+    /// <summary>Cân nặng (gram). Bỏ trống → 500g.</summary>
+    public int WeightGram { get; set; } = 500;
+    /// <summary>Kích thước kiện (cm) cho GHN. Bỏ trống → 10cm.</summary>
+    public int LengthCm { get; set; } = 10;
+    public int WidthCm { get; set; } = 10;
+    public int HeightCm { get; set; } = 10;
 }
 
 public class UpdateProductItemRequest
@@ -102,6 +116,10 @@ public class UpdateProductItemRequest
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+    public int WeightGram { get; set; } = 500;
+    public int LengthCm { get; set; } = 10;
+    public int WidthCm { get; set; } = 10;
+    public int HeightCm { get; set; } = 10;
 }
 
 public class CreateProductImageRequest
@@ -118,7 +136,19 @@ public class CreateProductRequest
     public List<CreateProductItemRequest> Items { get; set; } = new();
     public List<CreateProductImageRequest> Images { get; set; } = new();
     public List<Guid> CategoryIds { get; set; } = new();
-    public List<Guid> TagIds { get; set; } = new();
+
+    // ===== Thuộc tính phong thủy (tùy chọn) — khai báo luôn khi tạo để thành ứng viên gợi ý.
+    // Bỏ trống PrimaryElement → tạo sản phẩm chưa có phong thủy (set sau qua endpoint /feng-shui). =====
+
+    /// <summary>Hành chính (IsPrimary). Null → không gắn phong thủy khi tạo.</summary>
+    public FengShuiElement? PrimaryElement { get; set; }
+    /// <summary>Các hành phụ (0..n). Trùng hành chính sẽ bị bỏ qua.</summary>
+    public List<FengShuiElement> SecondaryElements { get; set; } = new();
+    public SizeClass? SizeClass { get; set; }
+    /// <summary>Mã vibe (vibes.code), vd "Focus".</summary>
+    public List<string> Vibes { get; set; } = new();
+    /// <summary>Mã phong cách (styles.code), vd "Minimal".</summary>
+    public List<string> Styles { get; set; } = new();
 }
 
 public class UpdateProductRequest
@@ -133,16 +163,10 @@ public class SetCategoriesRequest
     public List<Guid> CategoryIds { get; set; } = new();
 }
 
-public class SetTagsRequest
-{
-    public List<Guid> TagIds { get; set; } = new();
-}
-
 /// <summary>Query params bind từ URL cho danh sách sản phẩm.</summary>
 public class ProductQueryParams : PageRequest
 {
     public Guid? StoreId { get; set; }
     public Guid? CategoryId { get; set; }
-    public Guid? TagId { get; set; }
     public string? Search { get; set; }
 }

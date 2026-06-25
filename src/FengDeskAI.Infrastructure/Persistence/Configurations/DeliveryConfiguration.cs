@@ -20,6 +20,7 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.Property(d => d.TrackingCode).HasColumnName("tracking_code").HasMaxLength(100);
         builder.Property(d => d.ProviderOrderId).HasColumnName("provider_order_id").HasMaxLength(100);
         builder.Property(d => d.ShippingProvider).HasColumnName("shipping_provider").HasMaxLength(50);
+        builder.Property(d => d.TrackingUrl).HasColumnName("tracking_url").HasMaxLength(500);
         builder.Property(d => d.ShippingFee).HasColumnName("shipping_fee").HasPrecision(12, 2);
         builder.Property(d => d.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2);
         builder.Property(d => d.AssignedAt).HasColumnName("assigned_at");
