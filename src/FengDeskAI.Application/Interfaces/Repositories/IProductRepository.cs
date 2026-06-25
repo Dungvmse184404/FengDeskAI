@@ -8,7 +8,6 @@ public class ProductSearchFilter
 {
     public Guid? StoreId { get; set; }
     public Guid? CategoryId { get; set; }
-    public Guid? TagId { get; set; }
     public string? Search { get; set; }
     public bool ActiveOnly { get; set; } = true;
     public int Skip { get; set; }
@@ -17,7 +16,7 @@ public class ProductSearchFilter
 
 public interface IProductRepository : IGenericRepository<Product>
 {
-    /// <summary>Product kèm Items/Images/Categories/Tags/Store — dùng cho trang chi tiết.</summary>
+    /// <summary>Product kèm Items/Images/Categories/Elements/Vibes/Styles/Store — dùng cho trang chi tiết.</summary>
     Task<Product?> GetDetailAsync(Guid id, CancellationToken ct = default);
 
     /// <summary>Load product (tracked) kèm child collections để cập nhật quan hệ.</summary>
@@ -50,9 +49,8 @@ public interface IProductRepository : IGenericRepository<Product>
     /// <summary>Các model đang Processing — worker nền poll Meshy để hoàn tất. Tracked để cập nhật.</summary>
     Task<List<ProductModel3D>> GetProcessingModel3DsAsync(CancellationToken ct = default);
 
-    // Thay thế toàn bộ liên kết category/tag của product
+    // Thay thế toàn bộ liên kết category của product
     Task ReplaceCategoriesAsync(Guid productId, IEnumerable<Guid> categoryIds, CancellationToken ct = default);
-    Task ReplaceTagsAsync(Guid productId, IEnumerable<Guid> tagIds, CancellationToken ct = default);
 
     // Thuộc tính phong thủy (ứng viên gợi ý): set hành chính + các hành phụ (product_element) + size_class (trên products).
     Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, SizeClass size, CancellationToken ct = default);

@@ -15,6 +15,9 @@ public class GardenStore : BaseEntity
     public string? OpeningHours { get; set; }
     public bool IsActive { get; set; } = true;
 
+    /// <summary>Dịch vụ AhaMove mặc định cho điểm lấy hàng của store (vd "SGN-BIKE" — tiền tố mã thành phố). Null nếu chưa cấu hình.</summary>
+    public string? AhamoveServiceId { get; set; }
+
     public StoreAddress? Address { get; set; }
     public ICollection<GardenStoreOwner> Owners { get; set; } = new List<GardenStoreOwner>();
     public ICollection<GardenStaffAssignment> StaffAssignments { get; set; } = new List<GardenStaffAssignment>();

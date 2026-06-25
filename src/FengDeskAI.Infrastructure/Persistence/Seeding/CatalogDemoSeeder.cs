@@ -94,25 +94,25 @@ public class CatalogDemoSeeder : IDataSeeder
         var products = new List<Product>
         {
             BuildProduct(store.Id, "Cây Kim Tiền để bàn", "Cây phong thủy hút tài lộc, hợp mệnh Mộc.",
-                categories["Cây để bàn"], new[] { tags["Mộc"], tags["Hút tài lộc"] },
+                categories["Cây để bàn"],
                 ("Chậu sứ trắng", 250_000m, 30, "KT-WHITE"),
                 ("Chậu sứ xanh", 280_000m, 20, "KT-BLUE")),
 
             BuildProduct(store.Id, "Cây Lưỡi Hổ mini", "Thanh lọc không khí, giảm căng thẳng.",
-                categories["Cây để bàn"], new[] { tags["Mộc"], tags["Giảm căng thẳng"] },
+                categories["Cây để bàn"],
                 ("Size nhỏ", 150_000m, 50, "LH-S")),
 
             BuildProduct(store.Id, "Cầu thạch anh tím", "Đá phong thủy ổn định năng lượng.",
-                categories["Đá phong thủy"], new[] { tags["Thổ"], tags["Giảm căng thẳng"] },
+                categories["Đá phong thủy"],
                 ("Đường kính 6cm", 450_000m, 15, "TA-6"),
                 ("Đường kính 8cm", 650_000m, 10, "TA-8")),
 
             BuildProduct(store.Id, "Tượng Tỳ Hưu đồng", "Linh vật chiêu tài, hợp mệnh Kim.",
-                categories["Tượng phong thủy"], new[] { tags["Kim"], tags["Hút tài lộc"] },
+                categories["Tượng phong thủy"],
                 ("Cao 10cm", 890_000m, 8, "TH-10")),
 
             BuildProduct(store.Id, "Đèn muối Himalaya", "Ánh sáng ấm, thư giãn, hợp mệnh Hỏa.",
-                categories["Đèn trang trí"], new[] { tags["Hỏa"], tags["Giảm căng thẳng"] },
+                categories["Đèn trang trí"],
                 ("Loại 2-3kg", 320_000m, 25, "DM-23")),
         };
         await _context.Set<Product>().AddRangeAsync(products, ct);
@@ -144,7 +144,7 @@ public class CatalogDemoSeeder : IDataSeeder
 
     private static Product BuildProduct(
         Guid storeId, string name, string description,
-        Category category, Tag[] tagList,
+        Category category,
         params (string? Name, decimal Price, int Stock, string Sku)[] items)
     {
         var product = new Product
@@ -162,8 +162,6 @@ public class CatalogDemoSeeder : IDataSeeder
             product.Items.Add(new ProductItem { Name = itemName, Price = price, Stock = stock, Sku = sku });
 
         product.ProductCategories.Add(new ProductCategory { CategoryId = category.Id });
-        foreach (var tag in tagList)
-            product.ProductTags.Add(new ProductTag { TagId = tag.Id });
 
         return product;
     }

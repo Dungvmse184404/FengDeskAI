@@ -17,6 +17,10 @@ public class ProductItemConfiguration : IEntityTypeConfiguration<ProductItem>
         builder.Property(i => i.Price).HasColumnName("price").HasPrecision(12, 2).IsRequired();
         builder.Property(i => i.Stock).HasColumnName("stock").HasDefaultValue(0).IsRequired();
         builder.Property(i => i.Sku).HasColumnName("sku").HasMaxLength(20);
+        builder.Property(i => i.WeightGram).HasColumnName("weight_gram").HasDefaultValue(500).IsRequired();
+        builder.Property(i => i.LengthCm).HasColumnName("length_cm").HasDefaultValue(10).IsRequired();
+        builder.Property(i => i.WidthCm).HasColumnName("width_cm").HasDefaultValue(10).IsRequired();
+        builder.Property(i => i.HeightCm).HasColumnName("height_cm").HasDefaultValue(10).IsRequired();
 
         builder.Property(i => i.CreatedAt).HasColumnName("created_at");
         builder.Property(i => i.UpdatedAt).HasColumnName("updated_at");

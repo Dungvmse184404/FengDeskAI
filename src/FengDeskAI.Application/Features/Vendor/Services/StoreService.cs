@@ -264,6 +264,10 @@ public class StoreService : IStoreService
         return ServiceResult.Success(ApiStatusMessages.Staff.Unassigned);
     }
 
+    public async Task<IServiceResult<List<StoreResponse>>> GetMineAsync(Guid userId, CancellationToken ct = default)
+        => ServiceResult<List<StoreResponse>>.Success(
+            _mapper.Map<List<StoreResponse>>(await _uow.Stores.GetByOwnerAsync(userId, ct)));
+
     // ===== Owner (đồng sở hữu — marketplace) =====
 
     public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default)

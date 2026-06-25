@@ -19,6 +19,8 @@ public class Delivery : BaseEntity
     public string? TrackingCode { get; set; }
     public string? ProviderOrderId { get; set; }
     public string? ShippingProvider { get; set; }
+    /// <summary>Link theo dõi đơn của nhà vận chuyển (vd shared_link của AhaMove).</summary>
+    public string? TrackingUrl { get; set; }
 
     public decimal ShippingFee { get; set; }
     public decimal Subtotal { get; set; }

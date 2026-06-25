@@ -27,6 +27,11 @@ public class StoresController : ApiControllerBase
     public async Task<IActionResult> GetActive(CancellationToken ct)
         => ToActionResult(await _service.GetActiveAsync(ct));
 
+    /// <summary>Các store mà user hiện tại đồng sở hữu (kênh người bán). Yêu cầu đăng nhập.</summary>
+    [HttpGet("mine")]
+    public async Task<IActionResult> GetMine(CancellationToken ct)
+        => ToActionResult(await _service.GetMineAsync(CurrentUserId, ct));
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)

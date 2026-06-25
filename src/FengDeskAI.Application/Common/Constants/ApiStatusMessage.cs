@@ -92,8 +92,6 @@ public static class ApiStatusMessages
         public const string Deleted = "Đã xóa sản phẩm.";
         public const string CategoriesNotExist = "Có danh mục không tồn tại.";
         public const string CategoriesUpdated = "Cập nhật danh mục sản phẩm thành công.";
-        public const string TagsNotExist = "Có tag không tồn tại.";
-        public const string TagsUpdated = "Cập nhật tag sản phẩm thành công.";
 
         public const string PriceInvalid = "Giá không hợp lệ.";
         public const string ItemNotFound = "Không tìm thấy biến thể.";

@@ -24,6 +24,9 @@ public interface IStoreService
     /// <summary>Hard-delete địa chỉ (vật lý). Chỉ Staff/Admin — gate ở controller.</summary>
     Task<IServiceResult> HardDeleteAddressAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Các store user hiện tại đồng sở hữu (kênh người bán).</summary>
+    Task<IServiceResult<List<StoreResponse>>> GetMineAsync(Guid userId, CancellationToken ct = default);
+
     // ===== Owner (đồng sở hữu — marketplace) =====
     Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default);
     /// <summary>Thêm đồng sở hữu (owner hiện tại hoặc Admin). Tự cấp flag GardenOwner cho user được thêm.</summary>

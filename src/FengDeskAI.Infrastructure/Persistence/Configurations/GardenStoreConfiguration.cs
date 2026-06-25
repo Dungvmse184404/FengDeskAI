@@ -18,6 +18,7 @@ public class GardenStoreConfiguration : IEntityTypeConfiguration<GardenStore>
         builder.Property(s => s.Hotline).HasColumnName("hotline").HasMaxLength(20).IsRequired();
         builder.Property(s => s.OpeningHours).HasColumnName("opening_hours").HasMaxLength(100);
         builder.Property(s => s.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        builder.Property(s => s.AhamoveServiceId).HasColumnName("ahamove_service_id").HasMaxLength(50);
 
         builder.Property(s => s.CreatedAt).HasColumnName("created_at");
         builder.Property(s => s.UpdatedAt).HasColumnName("updated_at");
