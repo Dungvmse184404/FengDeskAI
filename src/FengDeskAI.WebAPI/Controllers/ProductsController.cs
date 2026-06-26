@@ -79,6 +79,11 @@ public class ProductsController : ApiControllerBase
             id, CurrentUserId, IsAdmin, stream, file.FileName, file.ContentType, sortOrder, ct));
     }
 
+    /// <summary>Gắn ảnh sản phẩm bằng URL có sẵn (không upload tệp). Lưu link vào sản phẩm.</summary>
+    [HttpPost("{id:guid}/images/link")]
+    public async Task<IActionResult> AddImageByUrl(Guid id, [FromBody] CreateProductImageRequest request, CancellationToken ct)
+        => ToActionResult(await _service.AddImageAsync(id, CurrentUserId, IsAdmin, request, ct));
+
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
     public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
         => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, IsAdmin, ct));

@@ -16,6 +16,7 @@ public class WardConfiguration : IEntityTypeConfiguration<Ward>
 
         builder.Property(w => w.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(w => w.Code).HasColumnName("code").IsRequired();
+        builder.Property(w => w.GhnWardCode).HasColumnName("ghn_ward_code").HasMaxLength(20);
         builder.HasIndex(w => w.Code).IsUnique();
         builder.HasIndex(w => w.DistrictId);
 

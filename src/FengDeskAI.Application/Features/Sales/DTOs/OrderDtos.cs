@@ -27,6 +27,23 @@ public class CheckoutRequest
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.PayOS;
 }
 
+/// <summary>Kết quả xem trước phí ship (FE gọi trước khi đặt hàng) — không tạo đơn.</summary>
+public class ShippingFeePreviewResponse
+{
+    public decimal Subtotal { get; set; }
+    public decimal TotalShippingFee { get; set; }
+    public decimal TotalAmount { get; set; }
+    public List<StoreShippingFeeResponse> Stores { get; set; } = new();
+}
+
+public class StoreShippingFeeResponse
+{
+    public Guid StoreId { get; set; }
+    public string StoreName { get; set; } = string.Empty;
+    public decimal Subtotal { get; set; }
+    public decimal ShippingFee { get; set; }
+}
+
 public class OrderItemResponse
 {
     public Guid Id { get; set; }

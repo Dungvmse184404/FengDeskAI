@@ -17,7 +17,12 @@ public class UserSummary
     public string Email { get; set; } = null!;
     public string FullName { get; set; } = null!;
     public string? Phone { get; set; }
+
+    /// <summary>Chuỗi role gộp (bit-flag ToString), vd "Customer, GardenOwner". Giữ cho tương thích cũ.</summary>
     public string Role { get; set; } = null!;
+
+    /// <summary>Danh sách role tách rời để FE quyết định workspace, vd ["Customer","GardenOwner"].</summary>
+    public List<string> Roles { get; set; } = new();
 
     /// <summary>Ngày sinh (để tính mệnh Nạp Âm theo năm). Null nếu user chưa khai.</summary>
     public DateTime? DateOfBirth { get; set; }

@@ -15,6 +15,7 @@ public class ProvinceConfiguration : IEntityTypeConfiguration<Province>
 
         builder.Property(p => p.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(p => p.Code).HasColumnName("code").IsRequired();
+        builder.Property(p => p.GhnProvinceId).HasColumnName("ghn_province_id");
         builder.HasIndex(p => p.Code).IsUnique();
 
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");

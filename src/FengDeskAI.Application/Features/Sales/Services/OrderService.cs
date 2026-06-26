@@ -3,6 +3,8 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Sales.DTOs;
+using FengDeskAI.Application.Features.Shipping.Services;
+using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Geography;
@@ -21,76 +23,31 @@ public class OrderService : IOrderService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly IOrderCancellationService _cancellation;
+    private readonly IShippingProvider _shipping;
+    private readonly IDeliveryFeeEstimator _feeEstimator;
 
-    public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation)
+    public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation,
+        IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator)
     {
         _uow = uow;
         _mapper = mapper;
         _cancellation = cancellation;
+        _shipping = shipping;
+        _feeEstimator = feeEstimator;
     }
 
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
     {
-        var cart = await _uow.Carts.GetByCustomerAsync(userId, ct);
-
-        // Địa chỉ: có gửi id thì phải hợp lệ (thuộc user); không gửi thì dùng địa chỉ mặc định.
-        UserAddress? address;
-        if (request.ShippingAddressId is { } addressId && addressId != Guid.Empty)
-        {
-            address = await _uow.UserAddresses.GetByIdForUserAsync(addressId, userId, ct);
-            if (address is null)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.ShippingAddressInvalid);
-        }
-        else
-        {
-            address = await _uow.UserAddresses.GetDefaultForUserAsync(userId, ct);
-            if (address is null)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.NoShippingAddress);
-        }
-
-        // Xác định danh sách dòng cần đặt:
-        //  - request.Items (productItemId + quantity): mua ngay, KHÔNG cần có trong giỏ.
-        //  - Items trống: đặt toàn bộ giỏ hàng.
-        List<(ProductItem Pi, int Quantity)> lines;
-
-        if (request.Items is { Count: > 0 })
-        {
-            var qtyById = request.Items
-                .GroupBy(x => x.ProductItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
-            if (qtyById.Values.Any(q => q <= 0))
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.QuantityInvalid);
-
-            var productItems = await _uow.Carts.GetProductItemsAsync(qtyById.Keys, ct);
-            if (productItems.Count != qtyById.Count)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsNotExist);
-
-            lines = productItems.Select(pi => (pi, qtyById[pi.Id])).ToList();
-        }
-        else
-        {
-            if (cart is null || cart.Items.Count == 0)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.CartEmpty);
-
-            lines = cart.Items.Select(ci => (ci.ProductItem, ci.Quantity)).ToList();
-        }
-
-        if (lines.Count == 0)
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.NoProductsSelected);
-
-        if (request.PaymentMethod is not (PaymentMethod.PayOS or PaymentMethod.COD))
-            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.PaymentMethodInvalid);
-
-        // Validate active + tồn kho
-        foreach (var (pi, qty) in lines)
-        {
-            if (pi?.Product is null || !pi.Product.IsActive)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsDiscontinued);
-            if (qty > pi.Stock)
-                return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Order.ProductOutOfStockFormat, pi.Product.Name, pi.Stock));
-        }
+        var resolved = await ResolveCheckoutAsync(userId, request, validatePaymentMethod: true, ct);
+        if (!resolved.IsSuccess) return ServiceResult<OrderDetailResponse>.Failure(resolved.StatusCode, resolved.Message!);
+        var (address, lines, cart) = resolved.Data!;
 
         var orderedProductItemIds = lines.Select(l => l.Pi.Id).ToHashSet();
+
+        // Ước tính phí ship theo từng store (gọi GHN /fee, fallback calculator) để cộng vào tổng
+        // ngay lúc checkout — COD trả đúng tổng, đơn online PayOS thu cả phí ship.
+        var storeFees = await ComputeStoreFeesAsync(lines, address.Id, ct);
+        var feeByStore = storeFees.ToDictionary(s => s.StoreId, s => s.ShippingFee);
 
         var orderId = await _uow.ExecuteInTransactionAsync(async _ =>
         {
@@ -119,10 +76,15 @@ public class OrderService : IOrderService
 
             // Delivery: COD tạo ngay khi đặt; đơn online chỉ tạo khi webhook báo đã thanh toán.
             if (request.PaymentMethod == PaymentMethod.COD)
+            {
                 OrderWorkflow.GroupItemsIntoDeliveries(order);
+                foreach (var delivery in order.Deliveries)
+                    delivery.ShippingFee = feeByStore.GetValueOrDefault(delivery.GardenStoreId);
+            }
 
             order.Subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
-            order.TotalShippingFee = order.Deliveries.Sum(d => d.ShippingFee);
+            // Tổng phí ship lấy từ ước tính theo store (đúng cho cả COD lẫn online — online chưa tạo delivery).
+            order.TotalShippingFee = feeByStore.Values.Sum();
             order.TotalAmount = order.Subtotal + order.TotalShippingFee;
             order.StatusLogs.Add(new OrderStatusLog
             {
@@ -238,6 +200,11 @@ public class OrderService : IOrderService
                 case DeliveryStatus.Delivered: delivery.DeliveredAt = now; break;
             }
 
+            // COD: vận đơn chỉ được tạo khi store xác nhận (đơn online đã tạo lúc thanh toán nên
+            // đã có ProviderOrderId). Tạo ở đây để COD cũng có vận đơn AhaMove + tracking.
+            if (request.Status == DeliveryStatus.Confirmed && string.IsNullOrEmpty(delivery.ProviderOrderId))
+                await CreateShipmentForDeliveryAsync(delivery, now, ct);
+
             // Add tường minh qua repo (Added → INSERT). Add qua navigation vào delivery đã-tracked
             // bị EF đánh Modified (UPDATE 0 rows) vì BaseEntity set sẵn Id — xem ghi chú ở PaymentService.
             await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
@@ -282,6 +249,178 @@ public class OrderService : IOrderService
         }, ct);
 
         return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
+    }
+
+    /// <summary>
+    /// Tính phí ship theo từng store cho các dòng hàng (dùng chung cho checkout + xem trước phí). Gom store
+    /// (điểm lấy) + địa chỉ khách (điểm giao) read-only rồi gọi <see cref="IDeliveryFeeEstimator"/> cho mỗi store.
+    /// </summary>
+    private async Task<List<StoreShippingFee>> ComputeStoreFeesAsync(
+        List<(ProductItem Pi, int Quantity)> lines, Guid shippingAddressId, CancellationToken ct)
+    {
+        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(shippingAddressId, ct);
+        var storeIds = lines.Select(l => l.Pi.Product.GardenStoreId).Distinct().ToList();
+        var stores = (await _uow.Stores.GetWithAddressByIdsAsync(storeIds, ct)).ToDictionary(s => s.Id);
+
+        var result = new List<StoreShippingFee>();
+        foreach (var group in lines.GroupBy(l => l.Pi.Product.GardenStoreId))
+        {
+            var items = group.Select(x => new ShipmentItem(
+                x.Pi.Id.ToString(),
+                x.Pi.Name is null ? x.Pi.Product.Name : $"{x.Pi.Product.Name} - {x.Pi.Name}",
+                x.Pi.Price, x.Quantity,
+                x.Pi.WeightGram, x.Pi.LengthCm, x.Pi.WidthCm, x.Pi.HeightCm)).ToList();
+            var weight = group.Sum(x => x.Pi.WeightGram * x.Quantity);
+            var subtotal = group.Sum(x => x.Pi.Price * x.Quantity);
+            stores.TryGetValue(group.Key, out var store);
+            var fee = await _feeEstimator.EstimateAsync(store, shipTo, subtotal, weight, items, ct);
+            result.Add(new StoreShippingFee(group.Key, store?.Name ?? string.Empty, subtotal, fee));
+        }
+        return result;
+    }
+
+    private sealed record StoreShippingFee(Guid StoreId, string StoreName, decimal Subtotal, decimal ShippingFee);
+
+    private sealed record CheckoutContext(
+        UserAddress Address, List<(ProductItem Pi, int Quantity)> Lines, Cart? Cart);
+
+    /// <summary>
+    /// Phân giải địa chỉ giao + danh sách dòng hàng + validate (tồn kho/active) dùng chung cho checkout và
+    /// xem trước phí ship. <paramref name="validatePaymentMethod"/>=false khi chỉ xem trước (chưa chọn PTTT).
+    /// </summary>
+    private async Task<IServiceResult<CheckoutContext>> ResolveCheckoutAsync(
+        Guid userId, CheckoutRequest request, bool validatePaymentMethod, CancellationToken ct)
+    {
+        var cart = await _uow.Carts.GetByCustomerAsync(userId, ct);
+
+        // Địa chỉ: có gửi id thì phải hợp lệ (thuộc user); không gửi thì dùng địa chỉ mặc định.
+        UserAddress? address;
+        if (request.ShippingAddressId is { } addressId && addressId != Guid.Empty)
+        {
+            address = await _uow.UserAddresses.GetByIdForUserAsync(addressId, userId, ct);
+            if (address is null)
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.ShippingAddressInvalid);
+        }
+        else
+        {
+            address = await _uow.UserAddresses.GetDefaultForUserAsync(userId, ct);
+            if (address is null)
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.NoShippingAddress);
+        }
+
+        // Xác định danh sách dòng cần đặt:
+        //  - request.Items (productItemId + quantity): mua ngay, KHÔNG cần có trong giỏ.
+        //  - Items trống: đặt toàn bộ giỏ hàng.
+        List<(ProductItem Pi, int Quantity)> lines;
+        if (request.Items is { Count: > 0 })
+        {
+            var qtyById = request.Items
+                .GroupBy(x => x.ProductItemId)
+                .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
+            if (qtyById.Values.Any(q => q <= 0))
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.QuantityInvalid);
+
+            var productItems = await _uow.Carts.GetProductItemsAsync(qtyById.Keys, ct);
+            if (productItems.Count != qtyById.Count)
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsNotExist);
+
+            lines = productItems.Select(pi => (pi, qtyById[pi.Id])).ToList();
+        }
+        else
+        {
+            if (cart is null || cart.Items.Count == 0)
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.CartEmpty);
+
+            lines = cart.Items.Select(ci => (ci.ProductItem, ci.Quantity)).ToList();
+        }
+
+        if (lines.Count == 0)
+            return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.NoProductsSelected);
+
+        if (validatePaymentMethod && request.PaymentMethod is not (PaymentMethod.PayOS or PaymentMethod.COD))
+            return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.PaymentMethodInvalid);
+
+        // Validate active + tồn kho
+        foreach (var (pi, qty) in lines)
+        {
+            if (pi?.Product is null || !pi.Product.IsActive)
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsDiscontinued);
+            if (qty > pi.Stock)
+                return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Order.ProductOutOfStockFormat, pi.Product.Name, pi.Stock));
+        }
+
+        return ServiceResult<CheckoutContext>.Success(new CheckoutContext(address, lines, cart));
+    }
+
+    /// <summary>
+    /// Xem trước phí ship (cho FE hiển thị trước khi đặt) — không tạo đơn. Cùng input như checkout
+    /// (địa chỉ + items / giỏ), trả về phí từng store + tổng.
+    /// </summary>
+    public async Task<IServiceResult<ShippingFeePreviewResponse>> PreviewShippingFeeAsync(
+        Guid userId, CheckoutRequest request, CancellationToken ct = default)
+    {
+        var resolved = await ResolveCheckoutAsync(userId, request, validatePaymentMethod: false, ct);
+        if (!resolved.IsSuccess) return ServiceResult<ShippingFeePreviewResponse>.Failure(resolved.StatusCode, resolved.Message!);
+        var (address, lines, _) = resolved.Data!;
+
+        var storeFees = await ComputeStoreFeesAsync(lines, address.Id, ct);
+        var subtotal = storeFees.Sum(s => s.Subtotal);
+        var shipping = storeFees.Sum(s => s.ShippingFee);
+
+        return ServiceResult<ShippingFeePreviewResponse>.Success(new ShippingFeePreviewResponse
+        {
+            Subtotal = subtotal,
+            TotalShippingFee = shipping,
+            TotalAmount = subtotal + shipping,
+            Stores = storeFees.Select(s => new StoreShippingFeeResponse
+            {
+                StoreId = s.StoreId,
+                StoreName = s.StoreName,
+                Subtotal = s.Subtotal,
+                ShippingFee = s.ShippingFee,
+            }).ToList(),
+        });
+    }
+
+    /// <summary>
+    /// Tạo vận đơn cho một delivery (dùng cho COD lúc store xác nhận). Gom store (điểm lấy) + địa chỉ
+    /// khách (điểm giao) + items read-only, gọi provider rồi gắn thông tin vận đơn vào delivery.
+    /// </summary>
+    private async Task CreateShipmentForDeliveryAsync(Delivery delivery, DateTime now, CancellationToken ct)
+    {
+        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { delivery.GardenStoreId }, ct)).FirstOrDefault();
+        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(delivery.Order.ShippingAddressId, ct);
+
+        var items = delivery.Items
+            .Select(i => new ShipmentItem(i.ProductItemId.ToString(), i.ProductName, i.UnitPrice, i.Quantity,
+                i.ProductItem.WeightGram, i.ProductItem.LengthCm, i.ProductItem.WidthCm, i.ProductItem.HeightCm))
+            .ToList();
+        var weightGram = delivery.Items.Sum(i => i.ProductItem.WeightGram * i.Quantity);
+
+        // COD: thu tiền tại điểm giao; nếu đơn đã thu online thì CodAmount = 0.
+        var cod = delivery.Order.PaymentMethod == PaymentMethod.COD
+            ? delivery.Subtotal + delivery.ShippingFee
+            : 0m;
+
+        var request = ShipmentRequestBuilder.Build(
+            delivery.Id, delivery.OrderId, delivery.Subtotal, store, shipTo, cod, weightGram, items);
+        var shipment = await _shipping.CreateShipmentAsync(request, ct);
+
+        delivery.ShippingProvider = shipment.Provider;
+        delivery.ProviderOrderId = shipment.ProviderOrderId;
+        delivery.TrackingCode = shipment.TrackingCode;
+        delivery.TrackingUrl = shipment.TrackingUrl;
+        delivery.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
+
+        await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+        {
+            DeliveryId = delivery.Id,
+            SourceType = DeliverySource.System,
+            FromStatus = DeliveryStatus.Pending.ToString(),
+            ToStatus = DeliveryStatus.Confirmed.ToString(),
+            Note = $"Tạo vận đơn {shipment.Provider} ({shipment.TrackingCode})",
+            LoggedAt = now,
+        }, ct);
     }
 
     private static (NotificationType Type, string Title, string Message) MapDeliveryNotification(DeliveryStatus status)

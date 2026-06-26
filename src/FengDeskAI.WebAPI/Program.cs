@@ -1,8 +1,12 @@
 using FengDeskAI.Application;
+using FengDeskAI.Application.Features.Geography.Services;
 using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Infrastructure;
 using FengDeskAI.Infrastructure.Common;
+using FengDeskAI.Infrastructure.Persistence.Contexts;
 using FengDeskAI.Infrastructure.Persistence.Seeding;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common.Filters;
 using FengDeskAI.WebAPI.Hubs;
@@ -140,6 +144,19 @@ var app = builder.Build();
 if (args.Contains("seed", StringComparer.OrdinalIgnoreCase))
 {
     await app.Services.RunSeedersAsync();
+    return;
+}
+
+// Đồng bộ dữ liệu hành chính VN (open-api.vn) + mã GHN: `dotnet run --project src/FengDeskAI.WebAPI -- sync-geo`
+// → migrate + Bước A (nạp tỉnh/quận/phường) + Bước B (điền mã GHN) rồi thoát. Xem Documents/GHN_INTEGRATION.md §10.
+if (args.Contains("sync-geo", StringComparer.OrdinalIgnoreCase))
+{
+    using var scope = app.Services.CreateScope();
+    var sp = scope.ServiceProvider;
+    await sp.GetRequiredService<AppDbContext>().Database.MigrateAsync();
+    var geo = sp.GetRequiredService<IGeoSyncService>();
+    await geo.ImportGovernmentDataAsync();
+    await geo.SyncGhnCodesAsync();
     return;
 }
 

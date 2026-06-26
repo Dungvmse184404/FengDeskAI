@@ -17,6 +17,12 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
                .Include(s => s.Owners)
                .FirstOrDefaultAsync(s => s.Id == id, ct);
 
+    public Task<List<GardenStore>> GetWithAddressByIdsAsync(IEnumerable<Guid> storeIds, CancellationToken ct = default)
+        => _set.AsNoTracking()
+               .Where(s => storeIds.Contains(s.Id))
+               .Include(s => s.Address).ThenInclude(a => a!.Ward).ThenInclude(w => w.District).ThenInclude(d => d.Province)
+               .ToListAsync(ct);
+
     public async Task<bool> CanManageAsync(Guid storeId, Guid userId, CancellationToken ct = default)
     {
         if (await IsOwnerAsync(storeId, userId, ct)) return true;

@@ -16,6 +16,7 @@ public class DistrictConfiguration : IEntityTypeConfiguration<District>
 
         builder.Property(d => d.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(d => d.Code).HasColumnName("code").IsRequired();
+        builder.Property(d => d.GhnDistrictId).HasColumnName("ghn_district_id");
         builder.HasIndex(d => d.Code).IsUnique();
         builder.HasIndex(d => d.ProvinceId);
 

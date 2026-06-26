@@ -79,22 +79,22 @@
 - `POST` `{ "name":"Thủy", "description":"..." }`
 - `PUT /api/tags/{id}` · `DELETE /api/tags/{id}`
 
-### Products — `api/products`
-| Method | Path | Quyền | Ghi chú |
-|---|---|---|---|
-| GET | `/api/products?storeId=&categoryId=&tagId=&search=&page=&pageSize=` | 🟢 | list card (`minPrice`, ảnh chính, **`items[]` kèm giá+tồn kho mỗi SKU**) + paging |
-| GET | `/api/products/{id}` | 🟢 | detail: items (SKU), images, categories, tags |
-| POST | `/api/products` | 🏪 | tạo product kèm items/images/links (xem body dưới) |
-| PUT | `/api/products/{id}` | 🏪 | `{ "name":"...", "description":"...", "isActive":true }` |
-| DELETE | `/api/products/{id}` | 🏪 | soft-delete |
-| POST | `/api/products/{id}/items` | 🏪 | `{ "name":"Size L", "price":250000, "stock":30, "sku":"KT-L" }` |
-| PUT | `/api/products/{id}/items/{itemId}` | 🏪 | như trên |
-| DELETE | `/api/products/{id}/items/{itemId}` | 🏪 | |
-| POST | `/api/products/{id}/images` | 🏪 | **multipart/form-data**: field `file` (+ `sortOrder`). Lưu Supabase Storage `Product_images/{id}/`, trả URL |
-| DELETE | `/api/products/{id}/images/{imageId}` | 🏪 | xoá bản ghi DB **và** file trên storage |
-| PUT | `/api/products/{id}/categories` | 🏪 | `{ "categoryIds":["...","..."] }` (thay toàn bộ) |
-| PUT | `/api/products/{id}/tags` | 🏪 | `{ "tagIds":["...","..."] }` (thay toàn bộ) |
-| PUT | `/api/products/{id}/feng-shui` | 🏪 | thuộc tính phong thủy (làm ứng viên gợi ý) — xem body dưới |
+### z
+| Method | Path                                                                | Quyền | Ghi chú                                                                                                     |
+| ------ | ------------------------------------------------------------------- | ----- | ----------------------------------------------------------------------------------------------------------- |
+| GET    | `/api/products?storeId=&categoryId=&tagId=&search=&page=&pageSize=` | 🟢    | list card (`minPrice`, ảnh chính, **`items[]` kèm giá+tồn kho mỗi SKU**) + paging                           |
+| GET    | `/api/products/{id}`                                                | 🟢    | detail: items (SKU), images, categories, tags                                                               |
+| POST   | `/api/products`                                                     | 🏪    | tạo product kèm items/images/links (xem body dưới)                                                          |
+| PUT    | `/api/products/{id}`                                                | 🏪    | `{ "name":"...", "description":"...", "isActive":true }`                                                    |
+| DELETE | `/api/products/{id}`                                                | 🏪    | soft-delete                                                                                                 |
+| POST   | `/api/products/{id}/items`                                          | 🏪    | `{ "name":"Size L", "price":250000, "stock":30, "sku":"KT-L" }`                                             |
+| PUT    | `/api/products/{id}/items/{itemId}`                                 | 🏪    | như trên                                                                                                    |
+| DELETE | `/api/products/{id}/items/{itemId}`                                 | 🏪    |                                                                                                             |
+| POST   | `/api/products/{id}/images`                                         | 🏪    | **multipart/form-data**: field `file` (+ `sortOrder`). Lưu Supabase Storage `Product_images/{id}/`, trả URL |
+| DELETE | `/api/products/{id}/images/{imageId}`                               | 🏪    | xoá bản ghi DB **và** file trên storage                                                                     |
+| PUT    | `/api/products/{id}/categories`                                     | 🏪    | `{ "categoryIds":["...","..."] }` (thay toàn bộ)                                                            |
+| PUT    | `/api/products/{id}/tags`                                           | 🏪    | `{ "tagIds":["...","..."] }` (thay toàn bộ)                                                                 |
+| PUT    | `/api/products/{id}/feng-shui`                                      | 🏪    | thuộc tính phong thủy (làm ứng viên gợi ý) — xem body dưới                                                  |
 
 **Body tạo product:**
 ```jsonc
@@ -112,6 +112,47 @@ POST /api/products
 
 > **Lưu ý**: `productItemId` mà cart/order dùng = `items[].id` trong product detail (mỗi SKU mang giá + tồn kho riêng).
 > Ảnh trong body tạo product vẫn nhận URL có sẵn; để **upload tệp** dùng endpoint `POST /api/products/{id}/images` (multipart).
+
+#### Ảnh sản phẩm — chi tiết dùng API image
+
+Nguồn: `ProductsController.UploadImage/DeleteImage` → `ProductService` → `IFileStorage` (Supabase Storage).
+
+**Có 2 cách gắn ảnh vào sản phẩm:**
+
+1. **Upload tệp** — `POST /api/products/{id}/images` (🏪 owner/staff store sở hữu sản phẩm)
+   - Content-Type: **`multipart/form-data`**; field tệp tên **`file`**; field phụ **`sortOrder`** (int, mặc định `0`).
+   - Định dạng cho phép (theo `ImageUpload.AllowedContentTypes` — chỉ loại AI đọc được): **JPEG, PNG, BMP, GIF**.
+   - Lưu tại `Product_images/{productId}/{guid}{ext}` trên Supabase Storage; URL công khai được gắn vào DB.
+   - Trả **`201 Created`** + `ProductImageResponse`:
+
+   ```jsonc
+   { "id": "<guid>", "url": "https://<supabase>/.../Product_images/<productId>/<guid>.jpg", "sortOrder": 0 }
+   ```
+
+   ```bash
+   curl -X POST 'https://<host>/api/products/<id>/images' \
+     -H 'Authorization: Bearer <token>' \
+     -F 'file=@cay-kim-tien.jpg' -F 'sortOrder=0'
+   ```
+
+2. **Dùng URL có sẵn** — chỉ qua **body tạo product** (`images: [{ "url": "...", "sortOrder": 0 }]`).
+   > Service có `AddImageAsync` (gắn ảnh bằng URL lẻ) nhưng **chưa được expose** qua controller — hiện chỉ có upload tệp + thêm-qua-body-create.
+
+**Xoá ảnh** — `DELETE /api/products/{id}/images/{imageId}` (🏪): xoá bản ghi DB **rồi** xoá file trên storage (best-effort, không chặn nghiệp vụ nếu xoá file lỗi).
+
+**Lỗi thường gặp:**
+
+| HTTP | Khi nào |
+|---|---|
+| `400` `ImageFileRequired` | không gửi `file` hoặc file rỗng |
+| `422` `ImageTypeInvalid` | content-type ngoài JPEG/PNG/BMP/GIF |
+| `403` | không phải owner/staff của store sở hữu sản phẩm (guard ở service) |
+| `404` `ImageNotFound` | xoá ảnh không tồn tại |
+
+**Liên quan:**
+- `GET /api/products/{id}` trả `images[]` (mỗi phần tử `{ id, url, sortOrder }`); list card lấy `primaryImageUrl` = ảnh có `sortOrder` nhỏ nhất.
+- Model 3D (`POST /api/products/{id}/model-3d`) sinh từ **một ảnh sản phẩm** — bỏ trống `sourceImageId` thì dùng ảnh primary.
+- Upload ảnh chat (`POST /api/chat/chatbox/{id}/images`) dùng **chung** quy ước `ImageUpload` (cùng danh sách định dạng), chỉ khác thư mục `Chat_images/{chatboxId}/`.
 
 **Body thuộc tính phong thủy** (lưu vào `product_element` nhiều-nhiều + `products.size_class`):
 ```jsonc

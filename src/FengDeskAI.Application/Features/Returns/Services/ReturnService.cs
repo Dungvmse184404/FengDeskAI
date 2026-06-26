@@ -3,6 +3,7 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
+using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Announcement;
@@ -406,27 +407,38 @@ public class ReturnService : IReturnService
         await _uow.SaveChangesAsync(ct);
 
         decimal subtotal = 0m;
+        var totalWeightGram = 0;
         var newItems = new List<OrderItem>();
+        var shipmentItems = new List<ShipmentItem>();
         foreach (var ri in rr.Items.Where(i => i.ExchangeProductItemId.HasValue))
         {
             var ex = exItems[ri.ExchangeProductItemId!.Value];
+            var productName = ex.Name is null ? ex.Product.Name : $"{ex.Product.Name} - {ex.Name}";
             newItems.Add(new OrderItem
             {
                 OrderId = rr.OrderId,
                 ProductItemId = ex.Id,
                 DeliveryId = replacement.Id,
-                ProductName = ex.Name is null ? ex.Product.Name : $"{ex.Product.Name} - {ex.Name}",
+                ProductName = productName,
                 UnitPrice = ex.Price,
                 Quantity = ri.Quantity,
             });
+            shipmentItems.Add(new ShipmentItem(ex.Id.ToString(), productName, ex.Price, ri.Quantity,
+                ex.WeightGram, ex.LengthCm, ex.WidthCm, ex.HeightCm));
+            totalWeightGram += ex.WeightGram * ri.Quantity;
             subtotal += ex.Price * ri.Quantity;
             ex.Stock -= ri.Quantity; // trừ kho biến thể thay thế
         }
         await _uow.Orders.AddOrderItemsAsync(newItems, ct);
         replacement.Subtotal = subtotal;
 
-        var shipment = await _shipping.CreateShipmentAsync(
-            new ShipmentRequest(replacement.Id, rr.OrderId, subtotal, null, null, null), ct);
+        // Gom điểm lấy hàng (store) + điểm giao (khách) để tạo vận đơn hàng đổi (không thu thêm tiền → COD = 0).
+        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { replacement.GardenStoreId }, ct)).FirstOrDefault();
+        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(rr.Order.ShippingAddressId, ct);
+
+        var shipment = await _shipping.CreateShipmentAsync(ShipmentRequestBuilder.Build(
+            replacement.Id, rr.OrderId, subtotal, store, shipTo,
+            codAmount: 0m, totalWeightGram: totalWeightGram, items: shipmentItems), ct);
         replacement.ShippingProvider = shipment.Provider;
         replacement.ProviderOrderId = shipment.ProviderOrderId;
         replacement.TrackingCode = shipment.TrackingCode;
