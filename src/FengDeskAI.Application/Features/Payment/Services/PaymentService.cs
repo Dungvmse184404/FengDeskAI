@@ -2,6 +2,7 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Payment.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
+using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Payment;
@@ -370,15 +371,44 @@ public class PaymentService : IPaymentService
 
     private async Task CreateShipmentsAsync(Order order, DateTime now, CancellationToken ct)
     {
-        foreach (var delivery in order.Deliveries.Where(d => d.Status == DeliveryStatus.Pending))
+        var pending = order.Deliveries.Where(d => d.Status == DeliveryStatus.Pending).ToList();
+        if (pending.Count == 0) return;
+
+        // Gom dữ liệu điểm lấy hàng (store) + điểm giao (khách) read-only để dựng ShipmentRequest.
+        // Provider chỉ nói chuyện HTTP — không truy cập DB (giữ đúng chiều phụ thuộc).
+        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(order.ShippingAddressId, ct);
+        var stores = (await _uow.Stores.GetWithAddressByIdsAsync(
+                pending.Select(d => d.GardenStoreId).Distinct(), ct))
+            .ToDictionary(s => s.Id);
+
+        foreach (var delivery in pending)
         {
-            var shipment = await _shipping.CreateShipmentAsync(
-                new ShipmentRequest(delivery.Id, order.Id, delivery.Subtotal, null, null, null), ct);
+            stores.TryGetValue(delivery.GardenStoreId, out var store);
+
+            var deliveryItems = order.Items.Where(i => i.DeliveryId == delivery.Id).ToList();
+            var items = deliveryItems
+                .Select(i => new ShipmentItem(i.ProductItemId.ToString(), i.ProductName, i.UnitPrice, i.Quantity,
+                    i.ProductItem.WeightGram, i.ProductItem.LengthCm, i.ProductItem.WidthCm, i.ProductItem.HeightCm))
+                .ToList();
+            var weightGram = deliveryItems.Sum(i => i.ProductItem.WeightGram * i.Quantity);
+
+            // COD: thu tiền tại điểm giao; online (PayOS): đã thu nên CodAmount = 0.
+            var cod = order.PaymentMethod == PaymentMethod.COD
+                ? delivery.Subtotal + delivery.ShippingFee
+                : 0m;
+
+            var request = ShipmentRequestBuilder.Build(
+                delivery.Id, order.Id, delivery.Subtotal, store, shipTo, cod, weightGram, items);
+
+            var shipment = await _shipping.CreateShipmentAsync(request, ct);
 
             delivery.ShippingProvider = shipment.Provider;
             delivery.ProviderOrderId = shipment.ProviderOrderId;
             delivery.TrackingCode = shipment.TrackingCode;
+            delivery.TrackingUrl = shipment.TrackingUrl;
             delivery.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
+            // Phí ship thực tế nhà vận chuyển trả về (order.TotalShippingFee đã thu lúc checkout theo ước tính).
+            if (shipment.ShippingFee is { } actualFee) delivery.ShippingFee = actualFee;
             delivery.AssignedAt = now;
             delivery.Status = DeliveryStatus.Confirmed;
 

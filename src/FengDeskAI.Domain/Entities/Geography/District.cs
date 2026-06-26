@@ -9,6 +9,9 @@ public class District : BaseEntity
     public string Name { get; set; } = null!;
     public int Code { get; set; }
 
+    /// <summary>Mã quận/huyện theo GHN (DistrictID). Điền qua đồng bộ master-data GHN. Xem Documents/GHN_INTEGRATION.md §3.1.</summary>
+    public int? GhnDistrictId { get; set; }
+
     public Province Province { get; set; } = null!;
     public ICollection<Ward> Wards { get; set; } = new List<Ward>();
 }

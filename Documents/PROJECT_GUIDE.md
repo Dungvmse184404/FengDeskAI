@@ -130,9 +130,9 @@ Tổng hợp các enum đã có trong codebase. Dùng để:
 
 ##### Identity (`Domain/Enums/`)
 
-| Enum | Values | DB type | Note |
-|---|---|---|---|
-| `Gender` | `Unspecified`, `Male`, `Female`, `Other` | `int` | Set ổn định, hiếm query bằng tay |
+| Enum                 | Values                                                                      | DB type          | Note                                                                                                           |
+| -------------------- | --------------------------------------------------------------------------- | ---------------- | -------------------------------------------------------------------------------------------------------------- |
+| `Gender`             | `Unspecified`, `Male`, `Female`, `Other`                                    | `int`            | Set ổn định, hiếm query bằng tay                                                                               |
 | `UserRole` `[Flags]` | `None=0`, `Customer=1`, `Manager=2`, `Staff=4`, `Admin=8`, `GardenOwner=16` | `int` (bit-mask) | 1 user có nhiều role: `Manager &#124; Staff = 6`. `GardenOwner` = người bán (sở hữu store). Chi tiết ở mục 6.3 |
 
 ##### Workspace (`Domain/Enums/Workspace/`)

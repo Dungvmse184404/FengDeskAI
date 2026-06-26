@@ -25,4 +25,9 @@ public class UserAddressRepository : GenericRepository<UserAddress>, IUserAddres
         // ExecuteUpdate chạy NGAY → bỏ default cũ trước khi set default mới, tránh vỡ partial-unique index.
         => _set.Where(a => a.UserId == userId && a.IsDefault)
                .ExecuteUpdateAsync(s => s.SetProperty(a => a.IsDefault, false), ct);
+
+    public Task<UserAddress?> GetWithWardChainAsync(Guid id, CancellationToken ct = default)
+        => _set.AsNoTracking()
+               .Include(a => a.Ward).ThenInclude(w => w.District).ThenInclude(d => d.Province)
+               .FirstOrDefaultAsync(a => a.Id == id, ct);
 }

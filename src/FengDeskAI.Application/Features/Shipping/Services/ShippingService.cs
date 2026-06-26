@@ -18,11 +18,13 @@ public class ShippingService : IShippingService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly Interfaces.External.IShippingProvider _shipping;
 
-    public ShippingService(IUnitOfWork uow, IMapper mapper)
+    public ShippingService(IUnitOfWork uow, IMapper mapper, Interfaces.External.IShippingProvider shipping)
     {
         _uow = uow;
         _mapper = mapper;
+        _shipping = shipping;
     }
 
     public async Task<IServiceResult> ProcessWebhookAsync(ShippingWebhookRequest request, CancellationToken ct = default)
@@ -58,6 +60,7 @@ public class ShippingService : IShippingService
             var from = delivery.Status;
             delivery.Status = request.NewStatus;
             if (request.TrackingCode is not null) delivery.TrackingCode = request.TrackingCode;
+            if (request.TrackingUrl is not null) delivery.TrackingUrl = request.TrackingUrl;
             if (request.Provider is not null) delivery.ShippingProvider = request.Provider;
 
             var now = DateTime.UtcNow;
@@ -114,6 +117,37 @@ public class ShippingService : IShippingService
 
         var logs = await _uow.Shipping.GetProgressLogsAsync(deliveryId, ct);
         return ServiceResult<List<DeliveryProgressLogResponse>>.Success(_mapper.Map<List<DeliveryProgressLogResponse>>(logs));
+    }
+
+    public async Task<IServiceResult> RedeliverAsync(Guid deliveryId, Guid userId, bool isAdmin, CancellationToken ct = default)
+    {
+        var delivery = await _uow.Shipping.GetDeliveryByIdAsync(deliveryId, ct);
+        if (delivery is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Shipping.DeliveryNotFound);
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Shipping.ViewProgressForbidden);
+        if (delivery.Status != DeliveryStatus.DeliveryFailed)
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Chỉ yêu cầu giao lại khi đơn giao đang ở trạng thái giao thất bại.");
+        if (string.IsNullOrEmpty(delivery.ProviderOrderId))
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Đơn giao chưa có mã vận đơn nhà vận chuyển.");
+
+        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { delivery.GardenStoreId }, ct)).FirstOrDefault();
+        var ok = await _shipping.RedeliverAsync(delivery.ProviderOrderId!, store?.GhnShopId, ct);
+        if (!ok)
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Nhà vận chuyển không hỗ trợ yêu cầu giao lại.");
+
+        // Không tự đổi trạng thái — chỉ ghi log; webhook "delivering" tiếp theo sẽ chuyển về Shipped.
+        await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+        {
+            DeliveryId = delivery.Id,
+            SourceType = DeliverySource.System,
+            FromStatus = delivery.Status.ToString(),
+            ToStatus = delivery.Status.ToString(),
+            Note = "Đã yêu cầu nhà vận chuyển giao lại",
+            LoggedAt = DateTime.UtcNow,
+        }, ct);
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult.Success("Đã gửi yêu cầu giao lại đến nhà vận chuyển.");
     }
 
     private async Task<Delivery?> ResolveDeliveryAsync(ShippingWebhookRequest request, CancellationToken ct)

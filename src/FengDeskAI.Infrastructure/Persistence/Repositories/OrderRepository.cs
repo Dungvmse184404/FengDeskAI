@@ -84,6 +84,7 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     public Task<Delivery?> GetDeliveryWithOrderAsync(Guid deliveryId, CancellationToken ct = default)
         => _context.Set<Delivery>()
             .Include(d => d.Store)
+            .Include(d => d.Items).ThenInclude(i => i.ProductItem)
             .Include(d => d.Order).ThenInclude(o => o.Deliveries)
             .FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
 

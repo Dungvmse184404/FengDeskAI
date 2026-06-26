@@ -14,6 +14,8 @@ public class ShippingWebhookRequest
     public string? ProviderOrderId { get; set; }
     public DeliveryStatus NewStatus { get; set; }
     public string? TrackingCode { get; set; }
+    /// <summary>Link theo dõi công khai của nhà vận chuyển (vd shared_link AhaMove) — cập nhật nếu có.</summary>
+    public string? TrackingUrl { get; set; }
     /// <summary>Payload thô (JSON string) — lưu nguyên vào log/raw_payload.</summary>
     public string? RawPayload { get; set; }
 }

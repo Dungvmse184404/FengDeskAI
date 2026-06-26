@@ -18,6 +18,12 @@ public class GardenStore : BaseEntity
     /// <summary>Dịch vụ AhaMove mặc định cho điểm lấy hàng của store (vd "SGN-BIKE" — tiền tố mã thành phố). Null nếu chưa cấu hình.</summary>
     public string? AhamoveServiceId { get; set; }
 
+    /// <summary>ShopId GHN của store (điểm lấy hàng) — gửi ở header mỗi request để chọn địa chỉ gửi. Null → dùng DefaultShopId. Xem Documents/GHN_INTEGRATION.md §3.2.</summary>
+    public int? GhnShopId { get; set; }
+
+    /// <summary>Loại dịch vụ GHN mặc định: 2 = chuyển phát nhanh (nhẹ), 5 = chuyển phát thường (nặng).</summary>
+    public int GhnServiceTypeId { get; set; } = 2;
+
     public StoreAddress? Address { get; set; }
     public ICollection<GardenStoreOwner> Owners { get; set; } = new List<GardenStoreOwner>();
     public ICollection<GardenStaffAssignment> StaffAssignments { get; set; } = new List<GardenStaffAssignment>();

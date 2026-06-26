@@ -7,6 +7,9 @@ namespace FengDeskAI.Application.Features.Sales.Services;
 public interface IOrderService
 {
     Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default);
+
+    /// <summary>Xem trước phí ship cho FE (cùng input checkout: địa chỉ + items/giỏ) — không tạo đơn.</summary>
+    Task<IServiceResult<ShippingFeePreviewResponse>> PreviewShippingFeeAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default);
     Task<IServiceResult<PagedResult<OrderListItemResponse>>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default);
 
     /// <summary>Tất cả đơn của mọi customer (paged) — chỉ admin.</summary>

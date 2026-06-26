@@ -29,6 +29,7 @@ public class MockShopeeShippingProvider : IShippingProvider
             Provider: Name,
             ProviderOrderId: providerOrderId,
             TrackingCode: trackingCode,
-            EstimatedDeliveryDate: DateTime.UtcNow.AddDays(3)));
+            EstimatedDeliveryDate: DateTime.UtcNow.AddDays(3),
+            TrackingUrl: $"https://mock.shopee-express.test/track/{trackingCode}"));
     }
 }

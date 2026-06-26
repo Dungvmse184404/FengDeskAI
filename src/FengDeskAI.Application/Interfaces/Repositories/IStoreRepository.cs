@@ -29,6 +29,12 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     /// <summary>True nếu store tồn tại (kể cả đã soft-delete).</summary>
     Task<bool> ExistsAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    /// Các store kèm địa chỉ + chuỗi phường/quận/tỉnh (read-only) để tạo vận đơn.
+    /// Dùng khi gom dữ liệu điểm lấy hàng cho nhà vận chuyển (vd AhaMove).
+    /// </summary>
+    Task<List<GardenStore>> GetWithAddressByIdsAsync(IEnumerable<Guid> storeIds, CancellationToken ct = default);
+
     /// <summary>Địa chỉ active của store (đã lọc soft-delete), tracked để cập nhật.</summary>
     Task<StoreAddress?> GetAddressAsync(Guid storeId, CancellationToken ct = default);
     /// <summary>Địa chỉ của store kể cả đã soft-delete (để hồi sinh khi Add lại — StoreId là unique).</summary>

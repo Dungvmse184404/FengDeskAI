@@ -59,6 +59,10 @@ public class ReturnsController : ApiControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, IsAdmin, ct));
 
+    //[HttpPost("{id:guid}/image")]
+    //public async Task<IActionResult> UploadImage(Guid id, [FromBody] ApproveReturnRequest request, CancellationToken ct)
+    //    => ToActionResult(await _service.ApproveAsync(id, CurrentUserId, IsAdmin, request, ct));
+
     [HttpPost("{id:guid}/approve")]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveReturnRequest request, CancellationToken ct)
         => ToActionResult(await _service.ApproveAsync(id, CurrentUserId, IsAdmin, request, ct));

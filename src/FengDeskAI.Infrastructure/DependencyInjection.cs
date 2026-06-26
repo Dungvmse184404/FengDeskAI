@@ -22,6 +22,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
 
 namespace FengDeskAI.Infrastructure;
@@ -169,10 +170,56 @@ public static class DependencyInjection
 
         services.AddSettings<ShippingWebhookSettings>(configuration);
 
-        // Payment (PayOS) + Shipping provider (mock — thay impl thật khi có credential)
+        // Payment (PayOS)
         services.AddSettings<PayOsSettings>(configuration);
         services.AddHttpClient<IPaymentGateway, PayOsPaymentGateway>();
-        services.AddScoped<IShippingProvider, MockShopeeShippingProvider>();
+
+        // Shipping provider: chọn theo cờ Shipping:Provider = "Ghn" | "Ahamove" | "Mock"
+        // (default Mock — chạy local không cần credential).
+        services.AddSettings<AhamoveSettings>(configuration);
+        services.AddSettings<GhnSettings>(configuration);
+        var shippingProvider = configuration["Shipping:Provider"];
+        if (string.Equals(shippingProvider, "Ghn", StringComparison.OrdinalIgnoreCase))
+        {
+            // GHN: token là API key dài hạn → gắn header Token mặc định; ShopId gắn theo từng request.
+            services.AddHttpClient<IShippingProvider, GhnShippingProvider>((sp, c) =>
+            {
+                var cfg = sp.GetRequiredService<IOptions<GhnSettings>>().Value;
+                c.BaseAddress = new Uri(cfg.BaseUrl);
+                c.DefaultRequestHeaders.Add("Token", cfg.Token);
+            });
+        }
+        else if (string.Equals(shippingProvider, "Ahamove", StringComparison.OrdinalIgnoreCase))
+        {
+            // Token cache phải singleton (giữ token giữa các request) → dùng IHttpClientFactory
+            // qua named client thay vì typed client (vốn transient).
+            services.AddHttpClient(AhamoveTokenProvider.HttpClientName, (sp, c) =>
+            {
+                var cfg = sp.GetRequiredService<IOptions<AhamoveSettings>>().Value;
+                c.BaseAddress = new Uri(cfg.BaseUrl);
+            });
+            services.AddSingleton<IAhamoveTokenProvider, AhamoveTokenProvider>();
+            services.AddHttpClient<IShippingProvider, AhamoveShippingProvider>((sp, c) =>
+            {
+                var cfg = sp.GetRequiredService<IOptions<AhamoveSettings>>().Value;
+                c.BaseAddress = new Uri(cfg.BaseUrl);
+            });
+        }
+        else
+        {
+            services.AddScoped<IShippingProvider, MockShopeeShippingProvider>();
+        }
+
+        // Đồng bộ dữ liệu hành chính (open-api.vn) + mã GHN — chạy qua lệnh `sync-geo`.
+        services.AddHttpClient(Persistence.Seeding.GeoSyncService.OpenApiClient,
+            c => c.BaseAddress = new Uri("https://provinces.open-api.vn"));
+        services.AddHttpClient(Persistence.Seeding.GeoSyncService.GhnMasterDataClient, (sp, c) =>
+        {
+            var cfg = sp.GetRequiredService<IOptions<GhnSettings>>().Value;
+            c.BaseAddress = new Uri(cfg.BaseUrl);
+            if (!string.IsNullOrEmpty(cfg.Token)) c.DefaultRequestHeaders.Add("Token", cfg.Token);
+        });
+        services.AddScoped<Application.Features.Geography.Services.IGeoSyncService, Persistence.Seeding.GeoSyncService>();
 
         // AI recommendation — mock theo CONTRACT.md (mặc định) hoặc HTTP client gọi Python.
         // Toggle bằng AiRecommendationSettings:UseMock.

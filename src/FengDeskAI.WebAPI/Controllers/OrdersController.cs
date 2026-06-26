@@ -29,6 +29,11 @@ public class OrdersController : ApiControllerBase
     public async Task<IActionResult> Checkout([FromBody] CheckoutRequest request, CancellationToken ct)
         => ToActionResult(await _service.CheckoutAsync(CurrentUserId, request, ct));
 
+    /// <summary>Xem trước phí ship trước khi đặt (FE hiển thị tổng tiền). Không tạo đơn.</summary>
+    [HttpPost("shipping-fee-preview")]
+    public async Task<IActionResult> PreviewShippingFee([FromBody] CheckoutRequest request, CancellationToken ct)
+        => ToActionResult(await _service.PreviewShippingFeeAsync(CurrentUserId, request, ct));
+
     [HttpGet]
     public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
         => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));

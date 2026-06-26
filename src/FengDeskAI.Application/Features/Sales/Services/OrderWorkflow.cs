@@ -43,12 +43,19 @@ public static class OrderWorkflow
         return OrderStatus.Pending;
     }
 
+    // Webhook nhà vận chuyển (GHN/AhaMove) có thể nhảy thẳng Confirmed → Shipped (bỏ Preparing),
+    // báo DeliveryFailed, hoặc Returned ở nhiều mốc — nên cho phép các chuyển tiếp này.
     public static bool IsValidDeliveryTransition(DeliveryStatus from, DeliveryStatus to) => from switch
     {
         DeliveryStatus.Pending => to is DeliveryStatus.Confirmed or DeliveryStatus.Cancelled,
-        DeliveryStatus.Confirmed => to is DeliveryStatus.Preparing or DeliveryStatus.Cancelled,
-        DeliveryStatus.Preparing => to is DeliveryStatus.Shipped or DeliveryStatus.Cancelled,
-        DeliveryStatus.Shipped => to is DeliveryStatus.Delivered or DeliveryStatus.Returned,
+        DeliveryStatus.Confirmed => to is DeliveryStatus.Preparing or DeliveryStatus.Shipped
+            or DeliveryStatus.Cancelled or DeliveryStatus.Returned,
+        DeliveryStatus.Preparing => to is DeliveryStatus.Shipped or DeliveryStatus.Cancelled
+            or DeliveryStatus.Returned,
+        DeliveryStatus.Shipped => to is DeliveryStatus.Delivered or DeliveryStatus.DeliveryFailed
+            or DeliveryStatus.Returned,
+        DeliveryStatus.DeliveryFailed => to is DeliveryStatus.Shipped or DeliveryStatus.Returned
+            or DeliveryStatus.Cancelled,
         DeliveryStatus.Delivered => to is DeliveryStatus.Returned,
         _ => false,
     };

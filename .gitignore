@@ -113,3 +113,7 @@ ehthumbs.db
 # Output of legacy publish
 [Pp]ublish[Pp]rofiles/
 artifacts/
+
+# ===== Note tools =====
+*.obsidian
+*localDocs

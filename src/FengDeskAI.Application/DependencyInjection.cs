@@ -13,6 +13,7 @@ using FengDeskAI.Application.Features.Sales.Mappings;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.Mappings;
 using FengDeskAI.Application.Features.Shipping.Services;
+using FengDeskAI.Application.Features.Storage.Services;
 using FengDeskAI.Application.Features.Vendor.Mappings;
 using FengDeskAI.Application.Features.Vendor.Services;
 using FengDeskAI.Application.Features.Identity.Mappings;
@@ -76,8 +77,13 @@ public static class DependencyInjection
         services.AddScoped<IShippingService, ShippingService>();
         // Tính phí ship — thuần logic, stateless.
         services.AddSingleton<IShippingFeeCalculator, ShippingFeeCalculator>();
+        // Ước tính phí ship lúc checkout: gọi nhà vận chuyển (GHN /fee), fallback calculator.
+        services.AddScoped<IDeliveryFeeEstimator, DeliveryFeeEstimator>();
 
         services.AddScoped<IPaymentService, PaymentService>();
+
+        // Upload ảnh dùng chung (FE đính URL vào sản phẩm lúc tạo).
+        services.AddScoped<IUploadService, UploadService>();
 
         services.AddScoped<INotificationService, NotificationService>();
 
