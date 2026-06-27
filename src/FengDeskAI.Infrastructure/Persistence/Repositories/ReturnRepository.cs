@@ -100,4 +100,14 @@ public class ReturnRepository : GenericRepository<ReturnRequest>, IReturnReposit
 
     public void AddStatusLog(ReturnStatusLog log)
         => _context.Set<ReturnStatusLog>().Add(log);
+
+    public Task AddImageAsync(ReturnRequestImage image, CancellationToken ct = default)
+        => _context.Set<ReturnRequestImage>().AddAsync(image, ct).AsTask();
+
+    public Task<ReturnRequestImage?> GetImageAsync(Guid returnRequestId, Guid imageId, CancellationToken ct = default)
+        => _context.Set<ReturnRequestImage>()
+            .FirstOrDefaultAsync(i => i.Id == imageId && i.ReturnRequestId == returnRequestId, ct);
+
+    public void RemoveImage(ReturnRequestImage image)
+        => _context.Set<ReturnRequestImage>().Remove(image);
 }

@@ -37,6 +37,9 @@ public class ShipBackRequest
     public string TrackingCode { get; set; } = null!;
 }
 
+/// <summary>Một file ảnh bằng chứng đã đọc vào stream — controller dựng từ IFormFile rồi truyền xuống service.</summary>
+public record ReturnImageFile(System.IO.Stream Content, string FileName, string ContentType);
+
 public class ApproveReturnRequest
 {
     public string? Note { get; set; }

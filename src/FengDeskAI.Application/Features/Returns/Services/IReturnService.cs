@@ -17,6 +17,12 @@ public interface IReturnService
     Task<IServiceResult<ReturnDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default);
 
+    /// <summary>Khách tải ảnh bằng chứng (tệp) lên yêu cầu của mình — upload storage rồi gắn URL.</summary>
+    Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
+
+    /// <summary>Khách xóa một ảnh bằng chứng — chỉ khi yêu cầu còn ở trạng thái chờ duyệt (Requested).</summary>
+    Task<IServiceResult<ReturnDetailResponse>> DeleteImageAsync(Guid id, Guid imageId, Guid userId, CancellationToken ct = default);
+
     // ----- Vendor / Admin -----
     Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetForStoreAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);
     Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetAllAsync(PageRequest page, CancellationToken ct = default);

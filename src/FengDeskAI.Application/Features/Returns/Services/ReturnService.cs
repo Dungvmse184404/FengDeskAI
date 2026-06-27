@@ -1,5 +1,6 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
@@ -23,13 +24,15 @@ public class ReturnService : IReturnService
     private readonly IMapper _mapper;
     private readonly IRefundService _refund;
     private readonly IShippingProvider _shipping;
+    private readonly IFileStorage _storage;
 
-    public ReturnService(IUnitOfWork uow, IMapper mapper, IRefundService refund, IShippingProvider shipping)
+    public ReturnService(IUnitOfWork uow, IMapper mapper, IRefundService refund, IShippingProvider shipping, IFileStorage storage)
     {
         _uow = uow;
         _mapper = mapper;
         _refund = refund;
         _shipping = shipping;
+        _storage = storage;
     }
 
     // ===================== Customer =====================
@@ -222,6 +225,63 @@ public class ReturnService : IReturnService
             await Task.CompletedTask;
             return null;
         }, ct);
+
+        return await GetByIdAsync(id, userId, isAdmin: false, ct);
+    }
+
+    public async Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
+    {
+        if (files is null || files.Count == 0)
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageFileRequired);
+
+        // GetDetailAsync(id, userId): chỉ trả về nếu userId là CHỦ yêu cầu → kiêm luôn kiểm quyền sở hữu.
+        var rr = await _uow.Returns.GetDetailAsync(id, userId, ct);
+        if (rr is null)
+            return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
+
+        var sort = rr.Images.Count;
+        foreach (var file in files)
+        {
+            if (file.Content is null || file.Content.Length == 0)
+                return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageFileRequired);
+            if (!ImageUpload.IsAllowed(file.ContentType))
+                return Fail(ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.Returns.ImageTypeInvalid);
+
+            // Mỗi yêu cầu một thư mục riêng: Return_images/{returnId}/{guid}{ext}
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(file.ContentType);
+            var objectPath = $"Return_images/{id}/{Guid.NewGuid():N}{ext}";
+
+            var stored = await _storage.UploadAsync(objectPath, file.Content, file.ContentType, ct);
+            await _uow.Returns.AddImageAsync(new ReturnRequestImage
+            {
+                ReturnRequestId = id,
+                ImageUrl = stored.Url,
+                SortOrder = sort++,
+            }, ct);
+        }
+        await _uow.SaveChangesAsync(ct);
+
+        return await GetByIdAsync(id, userId, isAdmin: false, ct);
+    }
+
+    public async Task<IServiceResult<ReturnDetailResponse>> DeleteImageAsync(Guid id, Guid imageId, Guid userId, CancellationToken ct = default)
+    {
+        // Owner-scoped: null nếu không phải chủ yêu cầu.
+        var rr = await _uow.Returns.GetDetailAsync(id, userId, ct);
+        if (rr is null)
+            return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
+        if (rr.Status != ReturnRequestStatus.Requested)
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageDeleteNotAllowed);
+
+        var image = await _uow.Returns.GetImageAsync(id, imageId, ct);
+        if (image is null)
+            return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.ImageNotFound);
+
+        _uow.Returns.RemoveImage(image);
+        await _uow.SaveChangesAsync(ct);
+        // Xóa file trên storage best-effort sau khi DB đã commit (không chặn nghiệp vụ nếu lỗi).
+        await _storage.DeleteByUrlAsync(image.ImageUrl, ct);
 
         return await GetByIdAsync(id, userId, isAdmin: false, ct);
     }

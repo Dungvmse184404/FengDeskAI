@@ -257,6 +257,10 @@ public static class ApiStatusMessages
         public const string InvalidTransitionFormat = "Không thể chuyển trạng thái yêu cầu từ {0} sang {1}.";
         public const string CancelNotAllowed = "Chỉ có thể hủy yêu cầu khi đang chờ duyệt hoặc đã duyệt.";
         public const string NoRefundToComplete = "Yêu cầu này chưa có lệnh hoàn tiền để xác nhận.";
+        public const string ImageFileRequired = "Vui lòng chọn tệp ảnh để tải lên.";
+        public const string ImageTypeInvalid = "Chỉ chấp nhận ảnh JPG, PNG, BMP hoặc GIF.";
+        public const string ImageNotFound = "Không tìm thấy ảnh.";
+        public const string ImageDeleteNotAllowed = "Chỉ xóa được ảnh khi yêu cầu đang chờ duyệt.";
 
         public const string Created = "Đã gửi yêu cầu trả hàng/đổi trả.";
         public const string Approved = "Đã duyệt yêu cầu trả hàng.";
@@ -266,6 +270,8 @@ public static class ApiStatusMessages
         public const string Resolved = "Đã xử lý yêu cầu trả hàng.";
         public const string RefundCompleted = "Đã hoàn tất hoàn tiền.";
         public const string Cancelled = "Đã hủy yêu cầu trả hàng.";
+        public const string ImagesUploaded = "Đã tải ảnh bằng chứng lên yêu cầu.";
+        public const string ImageDeleted = "Đã xóa ảnh.";
     }
 
     public static class Review
