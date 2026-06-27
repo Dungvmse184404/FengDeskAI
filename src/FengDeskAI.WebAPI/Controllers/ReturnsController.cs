@@ -42,6 +42,30 @@ public class ReturnsController : ApiControllerBase
     public async Task<IActionResult> ShipBack(Guid id, [FromBody] ShipBackRequest request, CancellationToken ct)
         => ToActionResult(await _service.ShipBackAsync(id, CurrentUserId, request, ct));
 
+    /// <summary>Tải ảnh bằng chứng cho yêu cầu trả (multipart/form-data, field "files" — chọn được nhiều tệp). Chỉ chủ yêu cầu.</summary>
+    [HttpPost("{id:guid}/images")]
+    public async Task<IActionResult> UploadImages(Guid id, [FromForm] List<IFormFile> files, CancellationToken ct)
+    {
+        var uploads = new List<ReturnImageFile>();
+        if (files is not null)
+        {
+            foreach (var f in files)
+            {
+                if (f.Length == 0) continue;
+                var ms = new MemoryStream();
+                await f.CopyToAsync(ms, ct);
+                ms.Position = 0;
+                uploads.Add(new ReturnImageFile(ms, f.FileName, f.ContentType));
+            }
+        }
+        return ToActionResult(await _service.UploadImagesAsync(id, CurrentUserId, uploads, ct));
+    }
+
+    /// <summary>Xóa một ảnh bằng chứng — chỉ chủ yêu cầu, chỉ khi yêu cầu còn ở trạng thái chờ duyệt.</summary>
+    [HttpDelete("{id:guid}/images/{imageId:guid}")]
+    public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
+        => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, ct));
+
     // ----- Vendor / Admin -----
 
     /// <summary>Tất cả yêu cầu trả hàng (paged) — chỉ admin.</summary>
@@ -58,10 +82,6 @@ public class ReturnsController : ApiControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, IsAdmin, ct));
-
-    //[HttpPost("{id:guid}/image")]
-    //public async Task<IActionResult> UploadImage(Guid id, [FromBody] ApproveReturnRequest request, CancellationToken ct)
-    //    => ToActionResult(await _service.ApproveAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     [HttpPost("{id:guid}/approve")]
     public async Task<IActionResult> Approve(Guid id, [FromBody] ApproveReturnRequest request, CancellationToken ct)

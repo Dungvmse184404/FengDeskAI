@@ -35,4 +35,13 @@ public interface IReturnRepository : IGenericRepository<ReturnRequest>
     /// <summary>Thêm status log tường minh qua DbSet (Added → INSERT) — tránh EF đánh Modified khi
     /// add qua navigation vào ReturnRequest đã-tracked (BaseEntity set sẵn Id).</summary>
     void AddStatusLog(ReturnStatusLog log);
+
+    /// <summary>Thêm ảnh bằng chứng tường minh qua DbSet (Added → INSERT).</summary>
+    Task AddImageAsync(ReturnRequestImage image, CancellationToken ct = default);
+
+    /// <summary>Ảnh (tracked) theo id, scope theo yêu cầu — để xóa.</summary>
+    Task<ReturnRequestImage?> GetImageAsync(Guid returnRequestId, Guid imageId, CancellationToken ct = default);
+
+    /// <summary>Xóa ảnh (soft-delete qua SaveChanges override).</summary>
+    void RemoveImage(ReturnRequestImage image);
 }
