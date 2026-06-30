@@ -146,6 +146,9 @@ public static class ApiStatusMessages
         public const string DeliveryNotFound = "Không tìm thấy đơn giao.";
         public const string UpdateDeliveryForbidden = "Bạn không có quyền cập nhật đơn giao này.";
         public const string DeliveryStatusUpdated = "Cập nhật trạng thái giao hàng thành công.";
+        public const string DeliveryNotConfirmed = "Chỉ tạo vận đơn khi đơn giao đã được xác nhận (Nhận đơn).";
+        public const string ShipmentAlreadyCreated = "Đơn giao này đã có vận đơn.";
+        public const string ShipmentCreated = "Đã tạo vận đơn thành công.";
         /// <summary>{0} = tên sản phẩm, {1} = số lượng tồn còn lại.</summary>
         public const string ProductOutOfStockFormat = "Sản phẩm '{0}' không đủ tồn kho (còn {1}).";
         /// <summary>{0} = trạng thái hiện tại, {1} = trạng thái muốn chuyển.</summary>

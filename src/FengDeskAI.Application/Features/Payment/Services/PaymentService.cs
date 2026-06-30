@@ -2,7 +2,6 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Payment.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
-using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Payment;
@@ -21,16 +20,14 @@ public class PaymentService : IPaymentService
 {
     private readonly IUnitOfWork _uow;
     private readonly IPaymentGateway _gateway;
-    private readonly IShippingProvider _shipping;
     private readonly IOrderCancellationService _cancellation;
     private readonly ILogger<PaymentService> _logger;
 
-    public PaymentService(IUnitOfWork uow, IPaymentGateway gateway, IShippingProvider shipping,
+    public PaymentService(IUnitOfWork uow, IPaymentGateway gateway,
         IOrderCancellationService cancellation, ILogger<PaymentService> logger)
     {
         _uow = uow;
         _gateway = gateway;
-        _shipping = shipping;
         _cancellation = cancellation;
         _logger = logger;
     }
@@ -134,10 +131,7 @@ public class PaymentService : IPaymentService
         if (txn.Status == PaymentStatus.Paid)
             return ServiceResult.Success(ApiStatusMessages.Payment.TransactionAlreadyProcessed);
 
-        // Một transaction duy nhất. KHÔNG retry trên cùng context: nếu transaction rollback,
-        // EF change tracker không reset → retry sẽ phát UPDATE cho entity chưa tồn tại (0 rows).
-        // Lỗi thật → trả lỗi để PayOS gọi lại (request mới = context sạch); idempotent nhờ check
-        // txn.Status == Paid ở trên.
+    
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
             var now = DateTime.UtcNow;
@@ -263,8 +257,9 @@ public class PaymentService : IPaymentService
 
     /// <summary>
     /// Áp dụng thanh toán thành công: transaction → Paid, order → Paid, tạo delivery (nếu chưa có)
-    /// + shipment, rollup. Dùng chung cho webhook PayOS và endpoint dev mark-paid.
-    /// Phải gọi BÊN TRONG một transaction (ExecuteInTransactionAsync).
+    /// và để đó cho garden owner bấm Nhận / Tạo ship. KHÔNG gọi nhà vận chuyển và KHÔNG rollup
+    /// trạng thái order ở đây — order giữ nguyên Paid sau bước này. Dùng chung cho webhook PayOS
+    /// và endpoint dev mark-paid. Phải gọi BÊN TRONG một transaction (ExecuteInTransactionAsync).
     /// </summary>
     private async Task ApplyPaymentSuccessAsync(Order order, Transaction txn, string? providerReference, DateTime now, CancellationToken ct)
     {
@@ -308,21 +303,12 @@ public class PaymentService : IPaymentService
                 }, ct);
             }
 
-            await CreateShipmentsAsync(order, now, ct);
-
-            var rolled = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
-            if (rolled != order.Status)
-            {
-                order.Status = rolled;
-                order.StatusChangeNote = "Đã tạo vận đơn cho các nhà vườn";
-            }
-
             await _uow.Notifications.AddAsync(new Notification
             {
                 UserId = order.CustomerId,
                 Type = NotificationType.OrderPaid,
                 Title = "Thanh toán thành công",
-                Message = "Đơn hàng của bạn đã được thanh toán. Đang chuẩn bị giao hàng.",
+                Message = "Đơn hàng của bạn đã được thanh toán. Đang chờ cửa hàng xác nhận.",
                 ReferenceId = order.Id,
                 ReferenceType = ReferenceType.Order,
                 IsRead = false,
@@ -366,61 +352,6 @@ public class PaymentService : IPaymentService
             item.DeliveryId = delivery.Id;
             item.Delivery = delivery;
             delivery.Subtotal += item.UnitPrice * item.Quantity;
-        }
-    }
-
-    private async Task CreateShipmentsAsync(Order order, DateTime now, CancellationToken ct)
-    {
-        var pending = order.Deliveries.Where(d => d.Status == DeliveryStatus.Pending).ToList();
-        if (pending.Count == 0) return;
-
-        // Gom dữ liệu điểm lấy hàng (store) + điểm giao (khách) read-only để dựng ShipmentRequest.
-        // Provider chỉ nói chuyện HTTP — không truy cập DB (giữ đúng chiều phụ thuộc).
-        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(order.ShippingAddressId, ct);
-        var stores = (await _uow.Stores.GetWithAddressByIdsAsync(
-                pending.Select(d => d.GardenStoreId).Distinct(), ct))
-            .ToDictionary(s => s.Id);
-
-        foreach (var delivery in pending)
-        {
-            stores.TryGetValue(delivery.GardenStoreId, out var store);
-
-            var deliveryItems = order.Items.Where(i => i.DeliveryId == delivery.Id).ToList();
-            var items = deliveryItems
-                .Select(i => new ShipmentItem(i.ProductItemId.ToString(), i.ProductName, i.UnitPrice, i.Quantity,
-                    i.ProductItem.WeightGram, i.ProductItem.LengthCm, i.ProductItem.WidthCm, i.ProductItem.HeightCm))
-                .ToList();
-            var weightGram = deliveryItems.Sum(i => i.ProductItem.WeightGram * i.Quantity);
-
-            // COD: thu tiền tại điểm giao; online (PayOS): đã thu nên CodAmount = 0.
-            var cod = order.PaymentMethod == PaymentMethod.COD
-                ? delivery.Subtotal + delivery.ShippingFee
-                : 0m;
-
-            var request = ShipmentRequestBuilder.Build(
-                delivery.Id, order.Id, delivery.Subtotal, store, shipTo, cod, weightGram, items);
-
-            var shipment = await _shipping.CreateShipmentAsync(request, ct);
-
-            delivery.ShippingProvider = shipment.Provider;
-            delivery.ProviderOrderId = shipment.ProviderOrderId;
-            delivery.TrackingCode = shipment.TrackingCode;
-            delivery.TrackingUrl = shipment.TrackingUrl;
-            delivery.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
-            // Phí ship thực tế nhà vận chuyển trả về (order.TotalShippingFee đã thu lúc checkout theo ước tính).
-            if (shipment.ShippingFee is { } actualFee) delivery.ShippingFee = actualFee;
-            delivery.AssignedAt = now;
-            delivery.Status = DeliveryStatus.Confirmed;
-
-            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
-            {
-                DeliveryId = delivery.Id,
-                SourceType = DeliverySource.System,
-                FromStatus = DeliveryStatus.Pending.ToString(),
-                ToStatus = DeliveryStatus.Confirmed.ToString(),
-                Note = $"Tạo vận đơn {shipment.Provider} ({shipment.TrackingCode})",
-                LoggedAt = now,
-            }, ct);
         }
     }
 
