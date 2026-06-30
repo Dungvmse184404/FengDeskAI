@@ -200,11 +200,6 @@ public class OrderService : IOrderService
                 case DeliveryStatus.Delivered: delivery.DeliveredAt = now; break;
             }
 
-            // COD: vận đơn chỉ được tạo khi store xác nhận (đơn online đã tạo lúc thanh toán nên
-            // đã có ProviderOrderId). Tạo ở đây để COD cũng có vận đơn AhaMove + tracking.
-            if (request.Status == DeliveryStatus.Confirmed && string.IsNullOrEmpty(delivery.ProviderOrderId))
-                await CreateShipmentForDeliveryAsync(delivery, now, ct);
-
             // Add tường minh qua repo (Added → INSERT). Add qua navigation vào delivery đã-tracked
             // bị EF đánh Modified (UPDATE 0 rows) vì BaseEntity set sẵn Id — xem ghi chú ở PaymentService.
             await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
@@ -383,10 +378,11 @@ public class OrderService : IOrderService
     }
 
     /// <summary>
-    /// Tạo vận đơn cho một delivery (dùng cho COD lúc store xác nhận). Gom store (điểm lấy) + địa chỉ
-    /// khách (điểm giao) + items read-only, gọi provider rồi gắn thông tin vận đơn vào delivery.
+    /// Gọi nhà vận chuyển cho một delivery và gắn thông tin vận đơn (tracking, fee) vào entity.
+    /// KHÔNG đổi <c>Status</c> và KHÔNG ghi <c>DeliveryProgressLog</c> — caller quyết định ngữ cảnh
+    /// chuyển trạng thái (hiện tại là Confirmed→Preparing trong <see cref="CreateDeliveryShipmentAsync"/>).
     /// </summary>
-    private async Task CreateShipmentForDeliveryAsync(Delivery delivery, DateTime now, CancellationToken ct)
+    private async Task CreateShipmentForDeliveryAsync(Delivery delivery, CancellationToken ct)
     {
         var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { delivery.GardenStoreId }, ct)).FirstOrDefault();
         var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(delivery.Order.ShippingAddressId, ct);
@@ -411,16 +407,58 @@ public class OrderService : IOrderService
         delivery.TrackingCode = shipment.TrackingCode;
         delivery.TrackingUrl = shipment.TrackingUrl;
         delivery.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
+        // Phí ship thực tế nhà vận chuyển trả về (order.TotalShippingFee đã thu lúc checkout theo ước tính).
+        if (shipment.ShippingFee is { } actualFee) delivery.ShippingFee = actualFee;
+    }
 
-        await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+    /// <summary>
+    /// Garden owner bấm "Tạo đơn ship" — delivery đang Confirmed mới được gọi nhà vận chuyển.
+    /// Sau khi gọi: ghi tracking + chuyển trạng thái Confirmed → Preparing, log + notify khách.
+    /// </summary>
+    public async Task<IServiceResult<DeliveryResponse>> CreateDeliveryShipmentAsync(Guid deliveryId, Guid userId, bool isAdmin, CancellationToken ct = default)
+    {
+        var delivery = await _uow.Orders.GetDeliveryWithOrderAsync(deliveryId, ct);
+        if (delivery is null)
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.UpdateDeliveryForbidden);
+        if (delivery.Status != DeliveryStatus.Confirmed)
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.DeliveryNotConfirmed);
+        if (!string.IsNullOrEmpty(delivery.ProviderOrderId))
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.ShipmentAlreadyCreated);
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            DeliveryId = delivery.Id,
-            SourceType = DeliverySource.System,
-            FromStatus = DeliveryStatus.Pending.ToString(),
-            ToStatus = DeliveryStatus.Confirmed.ToString(),
-            Note = $"Tạo vận đơn {shipment.Provider} ({shipment.TrackingCode})",
-            LoggedAt = now,
+            await CreateShipmentForDeliveryAsync(delivery, ct);
+
+            var now = DateTime.UtcNow;
+            delivery.Status = DeliveryStatus.Preparing;
+
+            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+            {
+                DeliveryId = delivery.Id,
+                SourceType = DeliverySource.System,
+                FromStatus = DeliveryStatus.Confirmed.ToString(),
+                ToStatus = DeliveryStatus.Preparing.ToString(),
+                Note = $"Tạo vận đơn {delivery.ShippingProvider} ({delivery.TrackingCode})",
+                LoggedAt = now,
+            }, ct);
+
+            await _uow.Notifications.AddAsync(new Notification
+            {
+                UserId = delivery.Order.CustomerId,
+                Type = NotificationType.DeliveryPreparing,
+                Title = "Đang chuẩn bị hàng",
+                Message = "Cửa hàng đã tạo vận đơn và đang chuẩn bị hàng cho đơn giao của bạn.",
+                ReferenceId = delivery.Id,
+                ReferenceType = ReferenceType.Delivery,
+                IsRead = false,
+            }, ct);
+
+            return null;
         }, ct);
+
+        return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.ShipmentCreated);
     }
 
     private static (NotificationType Type, string Title, string Message) MapDeliveryNotification(DeliveryStatus status)

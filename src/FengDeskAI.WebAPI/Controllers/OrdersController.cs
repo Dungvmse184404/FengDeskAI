@@ -60,4 +60,9 @@ public class OrdersController : ApiControllerBase
     [HttpPatch("deliveries/{deliveryId:guid}/status")]
     public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, [FromBody] UpdateDeliveryStatusRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateDeliveryStatusAsync(deliveryId, CurrentUserId, IsAdmin, request, ct));
+
+    /// <summary>Garden owner tạo vận đơn (gọi GHN/AhaMove) cho delivery đã ở trạng thái Confirmed.</summary>
+    [HttpPost("deliveries/{deliveryId:guid}/shipment")]
+    public async Task<IActionResult> CreateShipment(Guid deliveryId, CancellationToken ct)
+        => ToActionResult(await _service.CreateDeliveryShipmentAsync(deliveryId, CurrentUserId, IsAdmin, ct));
 }
