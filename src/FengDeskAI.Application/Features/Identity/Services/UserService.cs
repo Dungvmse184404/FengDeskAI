@@ -17,7 +17,7 @@ public class UserService : IUserService
 
     public UserService(IUnitOfWork uow) => _uow = uow;
 
-    public async Task<IServiceResult<List<UserSearchResponse>>> SearchAsync(string? q, int? limit, CancellationToken ct = default)
+    public async Task<IServiceResult<List<UserSearchResponse>>> SearchAsync(Guid searcherId, string? q, int? limit, CancellationToken ct = default)
     {
         var query = (q ?? string.Empty).Trim();
         if (query.Length < MinQueryLength)
@@ -29,7 +29,7 @@ public class UserService : IUserService
         if (take > MaxLimit) take = MaxLimit;
 
         var normalized = NormalizeForSearch(query);
-        var users = await _uow.Users.SearchAsync(normalized, take, ct);
+        var users = await _uow.Users.SearchAsync(searcherId, normalized, take, ct);
 
         var dtos = users.Select(u => new UserSearchResponse
         {

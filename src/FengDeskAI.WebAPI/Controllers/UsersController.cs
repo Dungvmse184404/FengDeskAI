@@ -21,5 +21,5 @@ public class UsersController : ApiControllerBase
     /// <summary>Tìm user kiểu GitHub: q match email / fullName (có dấu) / phone. Yêu cầu ≥ 3 ký tự.</summary>
     [HttpGet("search")]
     public async Task<IActionResult> Search([FromQuery] string? q, [FromQuery] int? limit, CancellationToken ct)
-        => ToActionResult(await _service.SearchAsync(q, limit, ct));
+        => ToActionResult(await _service.SearchAsync(CurrentUserId, q, limit, ct));
 }

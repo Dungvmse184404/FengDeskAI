@@ -13,5 +13,5 @@ public interface IUserRepository : IGenericRepository<User>
     /// Tìm user theo email / fullName (không phân biệt dấu) / phone — kiểu GitHub.
     /// <paramref name="normalizedQuery"/> đã được lowercase + bỏ dấu + đ→d phía Application để khớp với SQL.
     /// </summary>
-    Task<List<User>> SearchAsync(string normalizedQuery, int limit, CancellationToken ct = default);
+    Task<List<User>> SearchAsync(Guid searcherId, string normalizedQuery, int limit, CancellationToken ct = default);
 }

@@ -118,3 +118,7 @@ artifacts/
 *.obsidian
 *localDocs
 *ard
+
+# ===== auto pilot =====
+*start_project.bat
+*stop_project.bat

@@ -21,13 +21,11 @@ public class UserRepository : GenericRepository<User>, IUserRepository
     public Task<bool> PhoneExistsAsync(string phone, CancellationToken ct = default)
         => _set.AnyAsync(u => u.Phone == phone, ct);
 
-    public Task<List<User>> SearchAsync(string normalizedQuery, int limit, CancellationToken ct = default)
+    public Task<List<User>> SearchAsync(Guid searcherId, string normalizedQuery, int limit, CancellationToken ct = default)
     {
-        // Khớp khi pattern xuất hiện trong fullName (đã unaccent + đ→d), email, hoặc phone.
-        // Pattern đã lowercase + bỏ dấu phía C# nên LIKE thay vì ILIKE là đủ.
         var pattern = $"%{normalizedQuery}%";
         return _set.AsNoTracking()
-            .Where(u => u.IsActive)
+            .Where(u => u.IsActive && u.Id != searcherId)
             .Where(u =>
                 EF.Functions.Like(
                     AppDbContext.Unaccent(u.FullName).Replace("đ", "d").Replace("Đ", "d").ToLower(),
