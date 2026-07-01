@@ -26,18 +26,24 @@ Quản lý garden store (marketplace). User đã đăng nhập tự mở store (
 | GET | `/api/stores/{id}/owners` | Authenticated | Danh sách đồng sở hữu |
 | POST | `/api/stores/{id}/owners` | Owner/Admin | Thêm đồng sở hữu |
 | DELETE | `/api/stores/{id}/owners/{userId}` | Owner/Admin | Gỡ đồng sở hữu |
-| GET | `/api/stores/{id}/staff` | Owner/Admin | Danh sách nhân viên |
-| POST | `/api/stores/{id}/staff` | Owner/Admin | Phân công nhân viên |
-| DELETE | `/api/stores/{id}/staff/{assignmentId}` | Owner/Admin | Gỡ nhân viên |
+| GET | `/api/stores/{id}/staff` | Owner/Admin | Danh sách nhân viên + lời mời chưa phản hồi |
+| POST | `/api/stores/{id}/staff` | Owner/Admin | **Mời** nhân viên (Pending + Notification) |
+| DELETE | `/api/stores/{id}/staff/{assignmentId}` | Owner/Admin | Gỡ / huỷ lời mời (→ `Revoked`) |
+| GET | `/api/stores/staff/invitations/mine` | Authenticated | Lời mời Pending gửi cho tôi |
+| POST | `/api/stores/staff/{assignmentId}/accept` | Người được mời | Đồng ý (→ `Accepted`) |
+| POST | `/api/stores/staff/{assignmentId}/reject` | Người được mời | Từ chối (→ `Rejected`) |
 
 ---
 
 ## GET `/api/stores` · `/mine` · `/{id}`
+
+> **`/mine`** trả store mà user là **owner HOẶC garden staff đã `Accepted`** (nguồn sự thật cho quyền vào khu người bán). Mỗi item có thêm `isOwner`: `true` = owner, `false` = chỉ là nhân viên (dùng để FE ẩn nút owner-only). `/` và `/{id}` không set `isOwner`.
+
 `data` = `StoreResponse` (hoặc mảng):
 ```json
 {
   "id": "guid", "name": "Vườn Xanh", "description": "...", "hotline": "1900...",
-  "openingHours": "8:00-21:00", "isActive": true,
+  "openingHours": "8:00-21:00", "isActive": true, "isOwner": true,
   "address": { "id": "guid", "storeId": "guid", "wardId": "guid",
                "streetAddress": "...", "latitude": null, "longitude": null, "isActive": true },
   "owners": [{ "ownerUserId": "guid", "isPrimary": true, "assignedAt": "..." }],
@@ -81,15 +87,56 @@ Xóa mềm (owner/admin) hoặc xóa vĩnh viễn (StaffOrAbove).
 
 ---
 
-## Nhân viên (staff)
+## Nhân viên (staff) — invitation flow
 
-**GET `/{id}/staff`** — `data` = mảng `StaffAssignmentResponse`:
-```json
-[{ "id": "guid", "gardenStoreId": "guid", "staffId": "guid", "assignedBy": "guid",
-   "isActive": true, "assignedAt": "...", "unassignedAt": null }]
+State machine assignment:
 ```
-**POST `/{id}/staff`** — body `AssignStaffRequest`: `{ "staffId": "guid" }`.
-**DELETE `/{id}/staff/{assignmentId}`** — gỡ nhân viên.
+Pending ──staff accept──► Accepted ──owner gỡ──► Revoked
+   │
+   ├──staff reject──► Rejected
+   └──owner huỷ──► Revoked
+```
+Quyền store-scoped của staff chỉ tính khi `Status == Accepted`.
+
+**GET `/{id}/staff`** — Owner/Admin. `data` = mảng `StaffAssignmentResponse`:
+```json
+[{
+  "id": "guid", "gardenStoreId": "guid",
+  "staffId": "guid", "staffName": "Nguyễn Văn B",
+  "staffEmail": "b@example.com", "staffPhone": "0901234567",
+  "invitedBy": "guid", "invitedByName": "Nguyễn Văn A",
+  "status": "Pending",
+  "invitedAt": "...", "respondedAt": null, "unassignedAt": null
+}]
+```
+Trả cả `Pending` và `Accepted`. Rejected/Revoked ẩn để list gọn.
+
+**POST `/{id}/staff`** — Owner/Admin. Mời nhân viên (FE lấy `staffId` từ `GET /api/users/search`):
+```json
+{ "staffId": "guid" }
+```
+Vẫn chấp nhận `{ "staffEmail": "..." }` cho client cũ. BE tạo Pending + push Notification (`StaffInvited`, `ReferenceType.StaffInvitation`, `ReferenceId = assignment.id`).
+
+Lỗi: `400 StaffNotFound` (user không tồn tại), `400 IdentifierRequired` (không gửi cả hai), `400 CannotInviteOwner`, `409 AlreadyInvited` (đang Pending), `409 AlreadyAssigned` (đang Accepted).
+
+**DELETE `/{id}/staff/{assignmentId}`** — Owner/Admin. Gỡ hoặc huỷ lời mời (Pending/Accepted → `Revoked`).
+
+### Lời mời (góc nhìn người được mời)
+
+**GET `/api/stores/staff/invitations/mine`** — Authenticated. `data` = mảng `InvitationResponse`:
+```json
+[{
+  "id": "guid", "gardenStoreId": "guid", "storeName": "Vườn Xanh",
+  "invitedBy": "guid", "invitedByName": "Nguyễn Văn A",
+  "status": "Pending", "invitedAt": "..."
+}]
+```
+
+**POST `/api/stores/staff/{assignmentId}/accept`** — chỉ chủ lời mời (`StaffId == CurrentUserId`) và assignment đang `Pending`. Trả `StaffAssignmentResponse` mới (`Accepted`). Gửi Notification về cho owner.
+
+**POST `/api/stores/staff/{assignmentId}/reject`** — tương tự. Chuyển `Rejected`. Gửi Notification về owner.
+
+Lỗi: `404 InvitationNotFound`, `409 InvitationNotPending`.
 
 ---
 

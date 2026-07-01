@@ -18,6 +18,8 @@
 
         Return = 7,         // Thông báo yêu cầu trả hàng/đổi trả (Đã duyệt, Từ chối, Đã nhận hàng trả...)
 
-        Refund = 8          // Thông báo hoàn tiền (Đã hoàn tiền về nguồn/chuyển khoản)
+        Refund = 8,         // Thông báo hoàn tiền (Đã hoàn tiền về nguồn/chuyển khoản)
+
+        StaffInvitation = 9 // Lời mời làm nhân viên store — ReferenceId = GardenStaffAssignment.Id
     }
 }

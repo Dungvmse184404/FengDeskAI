@@ -1,5 +1,8 @@
+using FengDeskAI.Application.Features.Vendor.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Vendor;
+using FengDeskAI.Domain.Enums.Vendor;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,8 +29,9 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
     public async Task<bool> CanManageAsync(Guid storeId, Guid userId, CancellationToken ct = default)
     {
         if (await IsOwnerAsync(storeId, userId, ct)) return true;
+        // Chỉ Accepted mới có quyền — Pending/Rejected/Revoked đều KHÔNG có quyền (đã thống nhất trong invitation flow).
         return await _context.Set<GardenStaffAssignment>()
-            .AnyAsync(a => a.GardenStoreId == storeId && a.StaffId == userId && a.IsActive, ct);
+            .AnyAsync(a => a.GardenStoreId == storeId && a.StaffId == userId && a.Status == InvitationStatus.Accepted, ct);
     }
 
     public Task<bool> IsOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default)
@@ -37,6 +41,19 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
     public Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default)
         => _set.AsNoTracking()
             .Where(s => s.Owners.Any(o => o.OwnerUserId == ownerUserId))
+            .Include(s => s.Address).ThenInclude(a => a!.Ward)
+            .Include(s => s.Owners)
+            .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+
+    public Task<List<GardenStore>> GetForUserAsync(Guid userId, CancellationToken ct = default)
+        => _set.AsNoTracking()
+            // Owner (mọi quan hệ sở hữu) HOẶC nhân viên đã Accepted — Pending/Rejected/Revoked KHÔNG được vào seller.
+            .Where(s => s.Owners.Any(o => o.OwnerUserId == userId)
+                || _context.Set<GardenStaffAssignment>().Any(a =>
+                       a.GardenStoreId == s.Id
+                       && a.StaffId == userId
+                       && a.Status == InvitationStatus.Accepted))
             .Include(s => s.Address).ThenInclude(a => a!.Ward)
             .Include(s => s.Owners)
             .OrderByDescending(s => s.CreatedAt)
@@ -58,18 +75,65 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
     public async Task AddOwnerAsync(GardenStoreOwner owner, CancellationToken ct = default)
         => await _context.Set<GardenStoreOwner>().AddAsync(owner, ct);
 
-    public Task<List<GardenStaffAssignment>> GetStaffAsync(Guid storeId, CancellationToken ct = default)
-        => _context.Set<GardenStaffAssignment>().AsNoTracking()
-            .Where(a => a.GardenStoreId == storeId && a.IsActive)
-            .OrderByDescending(a => a.AssignedAt).ToListAsync(ct);
+    public Task<List<StaffAssignmentResponse>> GetStaffAsync(Guid storeId, CancellationToken ct = default)
+    {
+        // Trả về cả Pending + Accepted (để owner nhìn thấy lời mời chưa phản hồi).
+        // Rejected/Revoked ẩn để giữ list gọn — owner muốn xem lịch sử có thể mở endpoint riêng.
+        var users = _context.Set<User>().IgnoreQueryFilters();
+        return _context.Set<GardenStaffAssignment>().AsNoTracking()
+            .Where(a => a.GardenStoreId == storeId
+                && (a.Status == InvitationStatus.Pending || a.Status == InvitationStatus.Accepted))
+            .OrderByDescending(a => a.InvitedAt)
+            .Select(a => new StaffAssignmentResponse
+            {
+                Id = a.Id,
+                GardenStoreId = a.GardenStoreId,
+                StaffId = a.StaffId,
+                StaffName = users.Where(u => u.Id == a.StaffId).Select(u => u.FullName).FirstOrDefault() ?? string.Empty,
+                StaffEmail = users.Where(u => u.Id == a.StaffId).Select(u => u.Email).FirstOrDefault() ?? string.Empty,
+                StaffPhone = users.Where(u => u.Id == a.StaffId).Select(u => u.Phone).FirstOrDefault(),
+                InvitedBy = a.InvitedBy,
+                InvitedByName = users.Where(u => u.Id == a.InvitedBy).Select(u => u.FullName).FirstOrDefault(),
+                Status = a.Status,
+                InvitedAt = a.InvitedAt,
+                RespondedAt = a.RespondedAt,
+                UnassignedAt = a.UnassignedAt,
+            })
+            .ToListAsync(ct);
+    }
 
     public Task<GardenStaffAssignment?> GetActiveAssignmentAsync(Guid storeId, Guid staffId, CancellationToken ct = default)
         => _context.Set<GardenStaffAssignment>()
-            .FirstOrDefaultAsync(a => a.GardenStoreId == storeId && a.StaffId == staffId && a.IsActive, ct);
+            .FirstOrDefaultAsync(a => a.GardenStoreId == storeId && a.StaffId == staffId
+                && (a.Status == InvitationStatus.Pending || a.Status == InvitationStatus.Accepted), ct);
 
     public Task<GardenStaffAssignment?> GetAssignmentByIdAsync(Guid assignmentId, Guid storeId, CancellationToken ct = default)
         => _context.Set<GardenStaffAssignment>()
             .FirstOrDefaultAsync(a => a.Id == assignmentId && a.GardenStoreId == storeId, ct);
+
+    public Task<GardenStaffAssignment?> GetAssignmentByIdForUserAsync(Guid assignmentId, Guid staffUserId, CancellationToken ct = default)
+        => _context.Set<GardenStaffAssignment>()
+            .FirstOrDefaultAsync(a => a.Id == assignmentId && a.StaffId == staffUserId, ct);
+
+    public Task<List<InvitationResponse>> GetPendingInvitationsForUserAsync(Guid staffUserId, CancellationToken ct = default)
+    {
+        var users = _context.Set<User>().IgnoreQueryFilters();
+        var stores = _set.IgnoreQueryFilters();
+        return _context.Set<GardenStaffAssignment>().AsNoTracking()
+            .Where(a => a.StaffId == staffUserId && a.Status == InvitationStatus.Pending)
+            .OrderByDescending(a => a.InvitedAt)
+            .Select(a => new InvitationResponse
+            {
+                Id = a.Id,
+                GardenStoreId = a.GardenStoreId,
+                StoreName = stores.Where(s => s.Id == a.GardenStoreId).Select(s => s.Name).FirstOrDefault() ?? string.Empty,
+                InvitedBy = a.InvitedBy,
+                InvitedByName = users.Where(u => u.Id == a.InvitedBy).Select(u => u.FullName).FirstOrDefault(),
+                Status = a.Status,
+                InvitedAt = a.InvitedAt,
+            })
+            .ToListAsync(ct);
+    }
 
     public async Task AddAssignmentAsync(GardenStaffAssignment assignment, CancellationToken ct = default)
         => await _context.Set<GardenStaffAssignment>().AddAsync(assignment, ct);

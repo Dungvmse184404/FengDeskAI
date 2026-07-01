@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Features.Vendor.DTOs;
 using FengDeskAI.Domain.Entities.Vendor;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
@@ -15,15 +16,26 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     Task<bool> IsOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default);
     /// <summary>Các store mà user đồng sở hữu (kèm Address/Owners) — cho kênh người bán.</summary>
     Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default);
+    /// <summary>Store mà user là owner HOẶC garden staff đã Accepted — nguồn sự thật cho /stores/mine + quyền vào seller.</summary>
+    Task<List<GardenStore>> GetForUserAsync(Guid userId, CancellationToken ct = default);
     Task<List<GardenStoreOwner>> GetOwnersAsync(Guid storeId, CancellationToken ct = default);
     /// <summary>Owner record (tracked) để cập nhật/gỡ.</summary>
     Task<GardenStoreOwner?> GetOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default);
     Task<int> CountOwnersAsync(Guid storeId, CancellationToken ct = default);
     Task AddOwnerAsync(GardenStoreOwner owner, CancellationToken ct = default);
 
-    Task<List<GardenStaffAssignment>> GetStaffAsync(Guid storeId, CancellationToken ct = default);
+    /// <summary>
+    /// Danh sách nhân viên Pending+Accepted của store (đã join Users) — đủ tên/email/phone cho UI.
+    /// Rejected/Revoked ẩn để list gọn.
+    /// </summary>
+    Task<List<StaffAssignmentResponse>> GetStaffAsync(Guid storeId, CancellationToken ct = default);
+    /// <summary>Lời mời active (Pending hoặc Accepted) — dùng để check đã mời chưa.</summary>
     Task<GardenStaffAssignment?> GetActiveAssignmentAsync(Guid storeId, Guid staffId, CancellationToken ct = default);
     Task<GardenStaffAssignment?> GetAssignmentByIdAsync(Guid assignmentId, Guid storeId, CancellationToken ct = default);
+    /// <summary>Tìm assignment theo Id + StaffId (cho accept/reject — chỉ chủ lời mời truy cập).</summary>
+    Task<GardenStaffAssignment?> GetAssignmentByIdForUserAsync(Guid assignmentId, Guid staffUserId, CancellationToken ct = default);
+    /// <summary>Lời mời Pending gửi cho user (MyInvitationsPage).</summary>
+    Task<List<InvitationResponse>> GetPendingInvitationsForUserAsync(Guid staffUserId, CancellationToken ct = default);
     Task AddAssignmentAsync(GardenStaffAssignment assignment, CancellationToken ct = default);
 
     /// <summary>True nếu store tồn tại (kể cả đã soft-delete).</summary>

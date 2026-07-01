@@ -25,6 +25,11 @@ public enum NotificationType
     RefundCompleted,
     ExchangeShipped,
 
+    // Staff invitation
+    StaffInvited,
+    StaffInvitationAccepted,
+    StaffInvitationRejected,
+
     // System
     SystemAlert,
 }

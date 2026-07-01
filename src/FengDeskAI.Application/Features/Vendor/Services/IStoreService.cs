@@ -35,6 +35,14 @@ public interface IStoreService
     Task<IServiceResult> RemoveOwnerAsync(Guid id, Guid ownerUserId, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
 
     Task<IServiceResult<List<StaffAssignmentResponse>>> GetStaffAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
+    /// <summary>Mời nhân viên — tạo assignment Pending + gửi Notification cho người được mời.</summary>
     Task<IServiceResult<StaffAssignmentResponse>> AssignStaffAsync(Guid id, Guid actorUserId, bool isAdmin, AssignStaffRequest request, CancellationToken ct = default);
+    /// <summary>Owner gỡ / huỷ lời mời — chuyển sang Revoked.</summary>
     Task<IServiceResult> UnassignStaffAsync(Guid id, Guid assignmentId, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
+
+    // ===== Invitation (góc nhìn người được mời) =====
+    /// <summary>Các lời mời Pending gửi cho user hiện tại.</summary>
+    Task<IServiceResult<List<InvitationResponse>>> GetMyInvitationsAsync(Guid userId, CancellationToken ct = default);
+    Task<IServiceResult<StaffAssignmentResponse>> AcceptInvitationAsync(Guid assignmentId, Guid userId, CancellationToken ct = default);
+    Task<IServiceResult> RejectInvitationAsync(Guid assignmentId, Guid userId, CancellationToken ct = default);
 }

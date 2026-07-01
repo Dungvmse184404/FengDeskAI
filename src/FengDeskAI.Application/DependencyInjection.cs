@@ -52,6 +52,7 @@ public static class DependencyInjection
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRegistrationFlowService, RegistrationFlowService>();
+        services.AddScoped<IUserService, UserService>();
         services.AddScoped<IWorkspaceProfileService, WorkspaceProfileService>();
         services.AddScoped<IWorkspaceTypeService, WorkspaceTypeService>();
 

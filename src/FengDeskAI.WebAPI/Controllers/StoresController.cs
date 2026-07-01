@@ -103,4 +103,21 @@ public class StoresController : ApiControllerBase
     [HttpDelete("{id:guid}/staff/{assignmentId:guid}")]
     public async Task<IActionResult> UnassignStaff(Guid id, Guid assignmentId, CancellationToken ct)
         => ToActionResult(await _service.UnassignStaffAsync(id, assignmentId, CurrentUserId, IsAdmin, ct));
+
+    // ===== Invitation (góc nhìn người được mời) =====
+
+    /// <summary>Các lời mời Pending gửi cho user hiện tại — dùng cho MyInvitationsPage.</summary>
+    [HttpGet("staff/invitations/mine")]
+    public async Task<IActionResult> GetMyInvitations(CancellationToken ct)
+        => ToActionResult(await _service.GetMyInvitationsAsync(CurrentUserId, ct));
+
+    /// <summary>Đồng ý lời mời — chỉ chính người được mời và khi assignment đang Pending.</summary>
+    [HttpPost("staff/{assignmentId:guid}/accept")]
+    public async Task<IActionResult> AcceptInvitation(Guid assignmentId, CancellationToken ct)
+        => ToActionResult(await _service.AcceptInvitationAsync(assignmentId, CurrentUserId, ct));
+
+    /// <summary>Từ chối lời mời — chỉ chính người được mời và khi assignment đang Pending.</summary>
+    [HttpPost("staff/{assignmentId:guid}/reject")]
+    public async Task<IActionResult> RejectInvitation(Guid assignmentId, CancellationToken ct)
+        => ToActionResult(await _service.RejectInvitationAsync(assignmentId, CurrentUserId, ct));
 }

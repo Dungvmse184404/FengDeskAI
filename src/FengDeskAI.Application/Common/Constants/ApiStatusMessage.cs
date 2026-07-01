@@ -228,13 +228,25 @@ public static class ApiStatusMessages
     {
         public const string StoreNotFound = "Không tìm thấy cửa hàng.";
         public const string ViewForbidden = "Bạn không có quyền xem nhân viên cửa hàng này.";
-        public const string AssignForbidden = "Bạn không có quyền phân công nhân viên cho cửa hàng này.";
-        public const string UnassignForbidden = "Bạn không có quyền gỡ phân công nhân viên cửa hàng này.";
-        public const string StaffNotFound = "Nhân viên (user) không tồn tại.";
-        public const string AlreadyAssigned = "Nhân viên đã được phân công cho cửa hàng này.";
-        public const string Assigned = "Phân công nhân viên thành công.";
+        public const string AssignForbidden = "Bạn không có quyền mời nhân viên cho cửa hàng này.";
+        public const string UnassignForbidden = "Bạn không có quyền gỡ nhân viên / huỷ lời mời cửa hàng này.";
+        public const string StaffNotFound = "Người dùng được mời không tồn tại.";
+        public const string IdentifierRequired = "Vui lòng cung cấp email hoặc ID nhân viên.";
+        public const string CannotInviteOwner = "Không thể mời chính chủ cửa hàng làm nhân viên.";
+        public const string AlreadyInvited = "Đã gửi lời mời cho người này, đang chờ phản hồi.";
+        public const string AlreadyAssigned = "Người này đã là nhân viên của cửa hàng.";
+        public const string Invited = "Đã gửi lời mời nhân viên.";
         public const string AssignmentNotFound = "Không tìm thấy phân công đang hiệu lực.";
-        public const string Unassigned = "Đã gỡ phân công nhân viên.";
+        public const string Unassigned = "Đã gỡ nhân viên / huỷ lời mời.";
+        public const string InvitationNotFound = "Không tìm thấy lời mời cho bạn.";
+        public const string InvitationNotPending = "Lời mời này đã được phản hồi trước đó.";
+        public const string InvitationAccepted = "Bạn đã đồng ý làm nhân viên của cửa hàng.";
+        public const string InvitationRejected = "Bạn đã từ chối lời mời.";
+    }
+
+    public static class UserSearch
+    {
+        public const string QueryTooShort = "Cần nhập tối thiểu 3 ký tự để tìm kiếm.";
     }
 
     public static class Returns

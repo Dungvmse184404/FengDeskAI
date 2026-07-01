@@ -16,14 +16,14 @@
 - (`FengDeskAI/docs/reports`)
 
 ### 1.2. Report3 Software Requirement Specification (SRS)
-- [ ] 1. Product Overview
+- [x] 1. Product Overview
 - [ ] 2. User Requirements
   - [ ] 2.1 Actors (Customer, GardenOwner, Staff, Manager, Admin)
   - [ ] 2.2 Use Cases — diagram + descriptions *(trang "Use case diagram" đã có trong drawio, cần đối chiếu)*
 - [ ] 3. Functional Requirements
   - [ ] 3.1.1 Screens Flow · 3.1.2 Screen Descriptions · 3.1.3 Screen Authorization · 3.1.4 Non-Screen Functions
   - [ ] **3.1.5 Entity Relationship Diagram** ← ĐANG LÀM
-    - [ ] **Conceptual ERD** — đang sửa: thêm Cart, Delivery, Payment, Return Request, Refund, Review, Notification, Conversation/Message, Category, Workspace Type, Address; bỏ "Report"; tách Feng Shui Attribute vs Feng Shui Rule
+    - [x] **Conceptual ERD** — đang sửa: thêm Cart, Delivery, Payment, Return Request, Refund, Review, Notification, Conversation/Message, Category, Workspace Type, Address; bỏ "Report"; tách Feng Shui Attribute vs Feng Shui Rule
     - [x] Logical ERD đã có (`docs/erd` — "Logical Diagram" / "v2"); cần đối chiếu lại theo Domain entities
   - [ ] 3.2+ Đặc tả Feature/Function (theo từng controller/nghiệp vụ)
 - [ ] 4. Non-Functional Requirements (4.1 External Interfaces, 4.2 Quality Attributes)
