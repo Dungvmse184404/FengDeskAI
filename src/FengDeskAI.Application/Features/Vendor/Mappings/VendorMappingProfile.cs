@@ -11,7 +11,7 @@ public class VendorMappingProfile : Profile
         CreateMap<StoreAddress, StoreAddressResponse>();
         CreateMap<GardenStore, StoreResponse>();
         CreateMap<GardenStoreOwner, StoreOwnerResponse>();
-        CreateMap<GardenStaffAssignment, StaffAssignmentResponse>();
+        // StaffAssignmentResponse được build trực tiếp trong repo/service vì cần join Users.
 
         CreateMap<CreateStoreRequest, GardenStore>()
             .ForMember(d => d.Id, opt => opt.Ignore())

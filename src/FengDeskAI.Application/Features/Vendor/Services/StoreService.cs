@@ -1,10 +1,14 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Features.Announcement.DTOs;
+using FengDeskAI.Application.Features.Announcement.Services;
 using FengDeskAI.Application.Features.Vendor.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Enums;
+using FengDeskAI.Domain.Enums.Notification;
+using FengDeskAI.Domain.Enums.Vendor;
 
 namespace FengDeskAI.Application.Features.Vendor.Services;
 
@@ -12,11 +16,13 @@ public class StoreService : IStoreService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly INotificationService _notifications;
 
-    public StoreService(IUnitOfWork uow, IMapper mapper)
+    public StoreService(IUnitOfWork uow, IMapper mapper, INotificationService notifications)
     {
         _uow = uow;
         _mapper = mapper;
+        _notifications = notifications;
     }
 
     public async Task<IServiceResult<List<StoreResponse>>> GetActiveAsync(CancellationToken ct = default)
@@ -216,7 +222,7 @@ public class StoreService : IStoreService
             return ServiceResult<List<StaffAssignmentResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.ViewForbidden);
 
         var staff = await _uow.Stores.GetStaffAsync(id, ct);
-        return ServiceResult<List<StaffAssignmentResponse>>.Success(_mapper.Map<List<StaffAssignmentResponse>>(staff));
+        return ServiceResult<List<StaffAssignmentResponse>>.Success(staff);
     }
 
     public async Task<IServiceResult<StaffAssignmentResponse>> AssignStaffAsync(Guid id, Guid actorUserId, bool isAdmin, AssignStaffRequest request, CancellationToken ct = default)
@@ -226,24 +232,71 @@ public class StoreService : IStoreService
             return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
         if (!await IsOwnerOrAdminAsync(store.Id, actorUserId, isAdmin, ct))
             return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.AssignForbidden);
-        if (!await _uow.Users.AnyAsync(u => u.Id == request.StaffId, ct))
+
+        // FE chính dùng /api/users/search → staffId. Vẫn chấp nhận email fallback cho client cũ.
+        var email = request.StaffEmail?.Trim();
+        var hasIdentifier = request.StaffId.HasValue || !string.IsNullOrEmpty(email);
+        if (!hasIdentifier)
+            return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Staff.IdentifierRequired);
+
+        var staff = request.StaffId.HasValue
+            ? await _uow.Users.GetByIdAsync(request.StaffId.Value, ct)
+            : await _uow.Users.GetByEmailAsync(email!, ct);
+        if (staff is null)
             return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Staff.StaffNotFound);
-        if (await _uow.Stores.GetActiveAssignmentAsync(id, request.StaffId, ct) is not null)
-            return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Staff.AlreadyAssigned);
+
+        // Không mời chính owner làm staff của store đó.
+        if (await _uow.Stores.IsOwnerAsync(id, staff.Id, ct))
+            return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Staff.CannotInviteOwner);
+
+        var existing = await _uow.Stores.GetActiveAssignmentAsync(id, staff.Id, ct);
+        if (existing is not null)
+        {
+            var key = existing.Status == InvitationStatus.Pending
+                ? ApiStatusMessages.Staff.AlreadyInvited
+                : ApiStatusMessages.Staff.AlreadyAssigned;
+            return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.Conflict, key);
+        }
 
         var assignment = new GardenStaffAssignment
         {
             GardenStoreId = id,
-            StaffId = request.StaffId,
-            AssignedBy = actorUserId,
-            IsActive = true,
-            AssignedAt = DateTime.UtcNow,
+            StaffId = staff.Id,
+            InvitedBy = actorUserId,
+            Status = InvitationStatus.Pending,
+            InvitedAt = DateTime.UtcNow,
         };
         await _uow.Stores.AddAssignmentAsync(assignment, ct);
+        var actor = await _uow.Users.GetByIdAsync(actorUserId, ct);
         await _uow.SaveChangesAsync(ct);
 
-        return ServiceResult<StaffAssignmentResponse>.Success(
-            _mapper.Map<StaffAssignmentResponse>(assignment), ApiStatusMessages.Staff.Assigned, ApiStatusCodes.Created);
+        // Notification cho người được mời. Cùng transaction là lý tưởng nhưng NotificationService tự SaveChanges — chấp nhận as-is.
+        await _notifications.CreateAsync(new CreateNotificationRequest
+        {
+            UserId = staff.Id,
+            Type = NotificationType.StaffInvited,
+            Title = "Lời mời làm nhân viên",
+            Message = $"Bạn được mời làm nhân viên của cửa hàng \"{store.Name}\".",
+            ReferenceId = assignment.Id,
+            ReferenceType = ReferenceType.StaffInvitation,
+        }, ct);
+
+        var response = new StaffAssignmentResponse
+        {
+            Id = assignment.Id,
+            GardenStoreId = assignment.GardenStoreId,
+            StaffId = staff.Id,
+            StaffName = staff.FullName,
+            StaffEmail = staff.Email,
+            StaffPhone = staff.Phone,
+            InvitedBy = actorUserId,
+            InvitedByName = actor?.FullName,
+            Status = assignment.Status,
+            InvitedAt = assignment.InvitedAt,
+            RespondedAt = assignment.RespondedAt,
+            UnassignedAt = assignment.UnassignedAt,
+        };
+        return ServiceResult<StaffAssignmentResponse>.Success(response, ApiStatusMessages.Staff.Invited, ApiStatusCodes.Created);
     }
 
     public async Task<IServiceResult> UnassignStaffAsync(Guid id, Guid assignmentId, Guid actorUserId, bool isAdmin, CancellationToken ct = default)
@@ -255,18 +308,115 @@ public class StoreService : IStoreService
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.UnassignForbidden);
 
         var assignment = await _uow.Stores.GetAssignmentByIdAsync(assignmentId, id, ct);
-        if (assignment is null || !assignment.IsActive)
+        if (assignment is null
+            || (assignment.Status != InvitationStatus.Pending && assignment.Status != InvitationStatus.Accepted))
             return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Staff.AssignmentNotFound);
 
-        assignment.IsActive = false;
+        assignment.Status = InvitationStatus.Revoked;
         assignment.UnassignedAt = DateTime.UtcNow;
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success(ApiStatusMessages.Staff.Unassigned);
     }
 
+    public async Task<IServiceResult<List<InvitationResponse>>> GetMyInvitationsAsync(Guid userId, CancellationToken ct = default)
+    {
+        var list = await _uow.Stores.GetPendingInvitationsForUserAsync(userId, ct);
+        return ServiceResult<List<InvitationResponse>>.Success(list);
+    }
+
+    public async Task<IServiceResult<StaffAssignmentResponse>> AcceptInvitationAsync(Guid assignmentId, Guid userId, CancellationToken ct = default)
+    {
+        var assignment = await _uow.Stores.GetAssignmentByIdForUserAsync(assignmentId, userId, ct);
+        if (assignment is null)
+            return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Staff.InvitationNotFound);
+        if (assignment.Status != InvitationStatus.Pending)
+            return ServiceResult<StaffAssignmentResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Staff.InvitationNotPending);
+
+        assignment.Status = InvitationStatus.Accepted;
+        assignment.RespondedAt = DateTime.UtcNow;
+        await _uow.SaveChangesAsync(ct);
+
+        // Notify owner đã accept (tuỳ chọn — nhẹ nhàng, không phải lỗi nếu fail).
+        var store = await _uow.Stores.GetByIdAsync(assignment.GardenStoreId, ct);
+        var staff = await _uow.Users.GetByIdAsync(userId, ct);
+        if (store is not null && staff is not null)
+        {
+            await _notifications.CreateAsync(new CreateNotificationRequest
+            {
+                UserId = assignment.InvitedBy,
+                Type = NotificationType.StaffInvitationAccepted,
+                Title = "Lời mời được chấp nhận",
+                Message = $"{staff.FullName} đã đồng ý làm nhân viên của \"{store.Name}\".",
+                ReferenceId = assignment.Id,
+                ReferenceType = ReferenceType.StaffInvitation,
+            }, ct);
+        }
+
+        return await BuildAssignmentResponseAsync(assignment, ApiStatusMessages.Staff.InvitationAccepted, ct);
+    }
+
+    public async Task<IServiceResult> RejectInvitationAsync(Guid assignmentId, Guid userId, CancellationToken ct = default)
+    {
+        var assignment = await _uow.Stores.GetAssignmentByIdForUserAsync(assignmentId, userId, ct);
+        if (assignment is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Staff.InvitationNotFound);
+        if (assignment.Status != InvitationStatus.Pending)
+            return ServiceResult.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Staff.InvitationNotPending);
+
+        assignment.Status = InvitationStatus.Rejected;
+        assignment.RespondedAt = DateTime.UtcNow;
+        await _uow.SaveChangesAsync(ct);
+
+        var store = await _uow.Stores.GetByIdAsync(assignment.GardenStoreId, ct);
+        var staff = await _uow.Users.GetByIdAsync(userId, ct);
+        if (store is not null && staff is not null)
+        {
+            await _notifications.CreateAsync(new CreateNotificationRequest
+            {
+                UserId = assignment.InvitedBy,
+                Type = NotificationType.StaffInvitationRejected,
+                Title = "Lời mời bị từ chối",
+                Message = $"{staff.FullName} đã từ chối lời mời làm nhân viên của \"{store.Name}\".",
+                ReferenceId = assignment.Id,
+                ReferenceType = ReferenceType.StaffInvitation,
+            }, ct);
+        }
+
+        return ServiceResult.Success(ApiStatusMessages.Staff.InvitationRejected);
+    }
+
+    private async Task<IServiceResult<StaffAssignmentResponse>> BuildAssignmentResponseAsync(
+        GardenStaffAssignment assignment, string message, CancellationToken ct)
+    {
+        var staff = await _uow.Users.GetByIdAsync(assignment.StaffId, ct);
+        var inviter = await _uow.Users.GetByIdAsync(assignment.InvitedBy, ct);
+        var res = new StaffAssignmentResponse
+        {
+            Id = assignment.Id,
+            GardenStoreId = assignment.GardenStoreId,
+            StaffId = assignment.StaffId,
+            StaffName = staff?.FullName ?? string.Empty,
+            StaffEmail = staff?.Email ?? string.Empty,
+            StaffPhone = staff?.Phone,
+            InvitedBy = assignment.InvitedBy,
+            InvitedByName = inviter?.FullName,
+            Status = assignment.Status,
+            InvitedAt = assignment.InvitedAt,
+            RespondedAt = assignment.RespondedAt,
+            UnassignedAt = assignment.UnassignedAt,
+        };
+        return ServiceResult<StaffAssignmentResponse>.Success(res, message);
+    }
+
     public async Task<IServiceResult<List<StoreResponse>>> GetMineAsync(Guid userId, CancellationToken ct = default)
-        => ServiceResult<List<StoreResponse>>.Success(
-            _mapper.Map<List<StoreResponse>>(await _uow.Stores.GetByOwnerAsync(userId, ct)));
+    {
+        // Gồm cả store mà user là nhân viên đã Accepted — để garden staff vào được khu người bán.
+        var stores = _mapper.Map<List<StoreResponse>>(await _uow.Stores.GetForUserAsync(userId, ct));
+        // IsOwner để FE phân biệt "Chủ cửa hàng" vs "Nhân viên" + ẩn nút owner-only.
+        foreach (var s in stores)
+            s.IsOwner = s.Owners.Any(o => o.OwnerUserId == userId);
+        return ServiceResult<List<StoreResponse>>.Success(stores);
+    }
 
     // ===== Owner (đồng sở hữu — marketplace) =====
 
