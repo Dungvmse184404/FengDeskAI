@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Entities.Workspace;
+using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -23,16 +24,16 @@ public class WorkspaceTypeSeeder : IDataSeeder
     public int Order => 5;
     public string Name => "Workspace types (system + personal weights)";
 
-    // (Name, IsPublic, PersonalWeight)
-    private static readonly (string Name, bool IsPublic, decimal Weight, string Desc)[] SystemTypes =
+    // (Name, IsPublic, PersonalWeight, Scope, Desc)
+    private static readonly (string Name, bool IsPublic, decimal Weight, WorkspaceScope Scope, string Desc)[] SystemTypes =
     {
-        ("Personal Desk", false, 1.0m, "Bàn làm việc cá nhân."),
-        ("Home Office", false, 1.0m, "Phòng làm việc tại nhà, một người dùng."),
-        ("Private Office", false, 1.0m, "Phòng làm việc riêng trong công ty."),
-        ("Meeting Room", true, 0.5m, "Phòng họp dùng chung nhiều người."),
-        ("Co-working Booth", true, 0.5m, "Khoang làm việc chia sẻ."),
-        ("Open Workspace", true, 0.5m, "Khu làm việc mở dùng chung."),
-        ("Reception / Lounge", true, 0.5m, "Khu lễ tân / tiếp khách chung."),
+        ("Personal Desk", false, 1.0m, WorkspaceScope.Private, "Bàn làm việc cá nhân."),
+        ("Home Office", false, 1.0m, WorkspaceScope.Private, "Phòng làm việc tại nhà, một người dùng."),
+        ("Private Office", false, 1.0m, WorkspaceScope.Private, "Phòng làm việc riêng trong công ty."),
+        ("Meeting Room", true, 0.5m, WorkspaceScope.Shared, "Phòng họp dùng chung nhiều người."),
+        ("Co-working Booth", true, 0.5m, WorkspaceScope.Shared, "Khoang làm việc chia sẻ."),
+        ("Open Workspace", true, 0.5m, WorkspaceScope.Shared, "Khu làm việc mở dùng chung."),
+        ("Reception / Lounge", true, 0.5m, WorkspaceScope.Public, "Khu lễ tân / tiếp khách chung."),
     };
 
     public async Task SeedAsync(CancellationToken ct = default)
@@ -49,6 +50,7 @@ public class WorkspaceTypeSeeder : IDataSeeder
             Description = t.Desc,
             IsPublic = t.IsPublic,
             PersonalWeight = t.Weight,
+            Scope = t.Scope,
             IsSystemSeeded = true,
         });
 

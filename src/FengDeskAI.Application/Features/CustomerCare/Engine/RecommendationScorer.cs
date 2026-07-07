@@ -1,5 +1,3 @@
-using FengDeskAI.Domain.Enums;
-using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 
@@ -15,179 +13,116 @@ internal static class VibeCodes
     public const string Energize = "Energize";
 }
 
-/// <inheritdoc />
+/// <summary>
+/// Engine v3 — 3 bước theo PHẦN D của spec: Gap → lọc &amp; chấm khớp → Directional Validation.
+/// Sản phẩm là "viên thuốc" bù mất cân bằng của phòng; bơm vào hành thiếu → dương, hành thừa → âm.
+/// </summary>
 public sealed class RecommendationScorer : IRecommendationScorer
 {
-    // Ngưỡng diện tích mặt bàn (cm²) → sức chứa kích thước sản phẩm.
-    private const int SmallDeskMax = 3000;
-    private const int MediumDeskMax = 8000;
-
-    public PersonalProfile? BuildPersonalProfile(DateTime? dateOfBirth, Gender gender)
-        => FengShuiCalculator.BuildPersonalProfile(dateOfBirth, gender);
-
     public IReadOnlyList<ScoredProduct> Score(ScoringContext context, IReadOnlyList<ProductFacts> candidates)
     {
+        // Bước 1 — Gap (mảnh ghép còn thiếu). + = thiếu cần bù, − = thừa cần tránh.
+        var gap = context.AdjustedIdeal.Subtract(context.CurrentVector);
+        decimal gapL1 = gap.L1();
+
         var results = new List<ScoredProduct>(candidates.Count);
         foreach (var product in candidates)
-            results.Add(ScoreOne(context, product));
+        {
+            var scored = ScoreOne(context, product, gap, gapL1);
+            if (scored is not null)
+                results.Add(scored);
+        }
 
-        return results
-            .OrderByDescending(r => r.Score)
-            .ToList();
+        return results.OrderByDescending(r => r.Score).ToList();
     }
 
-    private ScoredProduct ScoreOne(ScoringContext ctx, ProductFacts product)
+    private static ScoredProduct? ScoreOne(ScoringContext ctx, ProductFacts product, ElementVector gap, decimal gapL1)
     {
         var facts = new List<string>();
         var cautions = new List<string>();
-        var w = ctx.Weights;
 
-        // ----- Phần cá nhân (mệnh + hướng) — nhân PersonalWeight -----
-        decimal personalRaw = 0m;
-        if (ctx.Personal is { } personal)
+        // ── Bước 2a — Intent filter (hard): sản phẩm phải có vibe khớp mục đích ──
+        var targetVibe = TargetVibe(ctx.Purpose);
+        if (targetVibe is { } vibe && !product.Vibes.Contains(vibe))
+            return null; // loại khỏi candidates
+
+        var productDominant = product.Vector.Dominant();
+
+        // ── Bước 2b — User constraint (chỉ khi có personalVector) ──
+        decimal userPenalty = 0m;
+        if (ctx.PersonalVector is { } personal)
         {
-            personalRaw += w.Element * ScoreElement(ctx, personal, product, facts, cautions); // mệnh: luôn xét
-            if (personal.FavorableDirections.Count > 0)
-                personalRaw += w.Direction * ScoreDirection(personal, product, ctx.DeskOrientation, facts);
-            else
-                cautions.Add("Chưa xác định giới tính Nam/Nữ — bỏ qua yếu tố hướng (Kua), vẫn xét mệnh.");
-        }
-        else
-        {
-            cautions.Add("Chưa có ngày sinh — bỏ qua yếu tố cá nhân, chỉ xét công năng.");
-        }
-
-        decimal personalScore = ctx.PersonalWeight * personalRaw;
-
-        // ----- Phần chức năng — luôn tính nguyên -----
-        decimal functionalScore =
-              w.Purpose * ScorePurpose(ctx.Purpose, product, facts)
-            + w.Style * ScoreStyle(ctx.Style, product, facts)
-            + w.Lighting * ScoreLighting(ctx.Lighting, product, facts)
-            + w.Size * ScoreSize(ctx.DeskArea, product, facts, cautions);
-
-        decimal total = Math.Round(personalScore + functionalScore, 3);
-        return new ScoredProduct(product.ProductId, total, facts, cautions);
-    }
-
-    private static decimal ScoreElement(
-        ScoringContext ctx, PersonalProfile personal, ProductFacts product,
-        List<string> facts, List<string> cautions)
-    {
-        if (product.PrimaryElement is not { } primary)
-            return 0m;
-
-        decimal value = ResolveElementScore(ctx, personal.Element, primary);
-        var relation = FengShuiCalculator.GetRelation(personal.Element, primary);
-
-        // Hành phụ đóng góp nửa trọng số.
-        if (product.SecondaryElement is { } secondary)
-            value += 0.5m * ResolveElementScore(ctx, personal.Element, secondary);
-
-        string phrase = RelationPhrase(relation);
-        if (value >= 0)
-            facts.Add($"Hành {primary} {phrase} (bản mệnh {personal.Element}).");
-        else
-            cautions.Add($"Hành {primary} {phrase} (bản mệnh {personal.Element}).");
-
-        return value;
-    }
-
-    private static decimal ResolveElementScore(ScoringContext ctx, FengShuiElement subject, FengShuiElement obj)
-        => ctx.ElementScores.TryGetValue((subject, obj), out var s)
-            ? s
-            : FengShuiCalculator.DefaultScore(FengShuiCalculator.GetRelation(subject, obj));
-
-    private static decimal ScoreDirection(
-        PersonalProfile personal, ProductFacts product, CompassDirection desk, List<string> facts)
-    {
-        if (product.PrimaryElement is not { } primary)
-            return 0m;
-
-        if (personal.FavorableDirections.Contains(desk))
-        {
-            // Bàn đã quay hướng tốt → ưu tiên vật phẩm cùng hành với hướng để cộng hưởng.
-            if (primary == FengShuiCalculator.GetDirectionElement(desk))
+            var personalDominant = personal.Dominant();
+            // Hành trội sản phẩm KHẮC mệnh user → xét quan hệ từ mệnh: BiKhac = bị obj khắc.
+            bool conflict = FengShuiCalculator.GetRelation(personalDominant, productDominant) == FengShuiRelation.BiKhac;
+            if (conflict)
             {
-                facts.Add($"Hành {primary} cộng hưởng với hướng bàn {desk} (hướng tốt theo Kua {personal.KuaNumber}).");
-                return 1.0m;
+                if (ctx.Scope == WorkspaceScope.Private)
+                    return null; // hard: loại khỏi candidates
+                userPenalty = ctx.Params.UserConflictPenalty; // soft: trừ điểm
+                cautions.Add($"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ điểm (không gian dùng chung).");
             }
-            return 0m;
+            else
+            {
+                facts.Add($"Hành {productDominant} không khắc bản mệnh {personalDominant}.");
+            }
         }
 
-        // Bàn quay hướng chưa tốt → vật phẩm mang hành của các hướng tốt giúp cân bằng.
-        var cureElements = personal.FavorableDirections
-            .Select(FengShuiCalculator.GetDirectionElement)
+        // ── Bước 2c — Điểm khớp Gap ──
+        decimal gapScore = gapL1 == 0m ? 0m : gap.Dot(product.Vector) / gapL1;
+        DescribeGap(gap, product.Vector, productDominant, gapScore, facts, cautions);
+
+        // ── Bước 3 — Directional Validation ──
+        var (dirPenalty, placementHint) = ValidateDirection(ctx, productDominant);
+
+        decimal score = Math.Round(Math.Clamp(gapScore - userPenalty - dirPenalty, -1m, 1m), 3);
+        return new ScoredProduct(product.ProductId, score, facts, cautions, placementHint);
+    }
+
+    private static void DescribeGap(
+        ElementVector gap, ElementVector productVector, FengShuiElement productDominant,
+        decimal gapScore, List<string> facts, List<string> cautions)
+    {
+        // Top hành đang thiếu (gap dương lớn nhất) mà sản phẩm bù được.
+        var topNeeded = gap.Enumerate().Where(x => x.Value > 0)
+            .OrderByDescending(x => x.Value).Take(2).Select(x => x.Element).ToList();
+        var topExcess = gap.Enumerate().Where(x => x.Value < 0)
+            .OrderBy(x => x.Value).Take(2).Select(x => x.Element).ToList();
+
+        if (gapScore >= 0)
+        {
+            var bumped = topNeeded.Where(e => productVector[e] > 0m).ToList();
+            facts.Add(bumped.Count > 0
+                ? $"Bù năng lượng hành {string.Join("/", bumped)} đang thiếu của phòng."
+                : $"Hành trội {productDominant} hài hòa với nhu cầu của phòng.");
+        }
+        else
+        {
+            var worsened = topExcess.Where(e => productVector[e] > 0m).ToList();
+            cautions.Add(worsened.Count > 0
+                ? $"Bơm thêm hành {string.Join("/", worsened)} vốn đã thừa trong phòng — nên cân nhắc."
+                : $"Chưa bù đúng hành phòng đang thiếu.");
+        }
+    }
+
+    /// <summary>
+    /// Hướng hợp vật phẩm = hướng cùng hành trội ∪ hướng SINH ra hành trội, trừ đi hướng bị chắn.
+    /// Còn hướng hợp → không phạt + hint; không còn → phạt DIRECTION_PENALTY.
+    /// </summary>
+    private static (decimal Penalty, string? Hint) ValidateDirection(ScoringContext ctx, FengShuiElement productDominant)
+    {
+        var generating = FengShuiCalculator.GetGeneratingElement(productDominant);
+        var goodDirs = FengShuiCalculator.GetDirectionsForElement(productDominant)
+            .Concat(FengShuiCalculator.GetDirectionsForElement(generating))
             .ToHashSet();
-        if (cureElements.Contains(primary))
-        {
-            facts.Add($"Bàn quay hướng {desk} chưa thuộc nhóm tốt; hành {primary} giúp dẫn năng lượng về hướng hợp mệnh.");
-            return 1.0m;
-        }
-        return 0m;
-    }
 
-    private static decimal ScorePurpose(WorkPurpose purpose, ProductFacts product, List<string> facts)
-    {
-        var target = TargetVibe(purpose);
-        if (target is { } vibe && product.Vibes.Contains(vibe))
-        {
-            facts.Add($"Tạo cảm giác {VibePhrase(vibe)} — hợp mục đích {purpose}.");
-            return 1.0m;
-        }
-        return 0m;
-    }
+        var placementDirs = goodDirs.Where(d => !ctx.ViolatedDirections.Contains(d)).ToList();
 
-    // ── Vibe giờ là mã chuỗi (vibes.code) thay cho enum ──
+        if (placementDirs.Count > 0)
+            return (0m, $"Hãy đặt vật phẩm này ở hướng {DirectionVi(placementDirs[0])} của phòng để kích hoạt năng lượng tốt nhất.");
 
-    private static decimal ScoreStyle(string style, ProductFacts product, List<string> facts)
-    {
-        if (!string.IsNullOrEmpty(style) && product.Styles.Contains(style))
-        {
-            facts.Add($"Phong cách {style} đồng bộ với không gian.");
-            return 1.0m;
-        }
-        return 0m;
-    }
-
-    private static decimal ScoreLighting(LightingType lighting, ProductFacts product, List<string> facts)
-    {
-        switch (lighting)
-        {
-            case LightingType.Dim:
-                if (product.PrimaryElement == FengShuiElement.Hoa || product.Vibes.Contains(VibeCodes.Energize))
-                {
-                    facts.Add("Bổ sung sinh khí/ánh sáng cho không gian thiếu sáng.");
-                    return 1.0m;
-                }
-                break;
-            case LightingType.Natural:
-                if (product.PrimaryElement is FengShuiElement.Thuy or FengShuiElement.Moc
-                    || product.Vibes.Contains(VibeCodes.Calm))
-                {
-                    facts.Add("Làm dịu, cân bằng không gian nhiều ánh sáng tự nhiên.");
-                    return 1.0m;
-                }
-                break;
-        }
-        return 0m;
-    }
-
-    private static decimal ScoreSize(int deskArea, ProductFacts product, List<string> facts, List<string> cautions)
-    {
-        var capacity = deskArea < SmallDeskMax ? SizeClass.Small
-            : deskArea < MediumDeskMax ? SizeClass.Medium
-            : SizeClass.Large;
-
-        int diff = (int)product.SizeClass - (int)capacity;
-        if (diff <= 0)
-        {
-            facts.Add($"Kích thước {product.SizeClass} vừa vặn mặt bàn ({deskArea} cm²).");
-            return 1.0m;
-        }
-
-        cautions.Add($"Kích thước {product.SizeClass} có thể quá khổ so với mặt bàn ({deskArea} cm²).");
-        return -0.5m * diff;
+        return (ctx.Params.DirectionPenalty,
+            "Các hướng hợp với vật phẩm đều bị chắn (cửa/WC/góc tối) — cân nhắc vị trí đặt.");
     }
 
     private static string? TargetVibe(WorkPurpose purpose) => purpose switch
@@ -198,26 +133,19 @@ public sealed class RecommendationScorer : IRecommendationScorer
         WorkPurpose.Creative => VibeCodes.Creative,
         WorkPurpose.Gaming => VibeCodes.Energize,
         WorkPurpose.Mixed => VibeCodes.Focus,
-        _ => null,
+        _ => null, // Other → không lọc theo intent
     };
 
-    private static string RelationPhrase(FengShuiRelation relation) => relation switch
+    private static string DirectionVi(CompassDirection d) => d switch
     {
-        FengShuiRelation.TuongHoa => "tương hòa, hợp bản mệnh",
-        FengShuiRelation.TuongSinh => "tương sinh, nuôi dưỡng bản mệnh",
-        FengShuiRelation.TuongKhac => "được bản mệnh chế ngự, dùng tốt",
-        FengShuiRelation.TietKhi => "khiến bản mệnh hao khí nhẹ",
-        FengShuiRelation.BiKhac => "khắc bản mệnh, nên cân nhắc",
-        _ => "",
-    };
-
-    private static string VibePhrase(string vibe) => vibe switch
-    {
-        VibeCodes.Focus => "tập trung",
-        VibeCodes.Relax => "thư giãn",
-        VibeCodes.Creative => "khơi gợi sáng tạo",
-        VibeCodes.Calm => "tĩnh tại",
-        VibeCodes.Energize => "tràn năng lượng",
-        _ => vibe,
+        CompassDirection.North => "Bắc",
+        CompassDirection.Northeast => "Đông Bắc",
+        CompassDirection.East => "Đông",
+        CompassDirection.Southeast => "Đông Nam",
+        CompassDirection.South => "Nam",
+        CompassDirection.Southwest => "Tây Nam",
+        CompassDirection.West => "Tây",
+        CompassDirection.Northwest => "Tây Bắc",
+        _ => d.ToString(),
     };
 }

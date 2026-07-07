@@ -31,4 +31,14 @@ public class Product : BaseEntity
 
     /// <summary>Model 3D sinh từ ảnh (1–1). Null nếu chưa yêu cầu sinh.</summary>
     public ProductModel3D? Model3D { get; set; }
+
+    // ── Cache vector ngũ hành (engine v3) — 5 cột numeric(4,3), Σ≈1 khi đã tính ──
+    public decimal? ElementTho { get; set; }
+    public decimal? ElementKim { get; set; }
+    public decimal? ElementThuy { get; set; }
+    public decimal? ElementMoc { get; set; }
+    public decimal? ElementHoa { get; set; }
+
+    /// <summary>True → dùng 5 cột vector admin/vendor nhập tay, bỏ auto-calc (tầng 1 fallback).</summary>
+    public bool IsVectorOverridden { get; set; }
 }

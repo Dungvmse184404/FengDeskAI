@@ -46,6 +46,9 @@ public interface IUnitOfWork
     // Recommendation (AI)
     IRecommendationRepository Recommendations { get; }
 
+    /// <summary>Cấu hình engine chấm điểm v3 (params, map ngũ hành, vector loại phòng...).</summary>
+    IScoringConfigRepository ScoringConfig { get; }
+
     Task<int> SaveChangesAsync(CancellationToken ct = default);
     Task<TResult> ExecuteInTransactionAsync<TResult>(
         Func<CancellationToken, Task<TResult>> action, CancellationToken ct = default);
