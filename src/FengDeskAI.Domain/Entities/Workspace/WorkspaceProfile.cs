@@ -28,10 +28,23 @@ public class WorkspaceProfile : BaseEntity
     public CompassDirection DeskOrientation { get; set; }
     public CompassDirection RoomFacingDirection { get; set; }
     public WorkPurpose WorkPurpose { get; set; }
+
+    /// <summary>Mệnh nhập tay (legacy) — engine v3 không dùng, giữ để tương thích dữ liệu cũ.</summary>
     public FengShuiElement FengShuiElement { get; set; }
 
     /// <summary>Diện tích mặt bàn (cm²).</summary>
     public int DeskArea { get; set; }
+
+    // ── Directional Validation (engine v3) — optional, trống thì không phạt hướng ──
+
+    /// <summary>Hướng cửa ra vào phòng.</summary>
+    public CompassDirection? EntranceDirection { get; set; }
+
+    /// <summary>Hướng cửa nhà vệ sinh (uế khí).</summary>
+    public CompassDirection? ToiletDirection { get; set; }
+
+    /// <summary>Các góc/hướng tối trong phòng — lưu jsonb list tên hướng.</summary>
+    public List<CompassDirection> DarkDirections { get; set; } = new();
 
     public bool IsDefault { get; set; }
 

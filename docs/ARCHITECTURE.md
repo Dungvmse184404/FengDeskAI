@@ -55,13 +55,13 @@ D:\Projects\SEP490\
                                                       │
               ┌─────────────┐  ┌──────────────────────┴─┐
               │ Ollama LLM  │  │ Meshy (image → 3D)     │
-              │ chat + tool │  │  ⚠ mocked hiện tại     │
+              │ chat + tool │  │     mocked hiện tại    │
               └─────────────┘  └────────────────────────┘
                     ▲
                     │
               ┌─────┴─────────────────────────────────┐
               │ AI Recommendation microservice        │
-              │ (Python FastAPI · CHƯA TỒN TẠI —      │
+              │ (Python FastAPI                       │
               │  hiện scorer chạy trong-process .NET) │
               └───────────────────────────────────────┘
 ```

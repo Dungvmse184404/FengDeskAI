@@ -17,6 +17,7 @@ public class WorkspaceTypeConfiguration : IEntityTypeConfiguration<WorkspaceType
         builder.Property(t => t.Description).HasColumnName("description").HasMaxLength(500);
         builder.Property(t => t.IsPublic).HasColumnName("is_public").HasDefaultValue(false);
         builder.Property(t => t.PersonalWeight).HasColumnName("personal_weight").HasColumnType("numeric(4,2)").HasDefaultValue(1.0m);
+        builder.Property(t => t.Scope).HasColumnName("scope").HasConversion<string>().HasMaxLength(20).HasDefaultValue(Domain.Enums.Workspace.WorkspaceScope.Private);
         builder.Property(t => t.IsSystemSeeded).HasColumnName("is_system_seeded").HasDefaultValue(false);
 
         builder.Property(t => t.CreatedAt).HasColumnName("created_at");

@@ -1,5 +1,9 @@
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using FengDeskAI.Domain.Entities.Workspace;
+using FengDeskAI.Domain.Enums.Workspace;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
 namespace FengDeskAI.Infrastructure.Persistence.Configurations;
@@ -29,6 +33,25 @@ public class WorkspaceProfileConfiguration : IEntityTypeConfiguration<WorkspaceP
         builder.Property(w => w.RoomFacingDirection).HasColumnName("room_facing_direction").HasConversion<string>().HasMaxLength(15);
         builder.Property(w => w.WorkPurpose).HasColumnName("work_purpose").HasConversion<string>().HasMaxLength(30);
         builder.Property(w => w.FengShuiElement).HasColumnName("feng_shui_element").HasConversion<string>().HasMaxLength(10);
+
+        // Directional Validation (engine v3) — nullable hướng + list hướng tối lưu jsonb.
+        builder.Property(w => w.EntranceDirection).HasColumnName("entrance_direction").HasConversion<string>().HasMaxLength(15);
+        builder.Property(w => w.ToiletDirection).HasColumnName("toilet_direction").HasConversion<string>().HasMaxLength(15);
+
+        var jsonOpts = new JsonSerializerOptions { Converters = { new JsonStringEnumConverter() } };
+        builder.Property(w => w.DarkDirections)
+            .HasColumnName("dark_directions")
+            .HasColumnType("jsonb")
+            .HasDefaultValueSql("'[]'::jsonb")
+            .HasConversion(
+                v => JsonSerializer.Serialize(v, jsonOpts),
+                v => string.IsNullOrEmpty(v)
+                    ? new List<CompassDirection>()
+                    : JsonSerializer.Deserialize<List<CompassDirection>>(v, jsonOpts) ?? new List<CompassDirection>(),
+                new ValueComparer<List<CompassDirection>>(
+                    (a, b) => a!.SequenceEqual(b!),
+                    c => c.Aggregate(0, (h, e) => HashCode.Combine(h, e.GetHashCode())),
+                    c => c.ToList()));
 
         builder.Property(w => w.DeskArea).HasColumnName("desk_area");
         builder.Property(w => w.IsDefault).HasColumnName("is_default").HasDefaultValue(false);

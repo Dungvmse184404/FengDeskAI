@@ -19,6 +19,14 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.IsActive).HasColumnName("is_active").HasDefaultValue(true);
         builder.Property(p => p.SizeClass).HasColumnName("size_class").HasConversion<string>().HasMaxLength(10);
 
+        // Cache vector ngũ hành (engine v3).
+        builder.Property(p => p.ElementTho).HasColumnName("element_tho").HasColumnType("numeric(4,3)");
+        builder.Property(p => p.ElementKim).HasColumnName("element_kim").HasColumnType("numeric(4,3)");
+        builder.Property(p => p.ElementThuy).HasColumnName("element_thuy").HasColumnType("numeric(4,3)");
+        builder.Property(p => p.ElementMoc).HasColumnName("element_moc").HasColumnType("numeric(4,3)");
+        builder.Property(p => p.ElementHoa).HasColumnName("element_hoa").HasColumnType("numeric(4,3)");
+        builder.Property(p => p.IsVectorOverridden).HasColumnName("is_vector_overridden").HasDefaultValue(false);
+
         builder.Property(p => p.CreatedAt).HasColumnName("created_at");
         builder.Property(p => p.UpdatedAt).HasColumnName("updated_at");
         builder.Property(p => p.CreatedBy).HasColumnName("created_by");

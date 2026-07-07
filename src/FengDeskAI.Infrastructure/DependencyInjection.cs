@@ -153,6 +153,7 @@ public static class DependencyInjection
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
         services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
+        services.AddScoped<IScoringConfigRepository, ScoringConfigRepository>();
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordService, PasswordService>();
@@ -248,7 +249,11 @@ public static class DependencyInjection
             services.AddHttpClient<IModel3DGenerator, MeshyModel3DGenerator>();
 
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
+        services.AddScoped<IDataSeeder, ScoringParamSeeder>();
+        services.AddScoped<IDataSeeder, ElementInputMapSeeder>();
+        services.AddScoped<IDataSeeder, WorkPurposeModifierSeeder>();
         services.AddScoped<IDataSeeder, WorkspaceTypeSeeder>();
+        services.AddScoped<IDataSeeder, WorkspaceTypeElementSeeder>();
         services.AddScoped<IDataSeeder, FengShuiRuleSeeder>();
         services.AddScoped<IDataSeeder, GeographySeeder>();
         services.AddScoped<IDataSeeder, CatalogDemoSeeder>();

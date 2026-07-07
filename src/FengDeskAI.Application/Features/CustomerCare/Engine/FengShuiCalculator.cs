@@ -174,6 +174,39 @@ public static class FengShuiCalculator
     public static IReadOnlyList<FengShuiElement> AllElements { get; } =
         Enum.GetValues<FengShuiElement>();
 
+    // ─────────────────────────── Engine v3 (ElementVector) ───────────────────────────
+
+    // Đảo của Generates: GeneratedBy[X] = hành SINH ra X (mẹ nuôi X).
+    private static readonly Dictionary<FengShuiElement, FengShuiElement> GeneratedBy =
+        Generates.ToDictionary(kv => kv.Value, kv => kv.Key);
+
+    /// <summary>Hành SINH ra <paramref name="e"/> (mẹ) — vd Kim sinh Thủy → GetGeneratingElement(Thủy)=Kim.</summary>
+    public static FengShuiElement GetGeneratingElement(FengShuiElement e) => GeneratedBy[e];
+
+    /// <summary>Hành mà <paramref name="e"/> SINH ra (con) — vd Thủy sinh Mộc → GetGeneratedElement(Thủy)=Mộc.</summary>
+    public static FengShuiElement GetGeneratedElement(FengShuiElement e) => Generates[e];
+
+    /// <summary>Các hướng la bàn ứng với hành <paramref name="e"/> (đảo của <see cref="GetDirectionElement"/>).</summary>
+    public static IReadOnlyList<CompassDirection> GetDirectionsForElement(FengShuiElement e)
+        => DirectionElements.Where(kv => kv.Value == e).Select(kv => kv.Key).ToList();
+
+    /// <summary>
+    /// Vector mệnh cá nhân theo năm sinh: bản mệnh (self) + hành sinh ra mệnh (supporter) +
+    /// hành mệnh sinh ra (child), theo tỉ lệ tham số (mặc định 0.6 / 0.3 / 0.1). Chuẩn hóa Σ=1.
+    /// </summary>
+    public static ElementVector BuildPersonalVector(
+        int birthYear, decimal selfShare, decimal supportShare, decimal childShare)
+    {
+        var self = GetNapAmElement(birthYear);
+        var supporter = GetGeneratingElement(self);
+        var child = GetGeneratedElement(self);
+
+        return ElementVector.Single(self).Scale(selfShare)
+            .Add(ElementVector.Single(supporter).Scale(supportShare))
+            .Add(ElementVector.Single(child).Scale(childShare))
+            .Normalize();
+    }
+
     private static int ReduceToSingleDigit(int n)
     {
         n = Math.Abs(n);

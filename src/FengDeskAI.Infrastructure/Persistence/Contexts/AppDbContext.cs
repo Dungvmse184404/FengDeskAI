@@ -9,6 +9,7 @@ using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Entities.CustomerCare;
+using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Entities.Workspace;
 using Microsoft.EntityFrameworkCore;
 
@@ -79,6 +80,14 @@ public class AppDbContext : DbContext
     public DbSet<Recommendation> Recommendations => Set<Recommendation>();
     public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
     public DbSet<RecommendationLog> RecommendationLogs => Set<RecommendationLog>();
+
+    // Recommendation scoring v3 (vector ngũ hành)
+    public DbSet<WorkspaceTypeElement> WorkspaceTypeElements => Set<WorkspaceTypeElement>();
+    public DbSet<ElementInputMap> ElementInputMaps => Set<ElementInputMap>();
+    public DbSet<WorkspaceProfileInput> WorkspaceProfileInputs => Set<WorkspaceProfileInput>();
+    public DbSet<ProductElementInput> ProductElementInputs => Set<ProductElementInput>();
+    public DbSet<WorkPurposeElementModifier> WorkPurposeElementModifiers => Set<WorkPurposeElementModifier>();
+    public DbSet<ScoringParam> ScoringParams => Set<ScoringParam>();
 
     /// <summary>Map tới hàm Postgres <c>unaccent()</c> (extension unaccent) — chỉ dùng trong truy vấn EF
     /// để tìm kiếm không phân biệt dấu. Cần CREATE EXTENSION unaccent (đã bật trong migration).</summary>

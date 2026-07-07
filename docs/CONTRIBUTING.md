@@ -1,4 +1,4 @@
-# HƯỚNG DẪN ĐÓNG GÓP (CONTRIBUTING GUIDELINES)
+# HƯỚNG DẪN ĐÓNG GÓP CHO CÁC THÀNH VIÊN (CONTRIBUTING GUIDELINES)
 
 Guidlines này nhằm mục đích để đảm bảo chất lượng code và tránh xung đột, dưới đây là những nguyên tắc đặt tên cho các Branch, Pull Request (PR), và Commit.
 

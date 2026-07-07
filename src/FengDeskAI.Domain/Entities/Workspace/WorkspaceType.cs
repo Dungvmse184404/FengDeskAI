@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Domain.Entities.Workspace;
 
@@ -21,6 +22,12 @@ public class WorkspaceType : BaseEntity
     /// 0.5 cho không gian công cộng. Không ảnh hưởng phần điểm chức năng (mục đích, ánh sáng, kích thước).
     /// </summary>
     public decimal PersonalWeight { get; set; } = 1.0m;
+
+    /// <summary>
+    /// Mức riêng tư (engine v3): quyết định bộ lọc mệnh là hard (Private) hay soft (Shared/Public).
+    /// Thay vai trò của <see cref="PersonalWeight"/> ở công thức mới. Mặc định Private.
+    /// </summary>
+    public WorkspaceScope Scope { get; set; } = WorkspaceScope.Private;
 
     /// <summary>True nếu là loại hệ thống seed sẵn (không cho user sửa/xóa).</summary>
     public bool IsSystemSeeded { get; set; }

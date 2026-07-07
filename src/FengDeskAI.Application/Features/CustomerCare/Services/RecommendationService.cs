@@ -5,10 +5,10 @@ using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Contracts.Recommendation;
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Entities.Workspace;
 using Microsoft.Extensions.Logging;
 using FengDeskAI.Domain.Entities.CustomerCare;
-using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Application.Features.CustomerCare.Engine;
@@ -49,44 +49,79 @@ public sealed class RecommendationService : IRecommendationService
         if (user is null)
             return ServiceResult<RecommendationResponse>.Failure(ApiStatusCodes.Unauthorized, "Người dùng không hợp lệ.");
 
-        // Phần cá nhân (null nếu giới tính không Nam/Nữ → bỏ qua mệnh & hướng).
-        var personal = _scorer.BuildPersonalProfile(user.DateOfBirth, user.Gender);
+        // Hồ sơ cá nhân (mệnh Nạp Âm + Kua) — cho AI diễn giải + lưu rec (null nếu thiếu ngày sinh).
+        var personal = FengShuiCalculator.BuildPersonalProfile(user.DateOfBirth, user.Gender);
 
-        // Trọng số cá nhân theo loại không gian (mặc định 1.0 = riêng tư).
-        decimal personalWeight = 1.0m;
+        // ── Tham số engine (thiếu row → default trong code) ──
+        var p = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+
+        // ── Vector mệnh (null → bỏ bộ lọc mệnh) ──
+        ElementVector? personalVector = user.DateOfBirth is { } dob
+            ? FengShuiCalculator.BuildPersonalVector(dob.Year, p.SelfShare, p.SupportShare, p.ChildShare)
+            : null;
+
+        // ── Vector phòng: ideal → intent → hiện trạng ──
         WorkspaceType? wsType = null;
+        var typeElements = new List<WorkspaceTypeElement>();
+        var scope = WorkspaceScope.Private;
         if (profile.WorkspaceTypeId is { } typeId)
         {
             wsType = await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct);
-            if (wsType is not null) personalWeight = wsType.PersonalWeight;
+            if (wsType is not null)
+            {
+                scope = wsType.Scope;
+                typeElements = await _uow.ScoringConfig.GetWorkspaceTypeElementsAsync(typeId, ct);
+            }
         }
 
-        var rules = await _uow.Recommendations.GetAllRulesAsync(ct);
-        var elementScores = rules.ToDictionary(r => (r.SubjectElement, r.ObjectElement), r => r.Score);
+        var resolver = new ElementInputResolver(await _uow.ScoringConfig.GetElementInputMapAsync(ct));
+        var ideal = WorkspaceVectorBuilder.BuildIdeal(typeElements);
+        var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
+        var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, modifiers);
 
+        var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
+        var currentVector = WorkspaceVectorBuilder.BuildCurrent(profileInputs, resolver, typeElements);
+
+        // ── Ứng viên + vector sản phẩm ──
         var products = await _uow.Products.GetScorableCandidatesAsync(ct);
         if (products.Count == 0)
             return ServiceResult<RecommendationResponse>.Failure(
                 ApiStatusCodes.UnprocessableEntity,
                 "Chưa có sản phẩm nào được gắn thuộc tính phong thủy để gợi ý.");
 
-        var candidates = products.Select(ToFacts).ToList();
+        var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(products.Select(x => x.Id).ToList(), ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+
+        var candidates = products.Select(prod => ToFacts(prod, productInputs, resolver, p)).ToList();
+
+        // ── Hướng bị chắn (cửa vào ∪ WC ∪ góc tối) ──
+        var violated = new HashSet<CompassDirection>();
+        if (profile.EntranceDirection is { } ed) violated.Add(ed);
+        if (profile.ToiletDirection is { } td) violated.Add(td);
+        foreach (var d in profile.DarkDirections) violated.Add(d);
 
         var context = new ScoringContext
         {
-            PersonalWeight = personalWeight,
+            PersonalVector = personalVector,
+            AdjustedIdeal = adjustedIdeal,
+            CurrentVector = currentVector,
+            Scope = scope,
             Purpose = profile.WorkPurpose,
-            Style = profile.StyleCode,
-            Lighting = profile.Lighting,
-            DeskOrientation = profile.DeskOrientation,
-            DeskArea = profile.DeskArea,
-            Personal = personal,
-            ElementScores = elementScores,
+            ViolatedDirections = violated,
+            Params = p,
         };
 
         int topN = Math.Clamp(request.TopN ?? DefaultTopN, 1, MaxTopN);
         var top = _scorer.Score(context, candidates).Take(topN).ToList();
-        var productById = products.ToDictionary(p => p.Id);
+        var productById = products.ToDictionary(x => x.Id);
+
+        if (top.Count == 0)
+            return ServiceResult<RecommendationResponse>.Failure(
+                ApiStatusCodes.UnprocessableEntity,
+                "Không có sản phẩm nào phù hợp với mục đích/bản mệnh của không gian này.");
+
+        decimal legacyWeight = wsType?.PersonalWeight ?? 1.0m;
 
         return await _uow.ExecuteInTransactionAsync(async innerCt =>
         {
@@ -98,7 +133,7 @@ public sealed class RecommendationService : IRecommendationService
                 CustomerElement = personal?.Element,
                 KuaNumber = personal?.KuaNumber,
                 KuaGroup = personal?.Group,
-                PersonalWeight = personalWeight,
+                PersonalWeight = legacyWeight,
                 Status = RecommendationStatus.Scored,
             };
 
@@ -111,7 +146,7 @@ public sealed class RecommendationService : IRecommendationService
                     BaseScore = s.Score,
                     BaseRank = rank,
                     FinalRank = rank,
-                    MatchFacts = JsonSerializer.Serialize(s.MatchFacts),
+                    MatchFacts = JsonSerializer.Serialize(MatchFactsWithHint(s)),
                     CautionFacts = s.CautionFacts.Count > 0 ? JsonSerializer.Serialize(s.CautionFacts) : null,
                 });
                 rank++;
@@ -121,10 +156,20 @@ public sealed class RecommendationService : IRecommendationService
             rec.Logs.Add(new RecommendationLog
             {
                 Stage = "EngineScored",
-                Detail = JsonSerializer.Serialize(new { topN, candidates = candidates.Count, personalWeight }),
+                Detail = JsonSerializer.Serialize(new
+                {
+                    topN,
+                    candidates = candidates.Count,
+                    ideal,
+                    adjustedIdeal,
+                    current = currentVector,
+                    gap = adjustedIdeal.Subtract(currentVector),
+                    scope = scope.ToString(),
+                    hasPersonalVector = personalVector is not null,
+                }),
             });
 
-            var aiRequest = BuildAiRequest(context, wsType, personal, top, productById);
+            var aiRequest = BuildAiRequest(profile, wsType, personal, legacyWeight, top, productById);
             rec.Logs.Add(new RecommendationLog { Stage = "AiRequested", Detail = JsonSerializer.Serialize(aiRequest) });
 
             AiRecommendationResponse aiResponse;
@@ -168,16 +213,39 @@ public sealed class RecommendationService : IRecommendationService
 
     // ─────────────────────────── helpers ───────────────────────────
 
-    private static ProductFacts ToFacts(Product p) => new(
-        p.Id,
-        p.Elements.Where(e => e.IsPrimary).Select(e => (FengShuiElement?)e.Element).FirstOrDefault(),
-        p.Elements.Where(e => !e.IsPrimary).Select(e => (FengShuiElement?)e.Element).FirstOrDefault(),
-        p.SizeClass ?? SizeClass.Medium,
-        p.Vibes.Select(v => v.VibeCode).ToHashSet(),
-        p.Styles.Select(s => s.StyleCode).ToHashSet());
+    /// <summary>MatchFacts + placementHint (gộp để không đổi schema RecommendationItem).</summary>
+    private static List<string> MatchFactsWithHint(ScoredProduct s)
+    {
+        var list = s.MatchFacts.ToList();
+        if (!string.IsNullOrWhiteSpace(s.PlacementHint))
+            list.Add(s.PlacementHint!);
+        return list;
+    }
+
+    private static ProductFacts ToFacts(
+        Product p,
+        IReadOnlyDictionary<Guid, IReadOnlyCollection<ProductElementInput>> inputsByProduct,
+        ElementInputResolver resolver,
+        ScoringParameters prms)
+    {
+        // Vector override chỉ dùng khi đủ 5 cột.
+        ElementVector? overridden = p is { ElementTho: { } t, ElementKim: { } k, ElementThuy: { } w, ElementMoc: { } m, ElementHoa: { } h }
+            ? new ElementVector(t, k, w, m, h)
+            : null;
+
+        var inputs = inputsByProduct.TryGetValue(p.Id, out var list)
+            ? list
+            : Array.Empty<ProductElementInput>();
+
+        var vector = ProductVectorProvider.Build(
+            p.IsVectorOverridden, overridden, inputs, resolver,
+            p.Elements.Select(e => (e.Element, e.IsPrimary)), prms);
+
+        return new ProductFacts(p.Id, vector, p.Vibes.Select(v => v.VibeCode).ToHashSet());
+    }
 
     private static AiRecommendationRequest BuildAiRequest(
-        ScoringContext ctx, WorkspaceType? wsType, PersonalProfile? personal,
+        WorkspaceProfile profile, WorkspaceType? wsType, PersonalProfile? personal, decimal legacyWeight,
         List<ScoredProduct> top, IReadOnlyDictionary<Guid, Product> productById)
     {
         return new AiRecommendationRequest
@@ -194,12 +262,12 @@ public sealed class RecommendationService : IRecommendationService
             {
                 Type = wsType?.Name ?? "Personal Desk",
                 IsPublic = wsType?.IsPublic ?? false,
-                Purpose = ctx.Purpose.ToString(),
-                Style = ctx.Style.ToString(),
-                Lighting = ctx.Lighting.ToString(),
-                DeskOrientation = ctx.DeskOrientation.ToString(),
-                DeskArea = ctx.DeskArea,
-                PersonalWeight = ctx.PersonalWeight,
+                Purpose = profile.WorkPurpose.ToString(),
+                Style = profile.StyleCode,
+                Lighting = profile.Lighting.ToString(),
+                DeskOrientation = profile.DeskOrientation.ToString(),
+                DeskArea = profile.DeskArea,
+                PersonalWeight = legacyWeight,
             },
             Candidates = top.Select((s, i) =>
             {
@@ -211,7 +279,7 @@ public sealed class RecommendationService : IRecommendationService
                     Description = p.Description,
                     Score = s.Score,
                     BaseRank = i + 1,
-                    MatchFacts = s.MatchFacts.ToList(),
+                    MatchFacts = MatchFactsWithHint(s),
                     CautionFacts = s.CautionFacts.ToList(),
                 };
             }).ToList(),
@@ -263,7 +331,7 @@ public sealed class RecommendationService : IRecommendationService
                 ImageUrl = p?.Images.OrderBy(im => im.SortOrder).FirstOrDefault()?.Url,
                 Score = it.BaseScore,
                 Rank = it.FinalRank,
-                MatchFacts = facts?.MatchFacts.ToList() ?? new(),
+                MatchFacts = facts is null ? new() : MatchFactsWithHint(facts),
                 CautionFacts = facts?.CautionFacts.ToList() ?? new(),
                 Explanation = it.AiExplanation,
             };
