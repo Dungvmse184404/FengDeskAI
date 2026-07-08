@@ -11,4 +11,8 @@ public interface IRecommendationService
 
     /// <summary>Lấy lại một phiên gợi ý đã lưu (theo chủ sở hữu).</summary>
     Task<IServiceResult<RecommendationResponse>> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Độ phù hợp của 1 sản phẩm × 1 workspace — không loại sản phẩm, cho trang chi tiết sản phẩm.</summary>
+    Task<IServiceResult<ProductFitResponse>> GetProductFitAsync(
+        Guid productId, Guid workspaceProfileId, Guid userId, CancellationToken ct = default);
 }

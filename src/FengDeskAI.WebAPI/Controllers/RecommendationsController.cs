@@ -30,4 +30,10 @@ public class RecommendationsController : ApiControllerBase
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, ct));
+
+    /// <summary>Độ phù hợp của 1 sản phẩm với 1 workspace — không loại sản phẩm, cho trang chi tiết sản phẩm.</summary>
+    [HttpGet("fit")]
+    public async Task<IActionResult> GetProductFit(
+        [FromQuery] Guid productId, [FromQuery] Guid workspaceProfileId, CancellationToken ct)
+        => ToActionResult(await _service.GetProductFitAsync(productId, workspaceProfileId, CurrentUserId, ct));
 }

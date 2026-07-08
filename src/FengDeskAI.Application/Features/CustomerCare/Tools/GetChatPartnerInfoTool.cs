@@ -65,7 +65,7 @@ public sealed class GetChatPartnerInfoTool : IAiTool
 
         object profile = Denied, workspaces = Denied, orders = Denied;
 
-        // Mặc định CHIA SẺ (opt-out): chưa có bản ghi consent → coi như khách cho phép tất cả.
+        // Mặc định CHIA SẺ (opt-out): chưa có bản ghi consent -> mặc định chia sẻ tất cả.
         if (consent?.ShareProfile ?? true)
         {
             var r = await _auth.GetMeAsync(granterId, ct);

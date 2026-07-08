@@ -19,11 +19,13 @@ public class ProductsController : ApiControllerBase
 {
     private readonly IProductService _service;
     private readonly IProductModel3DService _model3DService;
+    private readonly IProductVectorService _vectorService;
 
-    public ProductsController(IProductService service, IProductModel3DService model3DService)
+    public ProductsController(IProductService service, IProductModel3DService model3DService, IProductVectorService vectorService)
     {
         _service = service;
         _model3DService = model3DService;
+        _vectorService = vectorService;
     }
 
     private bool IsAdmin => User.IsInRole(Roles.Admin);
@@ -116,4 +118,26 @@ public class ProductsController : ApiControllerBase
     [HttpPut("{id:guid}/feng-shui")]
     public async Task<IActionResult> SetFengShui(Guid id, [FromBody] SetProductFengShuiRequest request, CancellationToken ct)
         => ToActionResult(await _service.SetFengShuiAsync(id, CurrentUserId, IsAdmin, request, ct));
+
+    // ----- Vector ngũ hành (engine v3) -----
+
+    /// <summary>Trạng thái vector + input ngũ hành hiện tại của sản phẩm.</summary>
+    [HttpGet("{id:guid}/vector")]
+    public async Task<IActionResult> GetVector(Guid id, CancellationToken ct)
+        => ToActionResult(await _vectorService.GetAsync(id, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>Khai chất liệu / màu / hình khối → auto-calc vector (tầng 2). Rỗng = xóa input.</summary>
+    [HttpPut("{id:guid}/element-inputs")]
+    public async Task<IActionResult> SetElementInputs(Guid id, [FromBody] SetProductElementInputsRequest request, CancellationToken ct)
+        => ToActionResult(await _vectorService.SetElementInputsAsync(id, CurrentUserId, IsAdmin, request, ct));
+
+    /// <summary>Ghi đè vector ngũ hành thủ công (tầng 1). Yêu cầu Σ ≈ 1.</summary>
+    [HttpPut("{id:guid}/vector-override")]
+    public async Task<IActionResult> SetVectorOverride(Guid id, [FromBody] SetProductVectorOverrideRequest request, CancellationToken ct)
+        => ToActionResult(await _vectorService.SetVectorOverrideAsync(id, CurrentUserId, IsAdmin, request, ct));
+
+    /// <summary>Bỏ ghi đè, tính lại vector từ input (hoặc về backfill tầng 3).</summary>
+    [HttpDelete("{id:guid}/vector-override")]
+    public async Task<IActionResult> ClearVectorOverride(Guid id, CancellationToken ct)
+        => ToActionResult(await _vectorService.ClearVectorOverrideAsync(id, CurrentUserId, IsAdmin, ct));
 }

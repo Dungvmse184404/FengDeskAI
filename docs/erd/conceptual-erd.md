@@ -67,10 +67,18 @@ h chính (Address tham chiếu tới Ward)
 ### Không gian làm việc & gợi ý phong thủy
 ```
 Workspace Profile – Hồ sơ không gian làm việc của User (input cho gợi ý)
-Workspace Type    – Loại không gian (quyết định trọng số gợi ý)
+Workspace Type    – Loại không gian (có scope + gắn vector ngũ hành)
 Recommendation    – Phiên gợi ý sinh cho 1 Workspace Profile
 Recommendation Item – Dòng gợi ý (Recommendation ↔ Product kèm score/rank)
 Feng Shui Rule    – Luật tương sinh/tương khắc ngũ hành (engine dùng chấm điểm)
+
+— Engine v3 (cấu hình ngũ hành, admin sửa) —
+Workspace Type Element     – Vector Ideal/Interior của mỗi Workspace Type
+Workspace Profile Input    – Màu/vật liệu/hình khối thực tế của 1 Workspace Profile
+Product Element Input      – Màu/vật liệu/hình khối của 1 Product (auto-calc vector)
+Element Input Map          – Tra (kind, code) → hành + trọng số (dùng chung phòng & sản phẩm)
+Work Purpose Element Modifier – Bẻ vector lý tưởng theo mục đích làm việc (Intent)
+Scoring Param              – Tham số phẳng của engine (SELF_SHARE, penalty...)
 ```
 
 ### Cửa hàng & sản phẩm (catalog)
@@ -145,6 +153,13 @@ Recommendation (N) ——— based on ———> (1) Workspace Profile
 Recommendation (1) ——— contains ———> (N) Recommendation Item
 Recommendation Item (N) ——— refers to ———> (1) Product
 Recommendation (1) ——— applies ———> (N) Feng Shui Rule
+
+— Engine v3 —
+Workspace Type (1) ——— has ———> (N) Workspace Type Element      [Ideal/Interior]
+Workspace Profile (1) ——— has ———> (N) Workspace Profile Input   [màu/vật liệu]
+Product (1) ——— has ———> (N) Product Element Input               [màu/vật liệu]
+Work Purpose (enum) ——— tuned by ———> (N) Work Purpose Element Modifier
+Element Input Map ——— tra cứu bởi ———> Workspace Profile Input & Product Element Input
 ```
 
 ### Cửa hàng & sản phẩm
