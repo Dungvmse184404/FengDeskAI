@@ -64,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITagService, TagService>();
         services.AddScoped<IProductService, ProductService>();
+        services.AddScoped<IProductVectorService, ProductVectorService>();
         services.AddScoped<IProductModel3DService, ProductModel3DService>();
         services.AddScoped<ITaxonomyService, TaxonomyService>();
 
@@ -95,6 +96,7 @@ public static class DependencyInjection
         // Engine chấm điểm phong thủy — thuần logic, stateless.
         services.AddSingleton<IRecommendationScorer, RecommendationScorer>();
         services.AddScoped<IRecommendationService, RecommendationService>();
+        services.AddScoped<IScoringConfigAdminService, ScoringConfigAdminService>();
 
         // Tools cho AI (function calling) — đọc, scope theo user.
         services.AddScoped<IAiTool, SearchProductsTool>();

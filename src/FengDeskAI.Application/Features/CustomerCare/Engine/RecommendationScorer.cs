@@ -28,7 +28,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         var results = new List<ScoredProduct>(candidates.Count);
         foreach (var product in candidates)
         {
-            var scored = ScoreOne(context, product, gap, gapL1);
+            var scored = ScoreOne(context, product, gap, gapL1, ScoreMode.Rank);
             if (scored is not null)
                 results.Add(scored);
         }
@@ -36,15 +36,31 @@ public sealed class RecommendationScorer : IRecommendationScorer
         return results.OrderByDescending(r => r.Score).ToList();
     }
 
-    private static ScoredProduct? ScoreOne(ScoringContext ctx, ProductFacts product, ElementVector gap, decimal gapL1)
+    public ScoredProduct ScoreSingle(ScoringContext context, ProductFacts product)
+    {
+        var gap = context.AdjustedIdeal.Subtract(context.CurrentVector);
+        decimal gapL1 = gap.L1();
+
+        // Mode Fit không bao giờ loại — ScoreOne luôn trả về non-null ở nhánh này.
+        return ScoreOne(context, product, gap, gapL1, ScoreMode.Fit)!;
+    }
+
+    /// <summary>Rank: chấm để xếp hạng &amp; lọc candidates. Fit: chấm 1×1 cho trang chi tiết — không loại, chỉ caution.</summary>
+    private enum ScoreMode { Rank, Fit }
+
+    private static ScoredProduct? ScoreOne(ScoringContext ctx, ProductFacts product, ElementVector gap, decimal gapL1, ScoreMode mode)
     {
         var facts = new List<string>();
         var cautions = new List<string>();
 
-        // ── Bước 2a — Intent filter (hard): sản phẩm phải có vibe khớp mục đích ──
+        // ── Bước 2a — Intent filter: Rank loại khỏi candidates; Fit chỉ ghi caution ──
         var targetVibe = TargetVibe(ctx.Purpose);
         if (targetVibe is { } vibe && !product.Vibes.Contains(vibe))
-            return null; // loại khỏi candidates
+        {
+            if (mode == ScoreMode.Rank)
+                return null; // loại khỏi candidates
+            cautions.Add($"Sản phẩm chưa thuộc nhóm vibe phù hợp mục đích {ctx.Purpose} của phòng.");
+        }
 
         var productDominant = product.Vector.Dominant();
 
@@ -57,10 +73,11 @@ public sealed class RecommendationScorer : IRecommendationScorer
             bool conflict = FengShuiCalculator.GetRelation(personalDominant, productDominant) == FengShuiRelation.BiKhac;
             if (conflict)
             {
-                if (ctx.Scope == WorkspaceScope.Private)
-                    return null; // hard: loại khỏi candidates
+                if (mode == ScoreMode.Rank && ctx.Scope == WorkspaceScope.Private)
+                    return null; // hard: loại khỏi candidates (chỉ khi rank cho không gian riêng tư)
                 userPenalty = ctx.Params.UserConflictPenalty; // soft: trừ điểm
-                cautions.Add($"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ điểm (không gian dùng chung).");
+                cautions.Add($"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ điểm"
+                    + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
             }
             else
             {

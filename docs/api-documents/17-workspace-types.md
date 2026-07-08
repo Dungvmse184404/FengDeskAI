@@ -4,7 +4,11 @@
 
 Controller: `WorkspaceTypesController` · Route gốc: `/api/workspace-types` · **Toàn bộ `[Authorize]`**.
 
-Loại không gian làm việc — quyết định **trọng số cá nhân** (`personalWeight`) khi gợi ý. User thấy loại hệ thống + loại mình tạo; loại tự tạo mặc định trọng số `1.0`.
+Loại không gian làm việc. User thấy loại hệ thống + loại mình tạo; loại tự tạo mặc định trọng số `1.0`.
+
+> **Engine v3:** loại phòng giờ còn gắn với **bộ vector ngũ hành** (`Ideal`/`Interior`) qua bảng `workspace_type_elements` — admin quản ở [Scoring Config](./25-scoring-config.md). Ngoài ra bảng có cột **`scope`** (`Private/Shared/Public`) quyết định lọc mệnh là "hard" (loại) hay "soft" (trừ điểm).
+>
+> ⚠️ **Legacy:** `personalWeight` là cách chấm điểm cũ, **engine v3 không dùng**. Cột `scope` **hiện chưa được lộ ra** trong request/response dưới đây (mới có ở DB).
 
 ---
 

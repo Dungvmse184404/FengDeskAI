@@ -35,6 +35,7 @@ Tài liệu API đầy đủ cho hệ thống **FengDeskAI** (BackEnd `.NET 8`).
 | 22 | [Uploads](./22-uploads.md) | `UploadsController` | 1 | Upload ảnh dùng chung |
 | 23 | [Ping](./23-ping.md) | `PingController` | 5 | Demo test authorization (Dev) |
 | 24 | [Dev Tools](./24-dev-tools.md) | `DevToolsController` | 2 | Test AI tool (Dev) |
+| 25 | [Scoring Config](./25-scoring-config.md) | `ScoringConfigController` | 11 | Admin cấu hình engine gợi ý v3 |
 | A | [Phụ lục — Enums & Models](./99-appendix-models.md) | — | — | Toàn bộ enum, envelope, error codes |
 
 ---

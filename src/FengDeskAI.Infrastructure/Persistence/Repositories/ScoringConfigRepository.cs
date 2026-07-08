@@ -33,4 +33,17 @@ public class ScoringConfigRepository : IScoringConfigRepository
     public Task<List<ProductElementInput>> GetProductElementInputsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default)
         => _context.Set<ProductElementInput>().AsNoTracking()
             .Where(i => productIds.Contains(i.ProductId)).ToListAsync(ct);
+
+    public async Task ReplaceProductElementInputsAsync(Guid productId, IEnumerable<ProductElementInput> inputs, CancellationToken ct = default)
+    {
+        var set = _context.Set<ProductElementInput>();
+        var existing = await set.Where(i => i.ProductId == productId).ToListAsync(ct);
+        if (existing.Count > 0) set.RemoveRange(existing); // soft-delete qua SaveChanges
+
+        foreach (var input in inputs)
+        {
+            input.ProductId = productId;
+            await set.AddAsync(input, ct);
+        }
+    }
 }

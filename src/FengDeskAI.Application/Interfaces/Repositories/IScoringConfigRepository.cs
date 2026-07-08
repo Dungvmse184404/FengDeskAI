@@ -15,4 +15,7 @@ public interface IScoringConfigRepository
     Task<List<WorkPurposeElementModifier>> GetWorkPurposeModifiersAsync(WorkPurpose purpose, CancellationToken ct = default);
     Task<List<WorkspaceProfileInput>> GetWorkspaceProfileInputsAsync(Guid workspaceProfileId, CancellationToken ct = default);
     Task<List<ProductElementInput>> GetProductElementInputsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default);
+
+    /// <summary>Thay toàn bộ input (màu/vật liệu/hình khối) của 1 sản phẩm. Chưa commit — caller lưu qua UoW.</summary>
+    Task ReplaceProductElementInputsAsync(Guid productId, IEnumerable<ProductElementInput> inputs, CancellationToken ct = default);
 }

@@ -35,6 +35,11 @@ public class WorkspaceProfilesController : ApiControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, ct));
 
+    /// <summary>Phân tích ngũ hành phòng (ideal/adjustedIdeal/current/gap) — FE hiển thị phòng thiếu/thừa hành gì.</summary>
+    [HttpGet("{id:guid}/element-analysis")]
+    public async Task<IActionResult> GetElementAnalysis(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.GetElementAnalysisAsync(id, CurrentUserId, ct));
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateWorkspaceProfileRequest request, CancellationToken ct)
         => ToActionResult(await _service.CreateAsync(CurrentUserId, request, ct));

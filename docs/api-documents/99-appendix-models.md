@@ -73,6 +73,8 @@ Tổng hợp enum, envelope và mã trạng thái dùng chung. **Mọi enum seri
 | `CompassDirection` | `North`, `Northeast`, `East`, `Southeast`, `South`, `Southwest`, `West`, `Northwest` |
 | `WorkPurpose` | `Office`, `Study`, `Creative`, `Reading`, `Gaming`, `Mixed`, `Other` |
 | `FengShuiElement` | `Kim` (Metal), `Moc` (Wood), `Thuy` (Water), `Hoa` (Fire), `Tho` (Earth) |
+| `WorkspaceScope` | `Private`, `Shared`, `Public` — mức riêng tư → lọc mệnh "hard"/"soft" (engine v3) |
+| `ElementInputKind` | `Color`, `Material`, `Shape` — loại tín hiệu suy ra vector ngũ hành (engine v3) |
 
 ---
 

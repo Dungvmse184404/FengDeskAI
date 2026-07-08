@@ -60,27 +60,14 @@ public sealed class RecommendationService : IRecommendationService
             ? FengShuiCalculator.BuildPersonalVector(dob.Year, p.SelfShare, p.SupportShare, p.ChildShare)
             : null;
 
-        // ── Vector phòng: ideal → intent → hiện trạng ──
-        WorkspaceType? wsType = null;
-        var typeElements = new List<WorkspaceTypeElement>();
-        var scope = WorkspaceScope.Private;
-        if (profile.WorkspaceTypeId is { } typeId)
-        {
-            wsType = await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct);
-            if (wsType is not null)
-            {
-                scope = wsType.Scope;
-                typeElements = await _uow.ScoringConfig.GetWorkspaceTypeElementsAsync(typeId, ct);
-            }
-        }
-
-        var resolver = new ElementInputResolver(await _uow.ScoringConfig.GetElementInputMapAsync(ct));
-        var ideal = WorkspaceVectorBuilder.BuildIdeal(typeElements);
-        var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
-        var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, modifiers);
-
-        var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
-        var currentVector = WorkspaceVectorBuilder.BuildCurrent(profileInputs, resolver, typeElements);
+        // ── Vector phòng: ideal → intent → hiện trạng (chung với GetProductFitAsync) ──
+        var wctx = await BuildWorkspaceContextAsync(profile, ct);
+        var wsType = wctx.WsType;
+        var scope = wctx.Scope;
+        var resolver = wctx.Resolver; // còn tái dùng cho vector sản phẩm bên dưới
+        var ideal = wctx.Analysis.Ideal;
+        var adjustedIdeal = wctx.Analysis.AdjustedIdeal;
+        var currentVector = wctx.Analysis.Current;
 
         // ── Ứng viên + vector sản phẩm ──
         var products = await _uow.Products.GetScorableCandidatesAsync(ct);
@@ -184,7 +171,7 @@ public sealed class RecommendationService : IRecommendationService
                 // Detail là cột jsonb → PHẢI serialize JSON; ex.Message trần sẽ gây 22P02 invalid input syntax for type json.
                 rec.Logs.Add(new RecommendationLog { Stage = "Error", Detail = JsonSerializer.Serialize(new { error = ex.Message }) });
                 return ServiceResult<RecommendationResponse>.Success(
-                    BuildResponse(rec, top, productById),
+                    BuildResponse(rec, top, productById, BuildGap(adjustedIdeal, currentVector)),
                     "Đã chấm điểm nhưng AI diễn giải gặp lỗi.", ApiStatusCodes.Ok);
             }
 
@@ -193,7 +180,7 @@ public sealed class RecommendationService : IRecommendationService
             rec.Logs.Add(new RecommendationLog { Stage = "AiResponded", Detail = JsonSerializer.Serialize(aiResponse) });
 
             return ServiceResult<RecommendationResponse>.Success(
-                BuildResponse(rec, top, productById),
+                BuildResponse(rec, top, productById, BuildGap(adjustedIdeal, currentVector)),
                 "Tạo gợi ý thành công.", ApiStatusCodes.Created);
         }, ct);
     }
@@ -211,7 +198,105 @@ public sealed class RecommendationService : IRecommendationService
         return ServiceResult<RecommendationResponse>.Success(BuildResponseFromEntity(rec, productById));
     }
 
+    public async Task<IServiceResult<ProductFitResponse>> GetProductFitAsync(
+        Guid productId, Guid workspaceProfileId, Guid userId, CancellationToken ct = default)
+    {
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(workspaceProfileId, userId, ct);
+        if (profile is null)
+            return ServiceResult<ProductFitResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hồ sơ không gian.");
+
+        var product = await _uow.Products.GetDetailAsync(productId, ct);
+        if (product is null || !product.IsActive || product.Elements.Count == 0)
+            return ServiceResult<ProductFitResponse>.Failure(
+                ApiStatusCodes.NotFound, "Không tìm thấy sản phẩm hoặc sản phẩm chưa gắn thuộc tính phong thủy.");
+
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var p = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+
+        // Vector mệnh (null → bỏ bộ lọc mệnh) — không hard-fail nếu thiếu profile cá nhân, fit vẫn trả điểm.
+        ElementVector? personalVector = user?.DateOfBirth is { } dob
+            ? FengShuiCalculator.BuildPersonalVector(dob.Year, p.SelfShare, p.SupportShare, p.ChildShare)
+            : null;
+
+        var wctx = await BuildWorkspaceContextAsync(profile, ct);
+
+        var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(new[] { productId }, ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+        var facts = ToFacts(product, productInputs, wctx.Resolver, p);
+
+        var violated = new HashSet<CompassDirection>();
+        if (profile.EntranceDirection is { } ed) violated.Add(ed);
+        if (profile.ToiletDirection is { } td) violated.Add(td);
+        foreach (var d in profile.DarkDirections) violated.Add(d);
+
+        var context = new ScoringContext
+        {
+            PersonalVector = personalVector,
+            AdjustedIdeal = wctx.Analysis.AdjustedIdeal,
+            CurrentVector = wctx.Analysis.Current,
+            Scope = wctx.Scope,
+            Purpose = profile.WorkPurpose,
+            ViolatedDirections = violated,
+            Params = p,
+        };
+
+        var scored = _scorer.ScoreSingle(context, facts);
+
+        var response = new ProductFitResponse
+        {
+            ProductId = productId,
+            WorkspaceProfileId = profile.Id,
+            Score = scored.Score,
+            MatchFacts = scored.MatchFacts.ToList(),
+            CautionFacts = scored.CautionFacts.ToList(),
+            PlacementHint = scored.PlacementHint,
+            Gap = wctx.Analysis.Ideal.Enumerate().Select(x => new ElementAnalysisRow
+            {
+                Element = x.Element.ToString(),
+                Ideal = Math.Round(x.Value, 3),
+                AdjustedIdeal = Math.Round(wctx.Analysis.AdjustedIdeal[x.Element], 3),
+                Current = Math.Round(wctx.Analysis.Current[x.Element], 3),
+                Gap = Math.Round(wctx.Analysis.Gap[x.Element], 3),
+            }).ToList(),
+            ProductVector = facts.Vector.Enumerate().Select(x => new ProductElementRow
+            {
+                Element = x.Element.ToString(),
+                Value = Math.Round(x.Value, 3),
+            }).ToList(),
+        };
+
+        return ServiceResult<ProductFitResponse>.Success(response);
+    }
+
     // ─────────────────────────── helpers ───────────────────────────
+
+    private sealed record WorkspaceScoringContext(
+        WorkspaceType? WsType, WorkspaceScope Scope, ElementInputResolver Resolver, WorkspaceElementAnalysis Analysis);
+
+    /// <summary>Nạp data phòng + dựng 4 vector ngũ hành — dùng chung bởi GenerateAsync và GetProductFitAsync.</summary>
+    private async Task<WorkspaceScoringContext> BuildWorkspaceContextAsync(WorkspaceProfile profile, CancellationToken ct)
+    {
+        WorkspaceType? wsType = null;
+        var typeElements = new List<WorkspaceTypeElement>();
+        var scope = WorkspaceScope.Private;
+        if (profile.WorkspaceTypeId is { } typeId)
+        {
+            wsType = await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct);
+            if (wsType is not null)
+            {
+                scope = wsType.Scope;
+                typeElements = await _uow.ScoringConfig.GetWorkspaceTypeElementsAsync(typeId, ct);
+            }
+        }
+
+        var resolver = new ElementInputResolver(await _uow.ScoringConfig.GetElementInputMapAsync(ct));
+        var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
+        var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
+        var analysis = WorkspaceElementAnalyzer.Analyze(typeElements, modifiers, profileInputs, resolver);
+
+        return new WorkspaceScoringContext(wsType, scope, resolver, analysis);
+    }
 
     /// <summary>MatchFacts + placementHint (gộp để không đổi schema RecommendationItem).</summary>
     private static List<string> MatchFactsWithHint(ScoredProduct s)
@@ -313,8 +398,24 @@ public sealed class RecommendationService : IRecommendationService
         rec.Summary = response.Summary;
     }
 
+    private static GapBreakdownResponse BuildGap(ElementVector adjustedIdeal, ElementVector current)
+    {
+        var gap = adjustedIdeal.Subtract(current);
+        return new GapBreakdownResponse
+        {
+            Elements = adjustedIdeal.Enumerate().Select(x => new GapElementRow
+            {
+                Element = x.Element.ToString(),
+                Ideal = Math.Round(x.Value, 3),
+                Current = Math.Round(current[x.Element], 3),
+                Gap = Math.Round(gap[x.Element], 3),
+            }).ToList(),
+        };
+    }
+
     private static RecommendationResponse BuildResponse(
-        Recommendation rec, List<ScoredProduct> top, IReadOnlyDictionary<Guid, Product> productById)
+        Recommendation rec, List<ScoredProduct> top, IReadOnlyDictionary<Guid, Product> productById,
+        GapBreakdownResponse? gap)
     {
         var factsByProduct = top.ToDictionary(t => t.ProductId);
 
@@ -331,15 +432,16 @@ public sealed class RecommendationService : IRecommendationService
                 ImageUrl = p?.Images.OrderBy(im => im.SortOrder).FirstOrDefault()?.Url,
                 Score = it.BaseScore,
                 Rank = it.FinalRank,
-                MatchFacts = facts is null ? new() : MatchFactsWithHint(facts),
+                MatchFacts = facts?.MatchFacts.ToList() ?? new(),
                 CautionFacts = facts?.CautionFacts.ToList() ?? new(),
+                PlacementHint = facts?.PlacementHint,
                 Explanation = it.AiExplanation,
             };
         })
         .OrderBy(i => i.Rank)
         .ToList();
 
-        return Compose(rec, items);
+        return Compose(rec, items, gap);
     }
 
     private static RecommendationResponse BuildResponseFromEntity(Recommendation rec, IReadOnlyDictionary<Guid, Product> productById)
@@ -363,10 +465,11 @@ public sealed class RecommendationService : IRecommendationService
         .OrderBy(i => i.Rank)
         .ToList();
 
-        return Compose(rec, items);
+        return Compose(rec, items, null);
     }
 
-    private static RecommendationResponse Compose(Recommendation rec, List<RecommendationItemResponse> items) => new()
+    private static RecommendationResponse Compose(
+        Recommendation rec, List<RecommendationItemResponse> items, GapBreakdownResponse? gap) => new()
     {
         Id = rec.Id,
         CustomerElement = rec.CustomerElement?.ToString(),
@@ -375,6 +478,7 @@ public sealed class RecommendationService : IRecommendationService
         PersonalWeight = rec.PersonalWeight,
         Status = rec.Status.ToString(),
         Summary = rec.Summary,
+        Gap = gap,
         Items = items,
     };
 

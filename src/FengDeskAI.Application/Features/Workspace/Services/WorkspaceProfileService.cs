@@ -1,8 +1,11 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Features.CustomerCare.DTOs;
+using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Domain.Entities.Recommendation;
 using Microsoft.Extensions.Logging;
 
 namespace FengDeskAI.Application.Features.Workspace.Services;
@@ -34,6 +37,54 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             return ServiceResult<WorkspaceProfileResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
         return ServiceResult<WorkspaceProfileResponse>.Success(_mapper.Map<WorkspaceProfileResponse>(profile));
+    }
+
+    public async Task<IServiceResult<WorkspaceElementAnalysisResponse>> GetElementAnalysisAsync(Guid id, Guid userId, CancellationToken ct = default)
+    {
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
+        if (profile is null)
+            return ServiceResult<WorkspaceElementAnalysisResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
+
+        var analysis = await AnalyzeAsync(profile, ct);
+
+        // Sắp giảm dần theo Gap: thiếu nhất (gap dương lớn) → thừa nhất (gap âm).
+        var rows = analysis.Ideal.Enumerate().Select(x => new ElementAnalysisRow
+        {
+            Element = x.Element.ToString(),
+            Ideal = Math.Round(x.Value, 3),
+            AdjustedIdeal = Math.Round(analysis.AdjustedIdeal[x.Element], 3),
+            Current = Math.Round(analysis.Current[x.Element], 3),
+            Gap = Math.Round(analysis.Gap[x.Element], 3),
+        })
+        .OrderByDescending(r => r.Gap)
+        .ToList();
+
+        var response = new WorkspaceElementAnalysisResponse
+        {
+            WorkspaceProfileId = profile.Id,
+            DominantNeed = analysis.Gap.Dominant().ToString(),
+            Elements = rows,
+        };
+
+        return ServiceResult<WorkspaceElementAnalysisResponse>.Success(response);
+    }
+
+    /// <summary>Nạp dữ liệu cấu hình rồi dựng 4 vector ngũ hành cho workspace (dùng chung công thức với engine).</summary>
+    private async Task<WorkspaceElementAnalysis> AnalyzeAsync(
+        Domain.Entities.Workspace.WorkspaceProfile profile, CancellationToken ct)
+    {
+        var typeElements = new List<WorkspaceTypeElement>();
+        if (profile.WorkspaceTypeId is { } typeId
+            && await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct) is not null)
+        {
+            typeElements = await _uow.ScoringConfig.GetWorkspaceTypeElementsAsync(typeId, ct);
+        }
+
+        var resolver = new ElementInputResolver(await _uow.ScoringConfig.GetElementInputMapAsync(ct));
+        var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
+        var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
+
+        return WorkspaceElementAnalyzer.Analyze(typeElements, modifiers, profileInputs, resolver);
     }
 
     public async Task<IServiceResult<WorkspaceProfileResponse>> GetDefaultAsync(Guid userId, CancellationToken ct = default)
