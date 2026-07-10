@@ -1,46 +1,19 @@
 namespace FengDeskAI.Application.Features.CustomerCare;
 
 /// <summary>
-/// Cấu hình session chat AI (bind từ section "AiChat" trong appsettings).
-/// Một class duy nhất: phần transport (BaseUrl/ChatPath/...) dùng bởi client trong Infrastructure,
-/// phần policy (model + lịch sử) dùng bởi <c>AiChatService</c> trong Application.
+/// Cấu hình AI cho chức năng CHATBOX (bind từ section "Ai:Chat").
+/// Transport (BaseUrl/Timeout/...) nằm ở "Ai:Provider" (<c>AiProviderOptions</c>, Infrastructure);
+/// intake/autofill nằm ở "Ai:Intake" (<c>WorkspaceIntakeOptions</c>).
 /// </summary>
 public sealed class AiChatOptions
 {
-    public const string SectionName = "AiChat";
+    public const string SectionName = "Ai:Chat";
 
-    // ── Transport ────────────────────────────────────────────────────────────
-    /// <summary>Base URL của LLM, vd "http://localhost:11434" hoặc URL ngrok.</summary>
-    public string BaseUrl { get; set; } = "http://localhost:11434";
-
-    /// <summary>Đường dẫn endpoint chat (Ollama: "/api/chat").</summary>
-    public string ChatPath { get; set; } = "/api/chat";
-
-    /// <summary>Timeout (giây) cho 1 lượt gọi — LLM local thường chậm, để rộng.</summary>
-    public int TimeoutSeconds { get; set; } = 120;
-
-    /// <summary>
-    /// Cửa sổ ngữ cảnh (token) gửi Ollama qua options.num_ctx. Mặc định Ollama ~2048 → hội thoại dài
-    /// (RoomContextMessages=30 + system prompt + tools) bị tràn → model trả rỗng → mất lượt trả lời.
-    /// Đặt rộng để chứa lịch sử. 0 = không gửi (dùng mặc định model).
-    /// </summary>
-    public int NumCtx { get; set; } = 16384;
-
-    /// <summary>
-    /// Giữ model nóng trong RAM giữa các lượt (Ollama "keep_alive"), vd "30m", "1h", "-1" = vĩnh viễn.
-    /// Bỏ trống → dùng mặc định của Ollama (~5 phút). Đây là cách giảm độ trễ load model hiệu quả nhất.
-    /// </summary>
-    public string? KeepAlive { get; set; } = "30m";
-
-    /// <summary>Khoá xác thực gửi kèm header (nếu LLM yêu cầu). Bỏ trống → không gửi.</summary>
-    public string? ApiKey { get; set; }
-
-    /// <summary>Tên header chứa <see cref="ApiKey"/>.</summary>
-    public string ApiKeyHeader { get; set; } = "Authorization";
-
-    // ── Policy ───────────────────────────────────────────────────────────────
     /// <summary>Model mặc định khi request không chỉ định.</summary>
     public string DefaultModel { get; set; } = "gemma3:4b";
+
+    /// <summary>Temperature cho hội thoại tự do. null = theo mặc định của model/provider.</summary>
+    public double? Temperature { get; set; }
 
     /// <summary>Danh sách model được phép đổi. Rỗng → chấp nhận mọi model client gửi.</summary>
     public List<string> AllowedModels { get; set; } = new();

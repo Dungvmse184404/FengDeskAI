@@ -11,11 +11,22 @@ public sealed record AiToolSpec(string Name, string Description, IReadOnlyDictio
 /// <summary>1 yêu cầu gọi tool do LLM trả về.</summary>
 public sealed record AiToolCall(string Name, string ArgumentsJson);
 
+/// <summary>Sản phẩm mà tool đã trả về trong lượt chat — để hậu xử lý tự chèn link markdown nếu model quên.</summary>
+public sealed record AiProductRef(Guid Id, string Name);
+
 /// <summary>
 /// Ngữ cảnh thực thi tool — scope theo user để không lộ dữ liệu người khác.
 /// <paramref name="ChatboxId"/>: phòng đang hội thoại (dùng cho tool đọc thông tin đối phương theo consent).
 /// </summary>
-public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEmail, Guid? ChatboxId = null);
+public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEmail, Guid? ChatboxId = null)
+{
+    /// <summary>
+    /// Registry per-turn: tool nào trả sản phẩm thì ghi vào đây (Id + Name).
+    /// <c>AiChatService</c> dùng để auto-link "[Tên](/products/{id})" trong câu trả lời cuối — deterministic,
+    /// không phó mặc cho model nhớ quy tắc hyperlink.
+    /// </summary>
+    public List<AiProductRef> Products { get; } = new();
+}
 
 /// <summary>
 /// Một công cụ AI có thể gọi (function calling). Thuần Application: gọi lại các service nghiệp vụ,

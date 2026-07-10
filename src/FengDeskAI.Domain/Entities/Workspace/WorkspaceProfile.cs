@@ -23,17 +23,18 @@ public class WorkspaceProfile : BaseEntity
 
     /// <summary>Mã phong cách (FK <c>styles.code</c>) — vd "Minimal".</summary>
     public string StyleCode { get; set; } = null!;
-    public LightingType Lighting { get; set; }
-    public DeskType DeskType { get; set; }
-    public CompassDirection DeskOrientation { get; set; }
-    public CompassDirection RoomFacingDirection { get; set; }
+    public LightingType? Lighting { get; set; }
+    /// <summary>Loại bàn — null nghĩa là không gian không có bàn.</summary>
+    public DeskType? DeskType { get; set; }
+    public CompassDirection? DeskOrientation { get; set; }
+    public CompassDirection? RoomFacingDirection { get; set; }
     public WorkPurpose WorkPurpose { get; set; }
 
-    /// <summary>Mệnh nhập tay (legacy) — engine v3 không dùng, giữ để tương thích dữ liệu cũ.</summary>
-    public FengShuiElement FengShuiElement { get; set; }
+    /// <summary>Mệnh nhập tay (legacy) — engine v3 không dùng, giữ cột cho dữ liệu cũ, không còn nhập mới.</summary>
+    public FengShuiElement? FengShuiElement { get; set; }
 
     /// <summary>Diện tích mặt bàn (cm²).</summary>
-    public int DeskArea { get; set; }
+    public int? DeskArea { get; set; }
 
     // ── Directional Validation (engine v3) — optional, trống thì không phạt hướng ──
 

@@ -16,6 +16,7 @@ Hợp đồng giữa **.NET monolith** (caller) và **AI microservice** (Python,
 3. **Chỉ được hoán vị thứ tự trong tập đã nhận** (`FinalRank`). Nên bám sát `BaseRank`, chỉ đảo khi có lý do từ facts.
 4. **Tôn trọng `CautionFacts`.** Nếu có cảnh báo (vd "khắc bản mệnh", "quá khổ"), diễn giải phải trung thực, không lờ đi.
 5. **`Customer.Element == null`** nghĩa là đã bỏ qua yếu tố cá nhân (giới tính không Nam/Nữ) → AI chỉ nhấn công năng (mục đích/ánh sáng/kích thước), không suy đoán mệnh.
+6. **`Workspace.Lighting`/`DeskOrientation`/`DeskArea` có thể vắng mặt** (user chưa điền) — key sẽ KHÔNG xuất hiện trong JSON khi null, không suy đoán giá trị thay user.
 
 ## Enum (closed-set, gửi dạng string)
 

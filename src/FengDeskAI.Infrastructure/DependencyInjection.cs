@@ -1,6 +1,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using FengDeskAI.Application.Features.CustomerCare;
+using FengDeskAI.Application.Features.Workspace;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Infrastructure.ExternalServices.Ai;
@@ -160,6 +161,7 @@ public static class DependencyInjection
         services.AddScoped<ITokenService, TokenService>();
 
         services.AddDistributedMemoryCache();
+        services.AddMemoryCache();
 
         services.AddSettings<MailSettings>(configuration);
         services.AddScoped<IEmailSender, SmtpEmailSender>();
@@ -231,8 +233,10 @@ public static class DependencyInjection
         else
             services.AddHttpClient<IAiRecommendationClient, HttpAiRecommendationClient>();
 
-        // AI chat hội thoại — gọi LLM kiểu Ollama (/api/chat). Lịch sử lưu trong chatboxes/chat_messages (DB).
+        // AI LLM — transport chung (Ai:Provider) + cấu hình per-function: chatbox (Ai:Chat), intake (Ai:Intake).
+        services.AddSettings<AiProviderOptions>(configuration);
         services.AddSettings<AiChatOptions>(configuration);
+        services.AddSettings<WorkspaceIntakeOptions>(configuration);
         services.AddHttpClient<IAiChatClient, OllamaChatClient>();
 
         // Object storage (Supabase) cho ảnh sản phẩm/người dùng + encoder ảnh → base64 để feed AI.

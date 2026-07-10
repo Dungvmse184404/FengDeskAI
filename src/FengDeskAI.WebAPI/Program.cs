@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using System.Threading.RateLimiting;
 using FengDeskAI.Application;
 using FengDeskAI.Application.Features.Geography.Services;
 using FengDeskAI.Application.Interfaces.Security;
@@ -5,6 +7,7 @@ using FengDeskAI.Infrastructure;
 using FengDeskAI.Infrastructure.Common;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using FengDeskAI.Infrastructure.Persistence.Seeding;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using FengDeskAI.WebAPI.Authorization;
@@ -93,6 +96,7 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<FengDeskAI.Application.Interfaces.External.IChatRealtimeNotifier, FengDeskAI.WebAPI.Hubs.ChatRealtimeNotifier>();
+builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiActivityNotifier, FengDeskAI.WebAPI.Hubs.AiActivityNotifier>();
 
 // Bot AI nền (Phase 3): hàng đợi singleton + worker xử lý.
 builder.Services.AddSingleton<FengDeskAI.WebAPI.Workers.AiBotQueue>();
@@ -137,6 +141,20 @@ builder.Services.AddAuthorization(options =>
         p => p.RequireRole(Roles.GardenOwner, Roles.Admin));
 });
 
+// Chống spam gọi LLM ở endpoint workspace AI intake: 10 req/phút, partition theo userId
+// (JWT NameIdentifier — endpoint đã [Authorize] nên luôn có claim khi middleware chạy tới đây).
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.AddPolicy("workspace-intake", httpContext => RateLimitPartition.GetFixedWindowLimiter(
+        partitionKey: httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "anonymous",
+        factory: _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+        }));
+});
+
 var app = builder.Build();
 
 // Chế độ "chỉ seeding": `dotnet run --project src/FengDeskAI.WebAPI -- seed`
@@ -170,6 +188,7 @@ app.UseSwaggerUI(opt =>
 app.UseCors("AllowAll");
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");

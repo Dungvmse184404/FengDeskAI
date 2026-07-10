@@ -30,9 +30,10 @@ public sealed record AiWorkspaceInfo
     public bool IsPublic { get; init; }
     public required string Purpose { get; init; }
     public required string Style { get; init; }
-    public required string Lighting { get; init; }
-    public required string DeskOrientation { get; init; }
-    public int DeskArea { get; init; }
+    /// <summary>Null nếu user chưa điền — bỏ qua khỏi diễn giải thay vì suy đoán.</summary>
+    public string? Lighting { get; init; }
+    public string? DeskOrientation { get; init; }
+    public int? DeskArea { get; init; }
     /// <summary>Trọng số cá nhân đã áp (1.0 riêng tư, 0.5 công cộng) — để AI hiểu mức nhấn mệnh.</summary>
     public decimal PersonalWeight { get; init; }
 }

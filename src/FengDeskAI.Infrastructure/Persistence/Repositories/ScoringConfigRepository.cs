@@ -46,4 +46,18 @@ public class ScoringConfigRepository : IScoringConfigRepository
             await set.AddAsync(input, ct);
         }
     }
+
+    public async Task ReplaceWorkspaceProfileInputsAsync(
+        Guid workspaceProfileId, IEnumerable<WorkspaceProfileInput> inputs, CancellationToken ct = default)
+    {
+        var set = _context.Set<WorkspaceProfileInput>();
+        var existing = await set.Where(i => i.WorkspaceProfileId == workspaceProfileId).ToListAsync(ct);
+        if (existing.Count > 0) set.RemoveRange(existing); // soft-delete qua SaveChanges
+
+        foreach (var input in inputs)
+        {
+            input.WorkspaceProfileId = workspaceProfileId;
+            await set.AddAsync(input, ct);
+        }
+    }
 }
