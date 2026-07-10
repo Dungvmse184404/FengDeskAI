@@ -100,8 +100,18 @@ public class ChatHub : Hub
         }
 
         await Groups.AddToGroupAsync(Context.ConnectionId, $"chat-{chatboxId}");
+        // Tương thích chat cũ: aiStatus của phòng AI phát vào "ai-op-chat-{chatboxId}" (xem AiActivityNotifier).
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"ai-op-chat-{chatboxId}");
         await Clients.Group($"chat-{chatboxId}").SendAsync("userJoined", new { chatboxId, userId = userId.Value });
     }
+
+    /// <summary>Tham gia group nhận trạng thái AI realtime cho một operation (chat, workspace intake…).</summary>
+    public Task JoinAiOperation(string operationId)
+        => Groups.AddToGroupAsync(Context.ConnectionId, $"ai-op-{operationId}");
+
+    /// <summary>Rời group trạng thái AI realtime.</summary>
+    public Task LeaveAiOperation(string operationId)
+        => Groups.RemoveFromGroupAsync(Context.ConnectionId, $"ai-op-{operationId}");
 
     /// <summary>
     /// Rời khỏi chatbox group.

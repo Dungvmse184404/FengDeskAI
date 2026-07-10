@@ -20,7 +20,7 @@ public sealed class RecommendationService : IRecommendationService
 {
     private const int DefaultTopN = 8;
     private const int MaxTopN = 20;
-
+   
     private readonly IUnitOfWork _uow;
     private readonly IRecommendationScorer _scorer;
     private readonly IAiRecommendationClient _ai;
@@ -349,8 +349,8 @@ public sealed class RecommendationService : IRecommendationService
                 IsPublic = wsType?.IsPublic ?? false,
                 Purpose = profile.WorkPurpose.ToString(),
                 Style = profile.StyleCode,
-                Lighting = profile.Lighting.ToString(),
-                DeskOrientation = profile.DeskOrientation.ToString(),
+                Lighting = profile.Lighting?.ToString(),
+                DeskOrientation = profile.DeskOrientation?.ToString(),
                 DeskArea = profile.DeskArea,
                 PersonalWeight = legacyWeight,
             },

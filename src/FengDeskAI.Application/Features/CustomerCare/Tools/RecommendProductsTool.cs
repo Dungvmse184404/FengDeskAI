@@ -36,6 +36,36 @@ public sealed class RecommendProductsTool : IAiTool
         if (!result.IsSuccess || result.Data is null)
             return ToolArgs.Error(result.Message ?? "Could not generate suggestions.");
 
-        return ToolArgs.Json(result.Data);
+        var data = result.Data;
+
+        // Ghi registry để AiChatService auto-link tên sản phẩm trong câu trả lời cuối (nếu model quên).
+        foreach (var it in data.Items)
+            context.Products.Add(new AiProductRef(it.ProductId, it.ProductName));
+
+        // Trả kèm sẵn field "link" (markdown) cho từng sản phẩm — model chỉ việc dùng nguyên văn.
+        return ToolArgs.Json(new
+        {
+            data.CustomerElement,
+            data.KuaNumber,
+            data.KuaGroup,
+            data.PersonalWeight,
+            data.Status,
+            data.Summary,
+            data.Gap,
+            Items = data.Items.Select(i => new
+            {
+                i.ProductId,
+                i.ProductName,
+                Link = $"[{i.ProductName}](/products/{i.ProductId})",
+                i.Price,
+                i.Score,
+                i.Rank,
+                i.MatchFacts,
+                i.CautionFacts,
+                i.PlacementHint,
+                i.Explanation,
+            }),
+            Note = "When mentioning any of these products in your reply, write the product name EXACTLY as the 'link' value (a markdown link). Do not invent other URLs.",
+        });
     }
 }

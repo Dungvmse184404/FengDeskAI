@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Contracts.Recommendation;
 using Microsoft.Extensions.Logging;
@@ -14,7 +15,12 @@ namespace FengDeskAI.Infrastructure.ExternalServices.Ai;
 /// </summary>
 public sealed class HttpAiRecommendationClient : IAiRecommendationClient
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    // Bỏ hẳn key khỏi payload khi null (thay vì gửi "key": null) — field workspace optional (Lighting,
+    // DeskOrientation, DeskArea) không nên xuất hiện dưới dạng chuỗi "null" cho AI diễn giải.
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+    };
 
     private readonly HttpClient _http;
     private readonly AiRecommendationSettings _settings;

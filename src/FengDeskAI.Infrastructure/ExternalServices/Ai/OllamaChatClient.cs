@@ -2,7 +2,6 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
-using FengDeskAI.Application.Features.CustomerCare;
 using FengDeskAI.Application.Interfaces.External;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -18,10 +17,10 @@ public sealed class OllamaChatClient : IAiChatClient
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     private readonly HttpClient _http;
-    private readonly AiChatOptions _options;
+    private readonly AiProviderOptions _options;
     private readonly ILogger<OllamaChatClient> _logger;
 
-    public OllamaChatClient(HttpClient http, IOptions<AiChatOptions> options, ILogger<OllamaChatClient> logger)
+    public OllamaChatClient(HttpClient http, IOptions<AiProviderOptions> options, ILogger<OllamaChatClient> logger)
     {
         _options = options.Value;
         _logger = logger;
@@ -34,7 +33,8 @@ public sealed class OllamaChatClient : IAiChatClient
     }
 
     public async Task<AiChatCompletion> CompleteAsync(
-        string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools = null, CancellationToken ct = default)
+        string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools = null,
+        AiCompletionOptions? options = null, CancellationToken ct = default)
     {
         var payload = new OllamaChatRequest
         {
@@ -43,7 +43,8 @@ public sealed class OllamaChatClient : IAiChatClient
             KeepAlive = string.IsNullOrWhiteSpace(_options.KeepAlive) ? null : _options.KeepAlive,
             Messages = messages.Select(ToWire).ToList(),
             Tools = tools is { Count: > 0 } ? tools.Select(ToWireTool).ToList() : null,
-            Options = _options.NumCtx > 0 ? new OllamaOptions { NumCtx = _options.NumCtx } : null,
+            Format = options?.JsonMode == true ? "json" : null,
+            Options = BuildOllamaOptions(options),
         };
 
         _logger.LogInformation("[AiChat] POST {Path} model={Model} ({Count} tin nhắn, {Tools} tools).",
@@ -57,7 +58,7 @@ public sealed class OllamaChatClient : IAiChatClient
             if (payload.Tools is { Count: > 0 } && err.Contains("does not support tools", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogWarning("[AiChat] Model {Model} không hỗ trợ tools — fallback chat thường.", model);
-                return await CompleteAsync(model, messages, tools: null, ct);
+                return await CompleteAsync(model, messages, tools: null, options: options, ct: ct);
             }
             _logger.LogError("[AiChat] LLM lỗi {Status}: {Err}", resp.StatusCode, err);
             resp.EnsureSuccessStatusCode(); // ném lỗi
@@ -98,6 +99,16 @@ public sealed class OllamaChatClient : IAiChatClient
             : null,
     };
 
+    private OllamaOptions? BuildOllamaOptions(AiCompletionOptions? options)
+    {
+        if (_options.NumCtx <= 0 && options?.Temperature is null) return null;
+        return new OllamaOptions
+        {
+            NumCtx = _options.NumCtx > 0 ? _options.NumCtx : null,
+            Temperature = options?.Temperature,
+        };
+    }
+
     private static OllamaTool ToWireTool(AiToolSpec spec) => new()
     {
         Function = new OllamaFunction
@@ -129,6 +140,11 @@ public sealed class OllamaChatClient : IAiChatClient
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<OllamaTool>? Tools { get; init; }
 
+        /// <summary>"json" ép model trả JSON hợp lệ (workspace intake) — bỏ trống cho chat tự do.</summary>
+        [JsonPropertyName("format")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Format { get; init; }
+
         [JsonPropertyName("options")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public OllamaOptions? Options { get; init; }
@@ -137,7 +153,12 @@ public sealed class OllamaChatClient : IAiChatClient
     private sealed class OllamaOptions
     {
         [JsonPropertyName("num_ctx")]
-        public int NumCtx { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? NumCtx { get; init; }
+
+        [JsonPropertyName("temperature")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public double? Temperature { get; init; }
     }
 
     private sealed class OllamaMessage

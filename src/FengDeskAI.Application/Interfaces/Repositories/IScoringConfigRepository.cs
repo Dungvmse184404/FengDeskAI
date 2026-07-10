@@ -18,4 +18,7 @@ public interface IScoringConfigRepository
 
     /// <summary>Thay toàn bộ input (màu/vật liệu/hình khối) của 1 sản phẩm. Chưa commit — caller lưu qua UoW.</summary>
     Task ReplaceProductElementInputsAsync(Guid productId, IEnumerable<ProductElementInput> inputs, CancellationToken ct = default);
+
+    /// <summary>Thay toàn bộ input (màu/vật liệu/hình khối) của 1 workspace profile. Chưa commit — caller lưu qua UoW.</summary>
+    Task ReplaceWorkspaceProfileInputsAsync(Guid workspaceProfileId, IEnumerable<WorkspaceProfileInput> inputs, CancellationToken ct = default);
 }

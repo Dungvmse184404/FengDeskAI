@@ -55,6 +55,7 @@ public static class DependencyInjection
         services.AddScoped<IUserService, UserService>();
         services.AddScoped<IWorkspaceProfileService, WorkspaceProfileService>();
         services.AddScoped<IWorkspaceTypeService, WorkspaceTypeService>();
+        services.AddScoped<IWorkspaceIntakeService, WorkspaceIntakeService>();
 
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IUserAddressService, UserAddressService>();
@@ -108,7 +109,7 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, GetPaymentStatusTool>();
         services.AddScoped<IAiTool, GetChatPartnerInfoTool>();
 
-        // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "AiChat".
+        // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "Ai:Chat".
         services.AddScoped<IAiChatService, AiChatService>();
 
         return services;

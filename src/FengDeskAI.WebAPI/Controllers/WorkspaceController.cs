@@ -1,8 +1,10 @@
 using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Features.Workspace.Services;
+using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FengDeskAI.WebAPI.Controllers;
 
@@ -15,11 +17,24 @@ namespace FengDeskAI.WebAPI.Controllers;
 public class WorkspaceProfilesController : ApiControllerBase
 {
     private readonly IWorkspaceProfileService _service;
+    private readonly IWorkspaceIntakeService _intakeService;
 
-    public WorkspaceProfilesController(IWorkspaceProfileService service)
+    public WorkspaceProfilesController(IWorkspaceProfileService service, IWorkspaceIntakeService intakeService)
     {
         _service = service;
+        _intakeService = intakeService;
     }
+
+    /// <summary>
+    /// AI intake: mô tả không gian bằng lời → draft prefill form. Stateless — KHÔNG lưu DB;
+    /// user review/sửa rồi submit qua <see cref="Create"/> như bình thường.
+    /// </summary>
+    [HttpPost("parse-description")]
+    [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
+    [EnableRateLimiting("workspace-intake")]
+    public async Task<IActionResult> ParseDescription(
+        [FromBody] ParseWorkspaceDescriptionRequest request, CancellationToken ct)
+        => ToActionResult(await _intakeService.ParseAsync(CurrentUserId, request, ct));
 
     /// <summary>Danh sách workspace profile của user hiện tại.</summary>
     [HttpGet]

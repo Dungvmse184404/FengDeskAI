@@ -12,8 +12,4 @@ public sealed class ChatRealtimeNotifier : IChatRealtimeNotifier
 
     public Task MessageReceivedAsync(ChatMessageBroadcast message, CancellationToken ct = default)
         => _hub.Clients.Group($"chat-{message.ChatboxId}").SendAsync("messageReceived", message, ct);
-
-    public Task AiActivityAsync(Guid chatboxId, string phase, string? toolName = null, CancellationToken ct = default)
-        => _hub.Clients.Group($"chat-{chatboxId}").SendAsync(
-            "aiStatus", new { chatboxId, phase, toolName }, ct);
 }
