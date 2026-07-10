@@ -131,6 +131,15 @@ public class ChatController : ApiControllerBase
             CurrentUserId, CurrentUser.Role, CurrentUser.Email, CurrentUser.Name, request, ct));
 
     /// <summary>
+    /// Rewind: sửa (hoặc giữ nguyên để regenerate) một tin nhắn cũ của chính mình rồi gửi lại — mọi tin
+    /// từ tin đó trở đi trong hội thoại bị thay thế. Chỉ áp dụng cho phòng riêng user↔AI.
+    /// </summary>
+    [HttpPost("ai/messages/{messageId:guid}/rewind")]
+    public async Task<IActionResult> RewindAi(Guid messageId, [FromBody] AiRewindRequest request, CancellationToken ct)
+        => ToActionResult(await _aiService.RewindAsync(
+            CurrentUserId, CurrentUser.Role, CurrentUser.Email, CurrentUser.Name, messageId, request, ct));
+
+    /// <summary>
     /// Lấy/tạo phòng riêng user ↔ AI và trả về ChatboxId. Trang AI lớn gọi trước khi upload ảnh
     /// (endpoint upload cần chatboxId) ở lượt đầu chưa gửi tin nào.
     /// </summary>

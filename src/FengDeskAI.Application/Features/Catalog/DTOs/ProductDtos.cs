@@ -137,12 +137,14 @@ public class CreateProductRequest
     public List<CreateProductImageRequest> Images { get; set; } = new();
     public List<Guid> CategoryIds { get; set; } = new();
 
-    // ===== Thuộc tính phong thủy (tùy chọn) — khai báo luôn khi tạo để thành ứng viên gợi ý.
-    // Bỏ trống PrimaryElement → tạo sản phẩm chưa có phong thủy (set sau qua endpoint /feng-shui). =====
+    // ===== Thuộc tính phong thủy (tùy chọn) — khai báo luôn khi tạo để thành ứng viên gợi ý. =====
 
-    /// <summary>Hành chính (IsPrimary). Null → không gắn phong thủy khi tạo.</summary>
+    /// <summary>Tín hiệu vật lý (vật liệu/màu/hình khối) — nguồn auto-calc vector (tầng 2), ưu tiên hơn PrimaryElement.</summary>
+    public List<ProductElementInputDto> ElementInputs { get; set; } = new();
+
+    /// <summary>Đường advanced / fallback tầng 3 — chỉ dùng khi không có ElementInputs. Null → không gắn phong thủy khi tạo.</summary>
     public FengShuiElement? PrimaryElement { get; set; }
-    /// <summary>Các hành phụ (0..n). Trùng hành chính sẽ bị bỏ qua.</summary>
+    /// <summary>Các hành phụ (0..n) của đường advanced. Trùng hành chính sẽ bị bỏ qua.</summary>
     public List<FengShuiElement> SecondaryElements { get; set; } = new();
     public SizeClass? SizeClass { get; set; }
     /// <summary>Mã vibe (vibes.code), vd "Focus".</summary>

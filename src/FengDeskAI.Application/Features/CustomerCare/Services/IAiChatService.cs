@@ -19,4 +19,12 @@ public interface IAiChatService
     /// tuyệt đối không nạp nội dung phòng private. Tool chạy theo scope của <paramref name="triggeredByUserId"/>.
     /// </summary>
     Task RespondInRoomAsync(Guid chatboxId, Guid triggeredByUserId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Rewind (sửa & gửi lại) một tin nhắn cũ của chính user trong phòng riêng user↔AI: soft-delete tin đó
+    /// và mọi tin sau nó trong chatbox, rồi gửi lại nội dung (mới hoặc giữ nguyên) qua <see cref="SendAsync"/>.
+    /// </summary>
+    Task<IServiceResult<AiChatResponse>> RewindAsync(
+        Guid userId, string? userRole, string? userEmail, string? userDisplayName,
+        Guid messageId, AiRewindRequest request, CancellationToken ct = default);
 }

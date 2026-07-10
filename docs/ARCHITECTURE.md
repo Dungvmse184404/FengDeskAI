@@ -314,7 +314,9 @@ Không có global `GardenStaff`. Quyền trên 1 store cụ thể check qua:
 | Convention BE / thêm entity mới / EF migration flow | `FengDeskAI/docs/PROJECT-GUIDE.md` §10, `FengDeskAI/CLAUDE.md` |
 | API contract chi tiết | `FengDeskAI/docs/api-documents/` (đánh số theo feature) |
 | ERD & state diagrams | `FengDeskAI/docs/erd/SEP490_FengDeskAI.drawio` |
-| Refactor plan (invitation, garden owner…) | `FengDeskAI/docs/ard/*.md` — spec trước khi code |
+| Kiến trúc tổng thể (chi tiết, cập nhật) | `FengDeskAI/docs/ard/architecture-core/` |
+| Từng phân hệ nghiệp vụ (bounded context) | `FengDeskAI/docs/ard/bounded-contexts/` |
+| Lịch sử thay đổi: feature design, refactor, fix, tích hợp | `FengDeskAI/docs/adr/*.md` |
 | Deliverables trường (Review1/2) | `Documents/1_SEP490/`, `Documents/2_SEP490/` |
 | Branching + Conventional Commits | `CONTRIBUTING.md` (workspace root) |
 | Rule cho AI agents | `AGENTS.md` (workspace root) |

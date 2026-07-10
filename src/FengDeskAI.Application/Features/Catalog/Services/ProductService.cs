@@ -56,14 +56,12 @@ public class ProductService : IProductService
             return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.CreateForbidden);
         if (!await _uow.Categories.AllExistAsync(request.CategoryIds, ct))
             return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.CategoriesNotExist);
-        // Nếu khai báo phong thủy ngay khi tạo: kiểm style/vibe code có trong bảng tra cứu (element là enum nên luôn hợp lệ).
-        if (request.PrimaryElement is not null)
-        {
-            if (!await AllCodesExistAsync(_uow.Styles, request.Styles, ct))
-                return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.StylesNotExist);
-            if (!await AllCodesExistAsync(_uow.Vibes, request.Vibes, ct))
-                return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.VibesNotExist);
-        }
+        // Vibe/style độc lập với PrimaryElement (element là enum nên luôn hợp lệ) — kiểm code có trong bảng tra cứu,
+        // cùng cách SetFengShuiAsync đang làm, để tránh lỗi FK 500 và trả 400 thân thiện.
+        if (!await AllCodesExistAsync(_uow.Styles, request.Styles, ct))
+            return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.StylesNotExist);
+        if (!await AllCodesExistAsync(_uow.Vibes, request.Vibes, ct))
+            return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.VibesNotExist);
 
         var product = new Product
         {
@@ -79,6 +77,15 @@ public class ProductService : IProductService
         foreach (var cid in request.CategoryIds.Distinct())
             product.ProductCategories.Add(new ProductCategory { CategoryId = cid });
         ApplyFengShui(product, request);
+
+        // Đường auto-calc (tầng 2) — ưu tiên hơn PrimaryElement, cùng 1 SaveChangesAsync nên atomic (lỗi validate → không tạo product).
+        if (request.ElementInputs.Count > 0)
+        {
+            var inputs = request.ElementInputs.Select(i => (i.Kind, i.Code)).ToList();
+            var (applyError, _) = await ProductVectorApplier.ApplyInputsAsync(product, inputs, _uow, ct);
+            if (applyError is not null)
+                return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, applyError);
+        }
 
         await _uow.Products.AddAsync(product, ct);
         await _uow.SaveChangesAsync(ct);
@@ -274,15 +281,19 @@ public class ProductService : IProductService
     private async Task<bool> CanManageStoreAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
         => isAdmin || await _uow.Stores.CanManageAsync(storeId, userId, ct);
 
-    /// <summary>Gắn thuộc tính phong thủy lên product mới (in-memory) nếu request có khai báo PrimaryElement.</summary>
+    /// <summary>
+    /// Gắn thuộc tính phong thủy lên product mới (in-memory). SizeClass/Vibes/Styles độc lập với PrimaryElement
+    /// (vendor có thể chọn vibe/style mà không cần khai hành); hành chính/phụ chỉ gắn khi có khai PrimaryElement.
+    /// </summary>
     private static void ApplyFengShui(Product product, CreateProductRequest request)
     {
-        if (request.PrimaryElement is not { } primary) return;
-
         product.SizeClass = request.SizeClass;
-        product.Elements.Add(new ProductElement { Element = primary, IsPrimary = true });
-        foreach (var el in request.SecondaryElements.Distinct().Where(e => e != primary))
-            product.Elements.Add(new ProductElement { Element = el, IsPrimary = false });
+        if (request.PrimaryElement is { } primary)
+        {
+            product.Elements.Add(new ProductElement { Element = primary, IsPrimary = true });
+            foreach (var el in request.SecondaryElements.Distinct().Where(e => e != primary))
+                product.Elements.Add(new ProductElement { Element = el, IsPrimary = false });
+        }
         foreach (var code in request.Vibes.Distinct())
             product.Vibes.Add(new ProductVibe { VibeCode = code });
         foreach (var code in request.Styles.Distinct())

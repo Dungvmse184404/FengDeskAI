@@ -37,4 +37,13 @@ public class ChatMessageRepository : GenericRepository<ChatMessage>, IChatMessag
         items.Reverse();
         return items;
     }
+
+    public Task<ChatMessage?> GetByIdWithImagesAsync(Guid id, CancellationToken ct = default)
+        => _set.Include(m => m.Images).FirstOrDefaultAsync(m => m.Id == id, ct);
+
+    public Task SoftDeleteFromAsync(Guid chatboxId, DateTime fromCreatedAt, Guid fromId, CancellationToken ct = default)
+        => _set
+            .Where(m => m.ChatboxId == chatboxId
+                && (m.CreatedAt > fromCreatedAt || (m.CreatedAt == fromCreatedAt && m.Id >= fromId)))
+            .ExecuteUpdateAsync(s => s.SetProperty(m => m.IsDeleted, true), ct);
 }

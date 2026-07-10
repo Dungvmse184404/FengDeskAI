@@ -108,6 +108,9 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, ListMyOrdersTool>();
         services.AddScoped<IAiTool, GetPaymentStatusTool>();
         services.AddScoped<IAiTool, GetChatPartnerInfoTool>();
+        // Tool có tác dụng phụ (tạo đơn) — chỉ enable ở phòng riêng, xem AiChatService.PrivateRoomOnlyTools.
+        services.AddScoped<IAiTool, PrepareOrderTool>();
+        services.AddScoped<IAiTool, ConfirmOrderTool>();
 
         // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "Ai:Chat".
         services.AddScoped<IAiChatService, AiChatService>();
