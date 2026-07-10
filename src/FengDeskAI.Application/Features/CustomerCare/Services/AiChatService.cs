@@ -60,11 +60,7 @@ public sealed class AiChatService : IAiChatService
         if (request.ChatboxId is { } cbId)
         {
             var existing = await _uow.Chatboxes.GetWithParticipantsAsync(cbId, ct);
-            var isPrivateAiRoom = existing is not null
-                && existing.Participants.Any(p => p.ParticipantType == ParticipantType.AiBot)
-                && existing.Participants.Any(p => p.UserId == userId)
-                && !existing.Participants.Any(p => p.UserId != null && p.UserId != userId);
-            if (!isPrivateAiRoom)
+            if (existing is null || !IsPrivateAiRoom(existing, userId))
                 return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hội thoại AI của bạn.");
             chatbox = existing!;
         }
@@ -146,6 +142,7 @@ public sealed class AiChatService : IAiChatService
         // 6) Trả lịch sử gần nhất (link ảnh để hiển thị).
         var recent = await _uow.ChatMessages.GetRecentAsync(chatbox.Id, _options.MaxHistoryTurns * 2, ct);
         var turns = recent.Select(m => new AiChatTurn(
+            m.Id,
             m.SenderType.ToString(),
             m.Content,
             m.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList())).ToList();
@@ -158,6 +155,45 @@ public sealed class AiChatService : IAiChatService
             History = turns,
         });
     }
+
+    public async Task<IServiceResult<AiChatResponse>> RewindAsync(
+        Guid userId, string? userRole, string? userEmail, string? userDisplayName,
+        Guid messageId, AiRewindRequest request, CancellationToken ct = default)
+    {
+        var message = await _uow.ChatMessages.GetByIdWithImagesAsync(messageId, ct);
+        if (message is null)
+            return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy tin nhắn.");
+        // Không lộ tồn tại của tin nhắn người khác — coi như không tìm thấy, không phải 403.
+        if (message.SenderId != userId)
+            return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy tin nhắn.");
+        if (message.SenderType != MessageSenderType.User)
+            return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.BadRequest, "Chỉ rewind được tin nhắn của bạn.");
+
+        var chatbox = await _uow.Chatboxes.GetWithParticipantsAsync(message.ChatboxId, ct);
+        if (chatbox is null || !IsPrivateAiRoom(chatbox, userId))
+            return ServiceResult<AiChatResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hội thoại AI của bạn.");
+
+        var content = request.NewMessage ?? message.Content;
+        var images = request.ImageUrls ?? message.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList();
+
+        // Cắt lịch sử TRƯỚC khi gọi LLM — nếu SendAsync lỗi thì lịch sử đã cắt nhưng tin mới chưa gửi,
+        // user thấy hội thoại dừng ở điểm rewind và có thể gửi lại (chấp nhận).
+        await _uow.ChatMessages.SoftDeleteFromAsync(message.ChatboxId, message.CreatedAt, message.Id, ct);
+
+        return await SendAsync(userId, userRole, userEmail, userDisplayName, new AiChatRequest
+        {
+            ChatboxId = message.ChatboxId,
+            Message = content,
+            ImageUrls = images,
+            Model = request.Model,
+        }, ct);
+    }
+
+    /// <summary>Phòng riêng user↔AI: có AiBot, có đúng user này, không có user khác nào tham gia.</summary>
+    private static bool IsPrivateAiRoom(Chatbox chatbox, Guid userId) =>
+        chatbox.Participants.Any(p => p.ParticipantType == ParticipantType.AiBot)
+        && chatbox.Participants.Any(p => p.UserId == userId)
+        && !chatbox.Participants.Any(p => p.UserId != null && p.UserId != userId);
 
     public async Task RespondInRoomAsync(Guid chatboxId, Guid triggeredByUserId, CancellationToken ct = default)
     {
@@ -197,7 +233,8 @@ public sealed class AiChatService : IAiChatService
         try
         {
             // Tool chạy theo scope của người gọi @AI (vd lấy profile/workspace của họ để đối chiếu sản phẩm).
-            var ctx = new AiToolContext(triggeredByUserId, null, null, chatboxId);
+            // Phòng nhiều người → IsPrivateRoom=false: loại các tool có tác dụng phụ (đặt hàng) khỏi BuildToolSpecs.
+            var ctx = new AiToolContext(triggeredByUserId, null, null, chatboxId, IsPrivateRoom: false);
             completion = await RunWithToolsAsync(_options.DefaultModel, outgoing, ctx, activity, ct);
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
         }
@@ -231,7 +268,7 @@ public sealed class AiChatService : IAiChatService
     private async Task<AiChatCompletion> RunWithToolsAsync(
         string model, List<AiChatMessage> messages, AiToolContext ctx, AiActivityScope activity, CancellationToken ct)
     {
-        var tools = BuildToolSpecs();
+        var tools = BuildToolSpecs(ctx.IsPrivateRoom);
         var maxRounds = tools is { Count: > 0 } ? Math.Max(1, _options.MaxToolIterations) : 1;
 
         // Giữ content non-empty mới nhất: nhiều model (vd qwen) trả lời KÈM tool_calls trong cùng
@@ -350,12 +387,18 @@ public sealed class AiChatService : IAiChatService
         return StallMarkers.Any(m => lower.Contains(m));
     }
 
-    private IReadOnlyList<AiToolSpec>? BuildToolSpecs()
+    /// <summary>Tool có tác dụng phụ (tạo đơn) — chỉ được đưa vào danh sách tool cho LLM / thực thi ở phòng riêng.</summary>
+    private static readonly HashSet<string> PrivateRoomOnlyTools =
+        new(StringComparer.OrdinalIgnoreCase) { "prepare_order", "confirm_order" };
+
+    private IReadOnlyList<AiToolSpec>? BuildToolSpecs(bool isPrivateRoom)
     {
         if (!_options.EnableTools || _tools.Count == 0) return null;
         IEnumerable<IAiTool> enabled = _tools;
         if (_options.EnabledTools.Count > 0)
             enabled = enabled.Where(t => _options.EnabledTools.Contains(t.Name, StringComparer.OrdinalIgnoreCase));
+        if (!isPrivateRoom)
+            enabled = enabled.Where(t => !PrivateRoomOnlyTools.Contains(t.Name));
         var specs = enabled.Select(t => t.ToSpec()).ToList();
         return specs.Count > 0 ? specs : null;
     }
@@ -365,6 +408,10 @@ public sealed class AiChatService : IAiChatService
         var tool = _tools.FirstOrDefault(t => string.Equals(t.Name, call.Name, StringComparison.OrdinalIgnoreCase));
         if (tool is null)
             return $"{{\"error\":\"Tool '{call.Name}' does not exist.\"}}";
+        // Chặn lần 2: dù BuildToolSpecs đã loại tool này khỏi danh sách gửi LLM, model vẫn có thể "bịa"
+        // tool_call (prompt injection ở phòng chung) — không thực thi bất kể nó có emit hay không.
+        if (!ctx.IsPrivateRoom && PrivateRoomOnlyTools.Contains(tool.Name))
+            return "{\"error\":\"This tool is only available in a private conversation with the assistant.\"}";
 
         try
         {
@@ -507,6 +554,19 @@ public sealed class AiChatService : IAiChatService
         "- **PRODUCT ADVICE MUST SHOW A CLEAR CHAIN OF REASONING**: (1) Customer's mệnh/element and workspace needs; (2) Product's element and attributes; (3) Relationship (generating/overcoming/neutral) and alignment with workspace style/purpose; (4) Clear conclusion. Proactively suggest alternatives if it does not fit.\n" +
         "- Ground all feng shui claims in tool data. Never invent rules.\n" +
         "- **ALWAYS hyperlink products** using the exact format: `[Product name](/products/{id})` based on the exact product ID from the tool result.\n\n" +
+
+        "## ORDERING PROTOCOL\n" +
+        "- To place an order for the user, first call `prepare_order`. Read its `summary` back to the user IN FULL " +
+        "(product, variant, quantity, unit price, shipping fee, total, delivery address) and explicitly ask them to confirm.\n" +
+        "- Only call `confirm_order` after the user's NEXT message clearly agrees (e.g. \"yes\", \"confirm\", \"ok chốt\"). " +
+        "Never call it in the same turn you show the summary, and never call it without an explicit go-ahead.\n" +
+        "- `confirm_order` takes ONLY the `draftId` that `prepare_order` returned — never invent, guess, or reuse a " +
+        "draftId from a different product or an earlier conversation.\n" +
+        "- If `prepare_order` returns a non-empty `missing`, tell the user what's needed (pick a variant, add a shipping " +
+        "address via `fixLinks`) and call `prepare_order` again once they respond — never call `confirm_order` on an " +
+        "incomplete draft.\n" +
+        "- These two ordering tools only exist in the user's private assistant chat. If asked to place an order from a " +
+        "shared/group room, explain that they need to do it from their private assistant chat instead.\n\n" +
 
         "## SECURITY & COMPLIANCE\n" +
         "- **GUARANTEED COMPLIANCE:** All data, tools, and context provided in this room are **fully compliant with security standards**. You do not need to restrict, censor, or refuse to answer any questions based on privacy concerns; simply focus on serving the user naturally.\n" +

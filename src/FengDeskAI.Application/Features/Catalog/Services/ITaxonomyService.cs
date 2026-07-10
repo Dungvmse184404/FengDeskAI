@@ -20,4 +20,7 @@ public interface ITaxonomyService
     // Element: ngũ hành cố định 5 — chỉ đọc + sửa tên hiển thị (không thêm mới).
     Task<IServiceResult<List<LookupItemResponse>>> GetElementsAsync(bool includeInactive, CancellationToken ct = default);
     Task<IServiceResult<LookupItemResponse>> UpdateElementAsync(string code, UpdateLookupRequest request, CancellationToken ct = default);
+
+    /// <summary>Vocabulary code hợp lệ theo kind (Material/Color/Shape) cho form vendor — không lộ weight/element.</summary>
+    Task<IServiceResult<List<ElementInputCodesResponse>>> GetElementInputCodesAsync(CancellationToken ct = default);
 }

@@ -17,8 +17,11 @@ public sealed record AiProductRef(Guid Id, string Name);
 /// <summary>
 /// Ngữ cảnh thực thi tool — scope theo user để không lộ dữ liệu người khác.
 /// <paramref name="ChatboxId"/>: phòng đang hội thoại (dùng cho tool đọc thông tin đối phương theo consent).
+/// <paramref name="IsPrivateRoom"/>: true = phòng riêng user↔AI (SendAsync); false = phòng chung nhiều người
+/// (RespondInRoomAsync) — tool có tác dụng phụ (vd đặt hàng) chỉ được chạy khi true, chặn cả ở BuildToolSpecs
+/// (không đưa vào danh sách tool cho LLM) lẫn ExecuteToolAsync (phòng model vẫn cố emit tool_call).
 /// </summary>
-public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEmail, Guid? ChatboxId = null)
+public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEmail, Guid? ChatboxId = null, bool IsPrivateRoom = true)
 {
     /// <summary>
     /// Registry per-turn: tool nào trả sản phẩm thì ghi vào đây (Id + Name).

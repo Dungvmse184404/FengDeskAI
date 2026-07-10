@@ -3,14 +3,23 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Catalog.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace FengDeskAI.Application.Features.Catalog.Services;
 
 public sealed class TaxonomyService : ITaxonomyService
 {
-    private readonly IUnitOfWork _uow;
+    private const string ElementInputCodesCacheKey = "element-input-codes";
+    private static readonly TimeSpan ElementInputCodesCacheTtl = TimeSpan.FromMinutes(10);
 
-    public TaxonomyService(IUnitOfWork uow) => _uow = uow;
+    private readonly IUnitOfWork _uow;
+    private readonly IMemoryCache _cache;
+
+    public TaxonomyService(IUnitOfWork uow, IMemoryCache cache)
+    {
+        _uow = uow;
+        _cache = cache;
+    }
 
     // ── Styles ──
     public Task<IServiceResult<List<LookupItemResponse>>> GetStylesAsync(bool includeInactive, CancellationToken ct = default)
@@ -38,6 +47,22 @@ public sealed class TaxonomyService : ITaxonomyService
 
     public Task<IServiceResult<LookupItemResponse>> UpdateElementAsync(string code, UpdateLookupRequest request, CancellationToken ct = default)
         => UpdateAsync(_uow.Elements, code, request, "hành", ct);
+
+    // ── Element input codes (vocabulary cho form vendor, cache 10') ──
+    public async Task<IServiceResult<List<ElementInputCodesResponse>>> GetElementInputCodesAsync(CancellationToken ct = default)
+    {
+        if (!_cache.TryGetValue(ElementInputCodesCacheKey, out List<ElementInputCodesResponse>? cached) || cached is null)
+        {
+            var map = await _uow.ScoringConfig.GetElementInputMapAsync(ct);
+            cached = map
+                .GroupBy(m => m.InputKind)
+                .Select(g => new ElementInputCodesResponse { Kind = g.Key, Codes = g.Select(m => m.InputCode).Distinct().ToList() })
+                .ToList();
+            _cache.Set(ElementInputCodesCacheKey, cached, ElementInputCodesCacheTtl);
+        }
+
+        return ServiceResult<List<ElementInputCodesResponse>>.Success(cached);
+    }
 
     // ── Generic dùng chung cho mọi bảng tra cứu ──
     private static async Task<IServiceResult<List<LookupItemResponse>>> ListAsync<T>(

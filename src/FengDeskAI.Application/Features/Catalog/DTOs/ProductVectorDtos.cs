@@ -37,3 +37,13 @@ public sealed record ProductVectorResponse
     public decimal? Hoa { get; init; }
     public List<ProductElementInputDto> Inputs { get; init; } = new();
 }
+
+/// <summary>
+/// Danh sách code hợp lệ theo từng kind (vd Material → Wood/Metal/...) cho form vendor render dropdown/chip.
+/// KHÔNG trả weight/element — vendor không cần biết mapping ngũ hành đằng sau.
+/// </summary>
+public sealed record ElementInputCodesResponse
+{
+    public ElementInputKind Kind { get; init; }
+    public List<string> Codes { get; init; } = new();
+}

@@ -29,42 +29,19 @@ public sealed class ProductVectorService : IProductVectorService
         var (error, product) = await GuardAsync(productId, userId, isAdmin, ct);
         if (error is not null) return error;
 
-        var map = await _uow.ScoringConfig.GetElementInputMapAsync(ct);
-        var validCodes = map.Select(m => (m.InputKind, Code: m.InputCode)).ToHashSet();
-
-        var cleaned = request.Inputs
+        var inputs = request.Inputs
             .Where(i => !string.IsNullOrWhiteSpace(i.Code))
             .Select(i => (i.Kind, i.Code))
             .Distinct()
             .ToList();
 
-        var unknown = cleaned.Where(i => !validCodes.Contains(i)).ToList();
-        if (unknown.Count > 0)
-            return ServiceResult<ProductVectorResponse>.Failure(ApiStatusCodes.BadRequest,
-                $"Tín hiệu không có trong bảng element_input_map: {string.Join(", ", unknown.Select(u => $"{u.Kind}:{u.Code}"))}.");
+        var (applyError, entities) = await ProductVectorApplier.ApplyInputsAsync(product!, inputs, _uow, ct);
+        if (applyError is not null)
+            return ServiceResult<ProductVectorResponse>.Failure(ApiStatusCodes.BadRequest, applyError);
 
-        var entities = cleaned.Select(i => new ProductElementInput { InputKind = i.Kind, InputCode = i.Code }).ToList();
-        await _uow.ScoringConfig.ReplaceProductElementInputsAsync(productId, entities, ct);
-
-        // Khai input thủ công → tắt override, tính lại cache vector (tầng 2). Rỗng → xóa cache (về tầng 3 lúc chấm).
-        product!.IsVectorOverridden = false;
-        if (entities.Count == 0)
-        {
-            ClearVectorColumns(product);
-        }
-        else
-        {
-            var prms = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
-            var resolver = new ElementInputResolver(map);
-            var vector = ProductVectorProvider.Build(
-                isOverridden: false, overriddenVector: null, inputs: entities, resolver: resolver,
-                productElements: product.Elements.Select(e => (e.Element, e.IsPrimary)), p: prms);
-            ApplyVectorColumns(product, vector);
-        }
-
-        _uow.Products.Update(product);
+        _uow.Products.Update(product!);
         await _uow.SaveChangesAsync(ct);
-        return ServiceResult<ProductVectorResponse>.Success(ToResponse(product, entities), "Cập nhật input ngũ hành sản phẩm thành công.");
+        return ServiceResult<ProductVectorResponse>.Success(ToResponse(product!, entities), "Cập nhật input ngũ hành sản phẩm thành công.");
     }
 
     public async Task<IServiceResult<ProductVectorResponse>> SetVectorOverrideAsync(

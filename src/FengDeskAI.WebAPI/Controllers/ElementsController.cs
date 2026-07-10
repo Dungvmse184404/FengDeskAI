@@ -12,7 +12,6 @@ namespace FengDeskAI.WebAPI.Controllers;
 /// KHÔNG thêm hành mới (ngũ hành cố định 5) và KHÔNG đổi code (engine tham chiếu).
 /// </summary>
 [Route("api/elements")]
-[Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
 public class ElementsController : ApiControllerBase
 {
     private readonly ITaxonomyService _service;
@@ -26,6 +25,16 @@ public class ElementsController : ApiControllerBase
 
     /// <summary>Đổi tên hiển thị / bật-tắt / thứ tự (code giữ nguyên).</summary>
     [HttpPut("{code}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
     public async Task<IActionResult> Update(string code, [FromBody] UpdateLookupRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateElementAsync(code, request, ct));
+
+    /// <summary>
+    /// Vocabulary code hợp lệ (Material/Color/Shape) cho form vendor render dropdown/chip khi tạo/sửa sản phẩm.
+    /// Mọi user đăng nhập đều xem được; KHÔNG trả weight/element (tránh gợi ý "chọn code để ăn hành đẹp").
+    /// </summary>
+    [HttpGet("~/api/catalog/element-input-codes")]
+    [Authorize]
+    public async Task<IActionResult> GetElementInputCodes(CancellationToken ct)
+        => ToActionResult(await _service.GetElementInputCodesAsync(ct));
 }

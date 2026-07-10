@@ -10,4 +10,4 @@ vấn đè là
 |`order_status_logs`|`order_status_log`|Lệch|
 |`product_elements`|`product_element`|Lệch|
 
-note tạm sẽ sửa sau
+note tạm sẽ sửa sau đang bận wa

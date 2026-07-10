@@ -20,7 +20,7 @@ public sealed record AiChatRequest
 }
 
 /// <summary>Một dòng trong lịch sử hội thoại trả về client.</summary>
-public sealed record AiChatTurn(string Role, string? Content, IReadOnlyList<string> Images);
+public sealed record AiChatTurn(Guid Id, string Role, string? Content, IReadOnlyList<string> Images);
 
 /// <summary>Kết quả 1 lượt chat: câu trả lời + lịch sử (đã cắt còn N lượt gần nhất).</summary>
 public sealed record AiChatResponse
@@ -29,4 +29,17 @@ public sealed record AiChatResponse
     public required string Model { get; init; }
     public required string Reply { get; init; }
     public required IReadOnlyList<AiChatTurn> History { get; init; }
+}
+
+/// <summary>Rewind (sửa & gửi lại) một tin nhắn cũ của chính user trong phòng riêng user↔AI.</summary>
+public sealed record AiRewindRequest
+{
+    /// <summary>Nội dung mới. Null = giữ nguyên nội dung cũ (regenerate).</summary>
+    public string? NewMessage { get; init; }
+
+    /// <summary>Link ảnh mới. Null = giữ ảnh cũ; [] = bỏ ảnh; có phần tử = thay ảnh.</summary>
+    public List<string>? ImageUrls { get; init; }
+
+    /// <summary>Model muốn dùng cho lượt gửi lại. Bỏ trống → dùng model mặc định.</summary>
+    public string? Model { get; init; }
 }
