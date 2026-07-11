@@ -19,8 +19,17 @@ internal static class ToolArgs
         return int.TryParse(GetString(e, name), out var s) ? s : null;
     }
 
-    public static string Json(object? value)
-        => JsonSerializer.Serialize(value, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+    /// <summary>
+    /// Encoder mặc định escape mọi ký tự non-ASCII → tiếng Việt trong tool result biến thành
+    /// chuỗi escape dạng u+0169/u+1EA1... Model nhỏ giải mã escape unicode rất kém
+    /// (từng "dịch" sai tên user thành họ khác) → giữ UTF-8 thô để model đọc thẳng.
+    /// </summary>
+    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
+    {
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    };
+
+    public static string Json(object? value) => JsonSerializer.Serialize(value, JsonOptions);
 
     public static string Error(string message) => Json(new { error = message });
 }

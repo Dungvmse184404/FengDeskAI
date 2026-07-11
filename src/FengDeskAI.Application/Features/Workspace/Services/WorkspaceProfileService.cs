@@ -48,7 +48,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         if (profile is null)
             return ServiceResult<WorkspaceElementAnalysisResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
-        var analysis = await AnalyzeAsync(profile, ct);
+        var (analysis, modifiers) = await AnalyzeAsync(profile, ct);
 
         // Sắp giảm dần theo Gap: thiếu nhất (gap dương lớn) → thừa nhất (gap âm).
         var rows = analysis.Ideal.Enumerate().Select(x => new ElementAnalysisRow
@@ -62,18 +62,26 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         .OrderByDescending(r => r.Gap)
         .ToList();
 
+        // compat% = 1 − (Σ|gap_e| / 2), tự chuẩn hóa vì 2 vector đều Σ=1 → sumAbsGap ∈ [0, 2].
+        var compatibilityPercent = (int)Math.Round(100m * (1m - analysis.Gap.L1() / 2m), MidpointRounding.AwayFromZero);
+
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var insights = SpaceInsightBuilder.Build(rows, profile.WorkPurpose, modifiers, user?.DateOfBirth?.Year);
+
         var response = new WorkspaceElementAnalysisResponse
         {
             WorkspaceProfileId = profile.Id,
             DominantNeed = analysis.Gap.Dominant().ToString(),
             Elements = rows,
+            CompatibilityPercent = compatibilityPercent,
+            Insights = insights,
         };
 
         return ServiceResult<WorkspaceElementAnalysisResponse>.Success(response);
     }
 
     /// <summary>Nạp dữ liệu cấu hình rồi dựng 4 vector ngũ hành cho workspace (dùng chung công thức với engine).</summary>
-    private async Task<WorkspaceElementAnalysis> AnalyzeAsync(
+    private async Task<(WorkspaceElementAnalysis Analysis, List<WorkPurposeElementModifier> Modifiers)> AnalyzeAsync(
         Domain.Entities.Workspace.WorkspaceProfile profile, CancellationToken ct)
     {
         var typeElements = new List<WorkspaceTypeElement>();
@@ -87,7 +95,8 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
 
-        return WorkspaceElementAnalyzer.Analyze(typeElements, modifiers, profileInputs, resolver);
+        var analysis = WorkspaceElementAnalyzer.Analyze(typeElements, modifiers, profileInputs, resolver);
+        return (analysis, modifiers);
     }
 
     public async Task<IServiceResult<WorkspaceProfileResponse>> GetDefaultAsync(Guid userId, CancellationToken ct = default)

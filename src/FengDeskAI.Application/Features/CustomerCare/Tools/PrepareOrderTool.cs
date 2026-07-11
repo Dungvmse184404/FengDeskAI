@@ -5,6 +5,7 @@ using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Domain.Entities.Geography;
 using Microsoft.Extensions.Caching.Memory;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Tools;
@@ -36,15 +37,17 @@ public sealed class PrepareOrderTool : IAiTool
 
     public string Description =>
         "Prepare a draft order for ONE product before checkout: resolves the variant, checks stock and the " +
-        "user's default shipping address, and previews the shipping fee. Returns a draftId + summary — read " +
-        "the summary back to the user and WAIT for their explicit confirmation before calling confirm_order. " +
-        "Never invent a draftId; it must come from this tool's result.";
+        "shipping address (user's default, or a specific saved one via shippingAddressId), and previews the " +
+        "shipping fee. Returns a draftId + summary — read the summary back to the user and WAIT for their " +
+        "explicit confirmation before calling confirm_order. Never invent a draftId; it must come from this tool's result.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
         ["productId"] = new("string", "Product id (GUID) — from a prior recommend/search result.", Required: true),
         ["quantity"] = new("integer", $"Quantity to buy (default 1, max {MaxQuantity})."),
         ["productItemId"] = new("string", "Specific variant id (GUID) — required only when the product has multiple variants (ask the user to pick one first)."),
+        ["shippingAddressId"] = new("string", "Id of a saved address (GUID) — from list_my_addresses, when the user wants to ship to a " +
+            "specific address instead of their default. Omit to use their default address."),
     };
 
     public async Task<string> ExecuteAsync(AiToolContext context, JsonElement arguments, CancellationToken ct = default)
@@ -89,20 +92,32 @@ public sealed class PrepareOrderTool : IAiTool
         if (quantity > item.Stock)
             return ToolArgs.Error($"Only {item.Stock} unit(s) of this variant left in stock — ask the user to lower the quantity.");
 
-        // 2) Resolve the user's default shipping address (this tool never lets the AI pick another one).
-        var defaultAddress = await _uow.UserAddresses.GetDefaultForUserAsync(context.UserId, ct);
-        if (defaultAddress is null)
+        // 2) Resolve the shipping address: a specific saved one (via shippingAddressId, must belong to the
+        // user) or the default. This tool never lets the AI invent an address — only ids the user actually owns.
+        var shippingAddressId = ToolArgs.GetGuid(arguments, "shippingAddressId");
+        UserAddress? chosenAddress;
+        if (shippingAddressId is { } saId)
         {
-            return ToolArgs.Json(new
-            {
-                draftId = (Guid?)null,
-                summary = (object?)null,
-                missing = new[] { "address" },
-                fixLinks = new { address = "/profile/addresses" },
-                note = "The user has no default shipping address. Tell them to add one at the link, then call prepare_order again once they say they're done.",
-            });
+            chosenAddress = await _uow.UserAddresses.GetByIdForUserAsync(saId, context.UserId, ct);
+            if (chosenAddress is null)
+                return ToolArgs.Error("Address not found — call list_my_addresses to see valid saved addresses.");
         }
-        var address = await _uow.UserAddresses.GetWithWardChainAsync(defaultAddress.Id, ct) ?? defaultAddress;
+        else
+        {
+            chosenAddress = await _uow.UserAddresses.GetDefaultForUserAsync(context.UserId, ct);
+            if (chosenAddress is null)
+            {
+                return ToolArgs.Json(new
+                {
+                    draftId = (Guid?)null,
+                    summary = (object?)null,
+                    missing = new[] { "address" },
+                    fixLinks = new { address = "/profile/addresses" },
+                    note = "The user has no default shipping address. Tell them to add one at the link, then call prepare_order again once they say they're done.",
+                });
+            }
+        }
+        var address = await _uow.UserAddresses.GetWithWardChainAsync(chosenAddress.Id, ct) ?? chosenAddress;
 
         // 3) Preview shipping fee (also re-checks stock/active status inside OrderService).
         var checkoutRequest = new CheckoutRequest
@@ -119,6 +134,8 @@ public sealed class PrepareOrderTool : IAiTool
         var draftId = Guid.NewGuid();
         var draft = new OrderDraft(context.UserId, item.Id, quantity, item.Price, address.Id, DateTime.UtcNow);
         _cache.Set(OrderDraftCacheKey.For(context.UserId, draftId), draft, DraftTtl);
+        // Pointer draft mới nhất theo user+phòng — confirm_order fallback khi model không còn nhớ draftId.
+        _cache.Set(OrderDraftCacheKey.Latest(context.UserId, context.ChatboxId), draftId, DraftTtl);
 
         context.Products.Add(new AiProductRef(product.Id, product.Name));
 

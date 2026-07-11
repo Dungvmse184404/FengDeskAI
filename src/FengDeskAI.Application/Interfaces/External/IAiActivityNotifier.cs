@@ -7,8 +7,9 @@ namespace FengDeskAI.Application.Interfaces.External;
 /// </summary>
 public sealed record AiActivityEvent(
     string OperationId,
-    string Phase, // thinking | calling_tool | writing | done | error
-    string? ToolName = null);
+    string Phase, // thinking | calling_tool | writing | narration | done | error
+    string? ToolName = null,
+    string? Note = null); // narration: lời dẫn trung gian của model (ephemeral, không lưu DB)
 
 public interface IAiActivityNotifier
 {
@@ -38,6 +39,13 @@ public sealed class AiActivityScope : IAsyncDisposable
         _lastPhase = phase;
         return _notifier.PublishAsync(new AiActivityEvent(_operationId, phase, toolName), ct);
     }
+
+    /// <summary>
+    /// Phát lời dẫn trung gian model viết kèm tool_calls — FE hiển thị dạng "thinking",
+    /// KHÔNG lưu DB (tránh phình context các lượt sau). Không đổi <c>_lastPhase</c>.
+    /// </summary>
+    public Task NarrateAsync(string text, CancellationToken ct = default)
+        => _notifier.PublishAsync(new AiActivityEvent(_operationId, "narration", null, text), ct);
 
     public ValueTask DisposeAsync()
     {

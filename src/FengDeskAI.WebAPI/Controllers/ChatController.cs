@@ -146,4 +146,8 @@ public class ChatController : ApiControllerBase
     [HttpPost("ai/chatbox")]
     public async Task<IActionResult> EnsureAiChatbox([FromQuery] Guid? productId, CancellationToken ct)
         => ToActionResult(await _service.EnsureAssistantAsync(CurrentUserId, CurrentUser.Role, productId, ct));
+
+    /// <summary>Cấu hình chat AI cho FE — vd cửa sổ nhớ (số tin) để vẽ mốc "AI context limit".</summary>
+    [HttpGet("ai/config")]
+    public IActionResult GetAiConfig() => ToActionResult(_aiService.GetConfig());
 }

@@ -72,7 +72,7 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             // Model + temperature riêng cho intake (Ai:Intake) — không dùng chung với chatbox.
             var completion = await _client.CompleteAsync(
                 _options.Model, messages, tools: null,
-                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode), ct: ct);
+                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, _options.Think), ct: ct);
 
             var raw = ParseRaw(completion.Content);
             var draft = Normalize(raw, vocab);

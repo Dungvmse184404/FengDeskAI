@@ -17,4 +17,12 @@ public sealed record OrderDraft(
 public static class OrderDraftCacheKey
 {
     public static string For(Guid userId, Guid draftId) => $"order-draft:{userId}:{draftId}";
+
+    /// <summary>
+    /// Pointer tới draft MỚI NHẤT của user trong 1 phòng chat. Tool exchange không được lưu vào history
+    /// giữa các lượt → model thường "quên" draftId khi user xác nhận ở lượt sau — confirm_order dùng
+    /// pointer này làm fallback thay vì bắt model nhớ.
+    /// </summary>
+    public static string Latest(Guid userId, Guid? chatboxId)
+        => $"order-draft-latest:{userId}:{chatboxId?.ToString() ?? "none"}";
 }

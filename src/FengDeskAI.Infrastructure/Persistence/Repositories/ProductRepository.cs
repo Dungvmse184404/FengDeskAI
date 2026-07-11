@@ -40,17 +40,27 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             query = query.Where(p => p.ProductCategories.Any(pc => pc.CategoryId == categoryId));
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
-            // Tách query thành từng từ — MỖI từ phải khớp (AND) ở Name HOẶC Description.
-            // Không phân biệt dấu + hoa thường (unaccent + ILIKE). VD "đèn ngủ" → SP phải chứa cả "đèn" lẫn "ngủ"
-            // (theo bất kỳ thứ tự nào, ở tên hoặc mô tả), thay vì phải khớp nguyên cụm.
+            // Tách query thành từng từ, mỗi từ khớp ở: TÊN / MÔ TẢ / TÊN DANH MỤC ("Đèn trang trí") /
+            // HÀNH phong thủy ("hỏa" → Element Hoa). Không phân biệt dấu + hoa thường (unaccent + ILIKE).
+            // Chiến lược 2 pha: AND trước (chính xác — "đèn muối" phải chứa cả 2 từ); 0 kết quả thì
+            // nới thành OR (bao phủ — "đèn ngủ" không có SP nào đủ cả 2 từ vẫn trả về các SP "đèn").
             var tokens = filter.Search.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-            foreach (var token in tokens)
+            if (tokens.Length > 0)
             {
-                var pattern = $"%{token}%";
-                query = query.Where(p =>
-                    EF.Functions.ILike(AppDbContext.Unaccent(p.Name), AppDbContext.Unaccent(pattern))
-                    || (p.Description != null
-                        && EF.Functions.ILike(AppDbContext.Unaccent(p.Description), AppDbContext.Unaccent(pattern))));
+                var strict = tokens.Aggregate(query, (q, t) => q.Where(MatchesToken(t)));
+                if (await strict.AnyAsync(ct))
+                {
+                    query = strict;
+                }
+                else
+                {
+                    // OR qua UNION trên Id (subquery) thay vì Union trực tiếp trên entity —
+                    // tránh hạn chế Include-sau-set-operation của EF, vẫn ra 1 câu SQL.
+                    var idQuery = query.Where(MatchesToken(tokens[0])).Select(p => p.Id);
+                    for (var i = 1; i < tokens.Length; i++)
+                        idQuery = idQuery.Union(query.Where(MatchesToken(tokens[i])).Select(p => p.Id));
+                    query = query.Where(p => idQuery.Contains(p.Id));
+                }
             }
         }
 
@@ -63,6 +73,42 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .ToListAsync(ct);
 
         return (items, total);
+    }
+
+    /// <summary>Điều kiện khớp 1 từ khóa: tên / mô tả / tên danh mục / hành phong thủy (nếu từ là tên hành).</summary>
+    private static System.Linq.Expressions.Expression<Func<Product, bool>> MatchesToken(string token)
+    {
+        var pattern = $"%{token}%";
+        var element = TokenToElement(token);
+        return p =>
+            EF.Functions.ILike(AppDbContext.Unaccent(p.Name), AppDbContext.Unaccent(pattern))
+            || (p.Description != null
+                && EF.Functions.ILike(AppDbContext.Unaccent(p.Description), AppDbContext.Unaccent(pattern)))
+            || p.ProductCategories.Any(pc =>
+                EF.Functions.ILike(AppDbContext.Unaccent(pc.Category.Name), AppDbContext.Unaccent(pattern)))
+            || (element != null && p.Elements.Any(e => e.Element == element));
+    }
+
+    /// <summary>"hỏa"/"hoả" → Hoa, "mộc" → Moc... (bỏ dấu phía C# vì so enum, không qua SQL). Không phải tên hành → null.</summary>
+    private static FengShuiElement? TokenToElement(string token)
+    {
+        var normalized = new string(token
+            .Normalize(System.Text.NormalizationForm.FormD)
+            .Where(c => System.Globalization.CharUnicodeInfo.GetUnicodeCategory(c)
+                != System.Globalization.UnicodeCategory.NonSpacingMark)
+            .ToArray())
+            .Replace('đ', 'd').Replace('Đ', 'D')
+            .ToLowerInvariant();
+
+        return normalized switch
+        {
+            "kim" => FengShuiElement.Kim,
+            "moc" => FengShuiElement.Moc,
+            "thuy" => FengShuiElement.Thuy,
+            "hoa" => FengShuiElement.Hoa,
+            "tho" => FengShuiElement.Tho,
+            _ => null,
+        };
     }
 
     public Task<List<Product>> GetScorableCandidatesAsync(CancellationToken ct = default)

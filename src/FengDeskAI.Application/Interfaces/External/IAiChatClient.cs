@@ -27,7 +27,9 @@ public sealed record AiChatCompletion(string Content, string Model, IReadOnlyLis
 /// Tinh chỉnh một lượt gọi cụ thể — dùng cho tác vụ trích xuất có cấu trúc (vd workspace intake) cần
 /// output ổn định/deterministic hơn hội thoại tự do. Bỏ trống → theo mặc định của model/provider.
 /// </summary>
-public sealed record AiCompletionOptions(double? Temperature = null, bool JsonMode = false);
+/// <param name="Think">Bật/tắt thinking của model (Ollama "think"). null = theo mặc định model.
+/// Tắt (false) giúp model nhỏ đỡ "lạc" câu trả lời vào thinking block.</param>
+public sealed record AiCompletionOptions(double? Temperature = null, bool JsonMode = false, bool? Think = null);
 
 /// <summary>
 /// Cổng gọi LLM hội thoại (Ollama / OpenAI-compatible) — thuần transport, không giữ state.

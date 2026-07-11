@@ -31,6 +31,12 @@ public sealed record AiChatResponse
     public required IReadOnlyList<AiChatTurn> History { get; init; }
 }
 
+/// <summary>
+/// Cấu hình chat AI cho FE. <see cref="ContextMessages"/> = số TIN gần nhất của phòng được gửi cho LLM
+/// (MaxHistoryTurns × 2) — FE vẽ mốc "AI context limit" ngay trên tin cũ nhất còn được nhớ.
+/// </summary>
+public sealed record AiChatConfigResponse(int MaxHistoryTurns, int ContextMessages);
+
 /// <summary>Rewind (sửa & gửi lại) một tin nhắn cũ của chính user trong phòng riêng user↔AI.</summary>
 public sealed record AiRewindRequest
 {
