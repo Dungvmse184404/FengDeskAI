@@ -186,6 +186,9 @@ public static class FengShuiCalculator
     /// <summary>Hành mà <paramref name="e"/> SINH ra (con) — vd Thủy sinh Mộc → GetGeneratedElement(Thủy)=Mộc.</summary>
     public static FengShuiElement GetGeneratedElement(FengShuiElement e) => Generates[e];
 
+    /// <summary>Hành mà <paramref name="e"/> KHẮC (chủ động) — vd Kim khắc Mộc → GetControlledElement(Kim)=Mộc.</summary>
+    public static FengShuiElement GetControlledElement(FengShuiElement e) => Controls[e];
+
     /// <summary>Các hướng la bàn ứng với hành <paramref name="e"/> (đảo của <see cref="GetDirectionElement"/>).</summary>
     public static IReadOnlyList<CompassDirection> GetDirectionsForElement(FengShuiElement e)
         => DirectionElements.Where(kv => kv.Value == e).Select(kv => kv.Key).ToList();
@@ -212,5 +215,24 @@ public static class FengShuiCalculator
         n = Math.Abs(n);
         while (n > 9) n = n / 10 + n % 10;
         return n;
+    }
+
+    // 30 tên Nạp Âm của Lục Thập Hoa Giáp, mỗi tên ứng 2 năm liền kề, chu kỳ 60 năm tính từ Giáp Tý.
+    // index cố định: Giáp Tý 1984 → phần tử 0 ("Hải Trung Kim").
+    private static readonly string[] NapAmNames =
+    {
+        "Hải Trung Kim", "Lư Trung Hỏa", "Đại Lâm Mộc", "Lộ Bàng Thổ", "Kiếm Phong Kim",
+        "Sơn Đầu Hỏa", "Giản Hạ Thủy", "Thành Đầu Thổ", "Bạch Lạp Kim", "Dương Liễu Mộc",
+        "Tuyền Trung Thủy", "Ốc Thượng Thổ", "Tích Lịch Hỏa", "Tùng Bách Mộc", "Trường Lưu Thủy",
+        "Sa Trung Kim", "Sơn Hạ Hỏa", "Bình Địa Mộc", "Bích Thượng Thổ", "Kim Bạch Kim",
+        "Phú Đăng Hỏa", "Thiên Hà Thủy", "Đại Trạch Thổ", "Thoa Xuyến Kim", "Tang Đố Mộc",
+        "Đại Khê Thủy", "Sa Trung Thổ", "Thiên Thượng Hỏa", "Thạch Lựu Mộc", "Đại Hải Thủy",
+    };
+
+    /// <summary>Tên Nạp Âm (vd "Hải Trung Kim") theo năm sinh dương lịch — chu kỳ 60 năm từ Giáp Tý 1984.</summary>
+    public static string GetNapAmName(int birthYear)
+    {
+        int offset = ((birthYear - 1984) % 60 + 60) % 60;
+        return NapAmNames[offset / 2];
     }
 }

@@ -1,6 +1,6 @@
 # ARD — Recommendation Scoring v4: Âm/Dương (Polarity)
 
-> **Status:** Proposal — spec trước khi code.
+> **Status:** Proposal — đã review lần 2 (2026-07-11): sửa nguồn functionPolarity (§2.2), rule polarity-unknown khi khắc (§3.2), thêm rollout kill-switch (§3.4) và chống lệch pha radar (§3.5).
 > **Tiền đề:** engine v3 (`recommendation-scoring-v3.md`) đã chạy: mọi thực thể quy về `ElementVector`, điểm = gap-matching. v4 **không đổi** kiến trúc đó — chỉ thêm **1 trục scalar** `Polarity` chạy song song.
 
 ---
@@ -37,7 +37,7 @@ currentPolarity = FUNCTION_POLARITY_SHARE × functionPolarity(WorkspaceType)
                 + (1 − FUNCTION_POLARITY_SHARE) × avg(polarity của env inputs)
 ```
 
-- `functionPolarity`: map tĩnh theo loại phòng (phòng họp/sảnh `+0.6`, bếp `+0.4`, phòng làm việc chung `+0.2`, phòng học cá nhân `-0.4`, phòng ngủ `-0.7`…). Để trong code cạnh `DirectionElements` (dictionary, unit-test được); chuyển DB sau nếu cần admin sửa.
+- `functionPolarity`: **cột mới `base_polarity numeric(4,3) default 0` trên bảng `workspace_types`** — KHÔNG dùng dictionary in-code vì `WorkspaceType` là bảng DB và **user tự thêm loại được** (map theo Name sẽ vỡ với loại tự tạo). Seed cho loại hệ thống (Meeting Room `+0.6`, Reception `+0.5`, Open Workspace `+0.2`, Personal Desk `-0.3`, Home Office `-0.2`…); loại user tự tạo giữ default `0` (trung tính — polarity phòng khi đó dựa hoàn toàn vào env inputs).
 - Env inputs: thêm 2 `ElementInputKind` mới — `Lighting` (`BrightSun +0.7`, `WarmDim -0.5`, `Blackout -0.8`…), `Ambience` (`Noisy +0.6`, `ManyDevices +0.5`, `Quiet -0.6`…). Không có input → fallback `functionPolarity` 100%.
 
 ### 2.3 Product — không bắt vendor khai thêm gì
@@ -65,21 +65,37 @@ score = (1 − POLARITY_SHARE) × gapScore + POLARITY_SHARE × polarityScore −
 Luật cổ: khắc **đồng tính** (cùng âm/cùng dương) nặng — "vô tình"; khắc **dị tính** nhẹ — "hữu tình". Khi `BiKhac`:
 
 ```csharp
-bool samePolarity = personalPolarity * Math.Sign(productPolarity) > 0; // product 0 → coi là dị tính
-// Đồng tính:  giữ hard-filter (Private + Rank) như v3; penalty × KHAC_SAME_POLARITY (1.2)
-// Dị tính:    KHÔNG hard-filter nữa, chỉ soft; penalty × KHAC_DIFF_POLARITY (0.6)
+// |productPolarity| < POLARITY_KNOWN_THRESHOLD (0.1) → polarity KHÔNG XÁC ĐỊNH
+//   → giữ nguyên 100% hành vi v3 (hard-filter + penalty như cũ). KHÔNG coi là dị tính!
+// Xác định + cùng dấu với personalPolarity (đồng tính):
+//   → giữ hard-filter (Private + Rank); penalty × KHAC_SAME_POLARITY (1.2)
+// Xác định + trái dấu (dị tính):
+//   → không hard-filter, chỉ soft; penalty × KHAC_DIFF_POLARITY (0.6)
 ```
 
-→ v4 **nới** hard-filter của v3: chỉ loại candidate khi khắc đồng tính. Ghi rõ vào caution fact để AI diễn giải.
+→ v4 chỉ **nới** hard-filter cho sản phẩm *đã biết* polarity và dị tính. Lý do rule threshold: phần lớn catalog ban đầu chưa có polarity (= 0); nếu coi 0 là "dị tính" thì toàn bộ catalog cũ mặc nhiên thoát hard-filter → v4 vô tình vô hiệu hóa lớp bảo vệ khắc mệnh của v3. Ghi caution fact tương ứng để AI diễn giải.
 
 ### 3.3 Tham số mới (`scoring_params`, default trong code)
 
-| Code | Default |
-|---|---|
-| `POLARITY_SHARE` | `0.20` |
-| `FUNCTION_POLARITY_SHARE` | `0.40` |
-| `KHAC_SAME_POLARITY` | `1.20` |
-| `KHAC_DIFF_POLARITY` | `0.60` |
+| Code | Default trong code | Seed ban đầu |
+|---|---|---|
+| `POLARITY_SHARE` | `0.20` | **`0.00` — kill-switch, xem §3.4** |
+| `FUNCTION_POLARITY_SHARE` | `0.40` | `0.40` |
+| `KHAC_SAME_POLARITY` | `1.20` | `1.20` |
+| `KHAC_DIFF_POLARITY` | `0.60` | `0.60` |
+| `POLARITY_KNOWN_THRESHOLD` | `0.10` | `0.10` |
+
+### 3.4 Rollout — kill-switch bằng chính scoring_params
+
+Seed `POLARITY_SHARE = 0` khi merge: toàn bộ code v4 nằm im (polarityScore × 0, và quy ước thêm — share = 0 thì tắt luôn modifier khắc §3.2). Sau khi seed polarity được hiệu chỉnh bằng **golden set** (~10 sản phẩm × 3 phòng mẫu, chấm tay và so thứ hạng trước/sau), admin nâng lên `0.2` qua API `scoring-config` sẵn có — bật/tắt không cần deploy. Đây cũng là đường lui nếu ranking lệch ngoài ý muốn.
+
+### 3.5 Chống lệch pha radar ↔ recommendation
+
+Nguy cơ: score có thành phần polarity mà radar chỉ vẽ 5 hành → user/QA thấy sản phẩm "bù gap kém hơn lại xếp trên" mà không có gì trên màn hình giải thích. Ba chốt bắt buộc:
+
+1. **Một nguồn số duy nhất:** `CurrentPolarity/IdealPolarity/PolarityGap` chỉ được tính trong `WorkspaceElementAnalyzer` — cả endpoint element-analysis lẫn `RecommendationService` đọc từ đó (đúng pattern Gap hiện tại). Cấm tính lại polarity inline ở service.
+2. **UI đi cùng đợt bật:** thanh `PolarityBar` (Âm ↔ Dương, chấm current + vạch ideal) phải lên FE **trước hoặc cùng lúc** admin nâng `POLARITY_SHARE > 0` — không bật scoring khi UI chưa hiển thị trục này. Radar 5 hành giữ nguyên, tuyệt đối không thêm polarity làm trục thứ 6 (khác đơn vị: share 0..1 Σ=1 vs tọa độ −1..+1).
+3. **Facts giải thích chênh lệch:** mọi lượt polarityScore có |giá trị| ≥ 0.05 phải sinh match/caution fact ("mang tính tĩnh, làm dịu không gian đang quá động") — user đọc được lý do xếp hạng ngay cả khi không nhìn PolarityBar. `ProductFitResponse` thêm `productPolarity`, `currentPolarity`, `idealPolarity` cho trang Fit.
 
 ## 4. Danh sách file thay đổi
 
@@ -89,7 +105,8 @@ bool samePolarity = personalPolarity * Math.Sign(productPolarity) > 0; // produc
 - `Entities/Catalog/Product.cs` — thêm `public decimal? Polarity { get; set; }` (cache, cạnh `ElementTho…`).
 
 ### Application (Engine)
-- `FengShuiCalculator.cs` — thêm `GetCanPolarity`, dictionary `WorkspaceTypePolarity`, map `PurposeTargetPolarity`.
+- `FengShuiCalculator.cs` — thêm `GetCanPolarity`, map `PurposeTargetPolarity` (WorkPurpose là enum → in-code OK).
+- `Entities/Workspace/WorkspaceType.cs` — thêm `BasePolarity` (+ config + seeder + migration — xem §2.2).
 - `ScoringModels.cs` — `ScoringParamCodes` + `ScoringParameters` thêm 4 param; `ScoringContext` thêm `PersonalPolarity`, `CurrentPolarity`, `IdealPolarity`; `ProductFacts` thêm `Polarity`.
 - `ElementVectorBuilders.cs` — `ElementInputResolver` đọc thêm polarity; thêm `PolarityBuilder` (2 hàm: `BuildWorkspacePolarity`, `BuildProductPolarity`).
 - `RecommendationScorer.cs` — §3.1 blend + §3.2 modifier; thêm fact/caution mô tả cân bằng âm dương.
@@ -97,7 +114,8 @@ bool samePolarity = personalPolarity * Math.Sign(productPolarity) > 0; // produc
 
 ### Infrastructure
 - `Configurations/ElementInputMapConfiguration.cs`, `ProductConfiguration` — cột mới `numeric(4,3)`.
-- Migration `RecommendationScoringV4Polarity` — 2 cột + backfill `polarity = 0`.
+- Migration `RecommendationScoringV4Polarity` — 3 cột (`element_input_map.polarity`, `products.polarity`, `workspace_types.base_polarity`) + backfill `0`.
+- Lưu ý cache: admin sửa `polarity` trong `element_input_map` KHÔNG tự tính lại `products.polarity` đã cache (giới hạn sẵn có của cache vector — chấp nhận, ghi vào docs admin; endpoint recompute-all để backlog).
 - `Seeding/ElementInputMapSeeder.cs` — gán polarity cho code hiện có + seed code `Lighting`/`Ambience`; `ScoringParamSeeder.cs` — 4 row mới.
 
 ### DTO / FE (giai đoạn 2, tách PR)
@@ -109,12 +127,18 @@ bool samePolarity = personalPolarity * Math.Sign(productPolarity) > 0; // produc
 
 - Âm dương theo Can **ngày** sinh (Bát Tự đầy đủ) — chỉ dùng Can năm.
 - Polarity theo giờ trong ngày / mùa.
-- Admin UI chỉnh `functionPolarity` (đang hard-code, chuyển DB khi có nhu cầu).
+- Endpoint recompute-all cache polarity khi admin sửa map (chấp nhận stale, xem §Infrastructure).
+- Polarity làm trục radar (sai đơn vị — chỉ vẽ PolarityBar riêng, xem §3.5).
 
 ## 6. Test cases tối thiểu
 
 1. `GetCanPolarity(1990) == +1` (Canh — dương), `GetCanPolarity(1991) == -1` (Tân — âm).
 2. Phòng ngủ không env input → `currentPolarity == functionPolarity == -0.7`.
 3. Phòng họp sáng gắt (`+0.6`, `+0.7`) → currentPolarity `= 0.4×0.6 + 0.6×0.7 = 0.66`; Purpose Calm (ideal `-0.4`) → gap `-1` (clamp) → sản phẩm âm (`-0.5`) được `+0.5` polarityScore.
-4. BiKhac đồng tính + Private + Rank → vẫn bị loại; BiKhac dị tính → còn trong list với penalty `0.6 × USER_CONFLICT_PENALTY`.
-5. Thiếu row `scoring_params` mới → engine chạy với default (`FromRows` giữ nguyên hành vi).
+4. BiKhac đồng tính + Private + Rank → vẫn bị loại; BiKhac dị tính (|polarity| ≥ 0.1) → còn trong list với penalty `0.6 × USER_CONFLICT_PENALTY`.
+5. **BiKhac + product polarity = 0 → hành vi GIỐNG HỆT v3** (hard-filter còn nguyên) — chốt chống vô hiệu hóa lọc khắc.
+6. `POLARITY_SHARE = 0` → toàn bộ ranking byte-identical với v3 (golden set so sánh) — chốt kill-switch.
+7. Catalog toàn sản phẩm polarity = 0, share = 0.2 → thứ hạng tương đối giữ nguyên v3 (mọi gapScore cùng nhân 0.8).
+8. Loại phòng user tự tạo (base_polarity = 0), không env input → currentPolarity = 0, polarityScore = 0 — không nổ NPE.
+9. Thiếu row `scoring_params` mới → engine chạy với default (`FromRows` giữ nguyên hành vi).
+10. Endpoint element-analysis và recommendation trả cùng `currentPolarity` cho cùng profile (chống lệch pha, cùng nguồn Analyzer).

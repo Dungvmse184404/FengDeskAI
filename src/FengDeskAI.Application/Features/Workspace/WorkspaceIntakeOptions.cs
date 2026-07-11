@@ -16,4 +16,8 @@ public sealed class WorkspaceIntakeOptions
 
     /// <summary>Ép model trả JSON hợp lệ (Ollama format="json").</summary>
     public bool JsonMode { get; set; } = true;
+
+    /// <summary>Bật/tắt thinking của model. null = theo mặc định model. Intake nên false — cần JSON thẳng.</summary>
+    public bool? Think { get; set; } = true;
 }
+ 

@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -32,9 +33,44 @@ public sealed class OllamaChatClient : IAiChatClient
             _http.DefaultRequestHeaders.TryAddWithoutValidation(_options.ApiKeyHeader, _options.ApiKey);
     }
 
+    /// <summary>Số lần thử lại tối đa khi lỗi transport tạm thời (socket bị OS/tunnel cắt ngang giữa chừng).</summary>
+    private const int MaxTransientRetries = 2;
+
+    /// <summary>Delay giữa các lần retry — ngắn vì Ollama có prompt cache checkpoint, thử lại gần như không mất phí xử lý lại prompt.</summary>
+    private static readonly TimeSpan[] RetryDelays = { TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(1200) };
+
+    /// <summary>
+    /// Lỗi "transient" ở tầng transport (socket bị Windows/ngrok cắt ngang giữa chừng — WSA 995,
+    /// connection reset...) — AN TOÀN để thử lại vì <paramref name="ct"/> (request gốc của user) CHƯA bị hủy.
+    /// Nếu <paramref name="ct"/> đã bị hủy thật (user đóng tab/reload) thì KHÔNG retry.
+    /// </summary>
+    private static bool IsTransient(Exception ex, CancellationToken ct)
+        => !ct.IsCancellationRequested
+           && ex is HttpRequestException or IOException or SocketException or OperationCanceledException;
+
     public async Task<AiChatCompletion> CompleteAsync(
         string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools = null,
         AiCompletionOptions? options = null, CancellationToken ct = default)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            try
+            {
+                return await SendOnceAsync(model, messages, tools, options, ct);
+            }
+            catch (Exception ex) when (attempt <= MaxTransientRetries && IsTransient(ex, ct))
+            {
+                _logger.LogWarning(ex,
+                    "[AiChat] Ollama lỗi kết nối tạm thời (lần {Attempt}/{Max}) — thử lại (prompt cache sẽ giúp lần sau nhanh hơn).",
+                    attempt, MaxTransientRetries);
+                await Task.Delay(RetryDelays[attempt - 1], ct);
+            }
+        }
+    }
+
+    private async Task<AiChatCompletion> SendOnceAsync(
+        string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools,
+        AiCompletionOptions? options, CancellationToken ct)
     {
         var payload = new OllamaChatRequest
         {
@@ -44,6 +80,7 @@ public sealed class OllamaChatClient : IAiChatClient
             Messages = messages.Select(ToWire).ToList(),
             Tools = tools is { Count: > 0 } ? tools.Select(ToWireTool).ToList() : null,
             Format = options?.JsonMode == true ? "json" : null,
+            Think = options?.Think,
             Options = BuildOllamaOptions(options),
         };
 
@@ -73,11 +110,22 @@ public sealed class OllamaChatClient : IAiChatClient
             .Select(tc => new AiToolCall(tc.Function!.Name, tc.Function.Arguments?.ToJsonString() ?? "{}"))
             .ToList();
 
+        var content = body.Message.Content;
+
+        // Model thinking (vd qwen3.5) thỉnh thoảng viết CẢ câu trả lời vào "thinking", content rỗng
+        // → cứu bằng thinking thay vì ném lỗi làm mất lượt. (Muốn tắt hẳn: Ai:Chat:Think=false.)
+        if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content)
+            && !string.IsNullOrWhiteSpace(body.Message.Thinking))
+        {
+            _logger.LogWarning("[AiChat] Content rỗng nhưng thinking có nội dung — dùng thinking làm câu trả lời.");
+            content = body.Message.Thinking;
+        }
+
         // Có tool_calls → content có thể rỗng (model chờ kết quả tool).
-        if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(body.Message.Content))
+        if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content))
             throw new InvalidOperationException("LLM trả về tin rỗng (không content, không tool call).");
 
-        return new AiChatCompletion(body.Message.Content ?? string.Empty, body.Model ?? model,
+        return new AiChatCompletion(content ?? string.Empty, body.Model ?? model,
             toolCalls is { Count: > 0 } ? toolCalls : null);
     }
 
@@ -145,6 +193,11 @@ public sealed class OllamaChatClient : IAiChatClient
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Format { get; init; }
 
+        /// <summary>Bật/tắt thinking (model hỗ trợ như qwen3). null = không gửi, theo mặc định model.</summary>
+        [JsonPropertyName("think")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public bool? Think { get; init; }
+
         [JsonPropertyName("options")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public OllamaOptions? Options { get; init; }
@@ -165,6 +218,11 @@ public sealed class OllamaChatClient : IAiChatClient
     {
         public string Role { get; init; } = string.Empty;
         public string Content { get; init; } = string.Empty;
+
+        /// <summary>Chuỗi suy luận của model thinking — chỉ đọc từ response, không gửi đi.</summary>
+        [JsonPropertyName("thinking")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? Thinking { get; init; }
 
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<string>? Images { get; init; }

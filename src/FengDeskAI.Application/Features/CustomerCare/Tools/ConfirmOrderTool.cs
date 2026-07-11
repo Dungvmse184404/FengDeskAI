@@ -37,20 +37,38 @@ public sealed class ConfirmOrderTool : IAiTool
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
-        ["draftId"] = new("string", "The draftId returned by prepare_order.", Required: true),
+        ["draftId"] = new("string", "The draftId returned by prepare_order, if you still have it. " +
+            "Omit it if you no longer have the exact id — the system will use the user's latest prepared draft."),
         ["paymentMethod"] = new("string", "Payment method (default PayOS). COD must be explicitly requested by the user.", Enum: new[] { "PayOS", "COD" }),
     };
 
     public async Task<string> ExecuteAsync(AiToolContext context, JsonElement arguments, CancellationToken ct = default)
     {
-        var draftId = ToolArgs.GetGuid(arguments, "draftId");
-        if (draftId is null)
-            return ToolArgs.Error("Missing or invalid 'draftId' (must be a GUID from a prior prepare_order result).");
+        // draftId chỉ sống trong tool result của LƯỢT prepare — tool exchange không lưu vào history nên
+        // sang lượt user xác nhận, model thường không còn id. Fallback: draft MỚI NHẤT user đã prepare
+        // trong phòng này (pointer do prepare_order set, cùng TTL — model không thể "bịa" draft).
+        var requested = ToolArgs.GetGuid(arguments, "draftId");
+        var latestKey = OrderDraftCacheKey.Latest(context.UserId, context.ChatboxId);
 
-        var cacheKey = OrderDraftCacheKey.For(context.UserId, draftId.Value);
-        if (!_cache.TryGetValue(cacheKey, out OrderDraft? draft) || draft is null)
-            return ToolArgs.Error("This draft has expired or was already used — call prepare_order again.");
-        _cache.Remove(cacheKey); // 1 lần dùng: mọi lượt gọi sau (kể cả khi lỗi bên dưới) đều báo hết hạn.
+        Guid draftId;
+        OrderDraft? draft;
+        if (requested is { } rid && _cache.TryGetValue(OrderDraftCacheKey.For(context.UserId, rid), out draft) && draft is not null)
+        {
+            draftId = rid;
+        }
+        else if (_cache.TryGetValue(latestKey, out Guid latestId)
+            && _cache.TryGetValue(OrderDraftCacheKey.For(context.UserId, latestId), out draft) && draft is not null)
+        {
+            draftId = latestId;
+        }
+        else
+        {
+            return ToolArgs.Error("No active draft found (expired or already used) — call prepare_order again.");
+        }
+
+        // 1 lần dùng: mọi lượt gọi sau (kể cả khi lỗi bên dưới) đều báo hết hạn.
+        _cache.Remove(OrderDraftCacheKey.For(context.UserId, draftId));
+        _cache.Remove(latestKey);
 
         var paymentMethod = PaymentMethod.PayOS;
         var paymentMethodText = ToolArgs.GetString(arguments, "paymentMethod");

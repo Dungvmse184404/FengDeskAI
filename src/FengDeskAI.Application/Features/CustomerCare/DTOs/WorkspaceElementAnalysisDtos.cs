@@ -13,6 +13,12 @@ public sealed record WorkspaceElementAnalysisResponse
 
     /// <summary>Từng hành, sắp giảm dần theo Gap (thiếu nhất → thừa nhất).</summary>
     public List<ElementAnalysisRow> Elements { get; init; } = new();
+
+    /// <summary>% phòng đúng chuẩn lý tưởng đã điều chỉnh theo mục đích + bản mệnh (0-100).</summary>
+    public int CompatibilityPercent { get; init; }
+
+    /// <summary>3 nhận định (status/detail/action) sinh ở BE theo case A/B/C.</summary>
+    public SpaceInsights Insights { get; init; } = null!;
 }
 
 public sealed record ElementAnalysisRow
@@ -26,3 +32,9 @@ public sealed record ElementAnalysisRow
     /// <summary>AdjustedIdeal − Current: + thiếu, − thừa.</summary>
     public decimal Gap { get; init; }
 }
+
+/// <summary>Case: "Imbalanced" (A) | "Balanced" (B) | "Toxic" (C).</summary>
+public sealed record SpaceInsights(string Case, IReadOnlyList<SpaceInsightLine> Lines);
+
+/// <summary>Kind: "status" | "detail" | "action" — FE map icon theo Kind, Title đến từ BE.</summary>
+public sealed record SpaceInsightLine(string Kind, string Title, string Text);

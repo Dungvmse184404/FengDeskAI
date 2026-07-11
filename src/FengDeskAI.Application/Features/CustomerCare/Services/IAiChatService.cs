@@ -27,4 +27,7 @@ public interface IAiChatService
     Task<IServiceResult<AiChatResponse>> RewindAsync(
         Guid userId, string? userRole, string? userEmail, string? userDisplayName,
         Guid messageId, AiRewindRequest request, CancellationToken ct = default);
+
+    /// <summary>Cấu hình chat AI mà FE cần biết — vd cửa sổ nhớ để vẽ mốc "AI context limit" trong khung chat.</summary>
+    IServiceResult<AiChatConfigResponse> GetConfig();
 }

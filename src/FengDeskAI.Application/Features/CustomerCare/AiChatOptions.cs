@@ -15,6 +15,11 @@ public sealed class AiChatOptions
     /// <summary>Temperature cho hội thoại tự do. null = theo mặc định của model/provider.</summary>
     public double? Temperature { get; set; }
 
+    /// <summary>
+    /// Bật/tắt thinking của model (Ollama "think", model hỗ trợ như qwen3). null = theo mặc định model.
+    /// false → model trả lời thẳng vào content, hết bệnh "lạc" câu trả lời vào thinking block.
+    /// </summary>
+    public bool? Think { get; set; } = true;
     /// <summary>Danh sách model được phép đổi. Rỗng → chấp nhận mọi model client gửi.</summary>
     public List<string> AllowedModels { get; set; } = new();
 
@@ -22,7 +27,7 @@ public sealed class AiChatOptions
     public int MaxHistoryTurns { get; set; } = 5;
 
     /// <summary>Số tin gần nhất của CHÍNH phòng được nạp khi @AI ở phòng nhiều người (để nhớ ngữ cảnh trong phòng).</summary>
-    public int RoomContextMessages { get; set; } = 30;
+    public int RoomContextMessages { get; set; } = 10;
 
     /// <summary>
     /// Số ảnh GẦN NHẤT (tính trên toàn cửa sổ lịch sử) được encode base64 đưa cho LLM mỗi lượt.

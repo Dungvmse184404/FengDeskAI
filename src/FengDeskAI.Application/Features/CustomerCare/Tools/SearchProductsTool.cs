@@ -14,7 +14,12 @@ public sealed class SearchProductsTool : IAiTool
     public SearchProductsTool(IProductService products) => _products = products;
 
     public string Name => "search_products";
-    public string Description => "Search feng shui products by keyword (scans both NAME and DESCRIPTION, diacritics- and case-insensitive). Returns a list of id, name, image and variants with price + stock (items).";
+    public string Description =>
+        "Search feng shui products by keyword — scans NAME, DESCRIPTION, CATEGORY names and feng shui " +
+        "ELEMENTS (e.g. 'hỏa' finds Fire-element products), diacritics- and case-insensitive. Multi-word " +
+        "queries match all words first, then automatically relax to any-word if nothing matches — so pass " +
+        "the user's phrase as-is; no need to retry with shorter keywords. Returns id, name, image and " +
+        "variants with price + stock (items).";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {

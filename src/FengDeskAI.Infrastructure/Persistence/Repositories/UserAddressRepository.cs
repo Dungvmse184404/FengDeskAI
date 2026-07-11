@@ -30,4 +30,12 @@ public class UserAddressRepository : GenericRepository<UserAddress>, IUserAddres
         => _set.AsNoTracking()
                .Include(a => a.Ward).ThenInclude(w => w.District).ThenInclude(d => d.Province)
                .FirstOrDefaultAsync(a => a.Id == id, ct);
+
+    public Task<List<UserAddress>> GetByUserIdWithWardChainAsync(Guid userId, CancellationToken ct = default)
+        => _set.AsNoTracking()
+               .Where(a => a.UserId == userId)
+               .Include(a => a.Ward).ThenInclude(w => w.District).ThenInclude(d => d.Province)
+               .OrderByDescending(a => a.IsDefault)
+               .ThenByDescending(a => a.UpdatedAt)
+               .ToListAsync(ct);
 }
