@@ -29,6 +29,13 @@ public class Chatbox : BaseEntity
     /// </summary>
     public bool IsSupport { get; set; }
 
+    /// <summary>
+    /// Store liên quan — khi phòng là hỗ trợ khách hàng ↔ MỘT shop cụ thể (garden owner/staff trả lời,
+    /// không phải platform Staff/Manager/Admin). Null = phòng hỗ trợ nền tảng chung (CSKH FengDesk).
+    /// Không có navigation property (giống ProductId) — chỉ cần Id để lọc/phân quyền theo store.
+    /// </summary>
+    public Guid? GardenStoreId { get; set; }
+
     public virtual ICollection<ChatboxParticipant> Participants { get; set; } = new List<ChatboxParticipant>();
     public virtual ICollection<ChatMessage> Messages { get; set; } = new List<ChatMessage>();
 }

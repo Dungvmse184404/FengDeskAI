@@ -65,4 +65,9 @@ public class OrdersController : ApiControllerBase
     [HttpPost("deliveries/{deliveryId:guid}/shipment")]
     public async Task<IActionResult> CreateShipment(Guid deliveryId, CancellationToken ct)
         => ToActionResult(await _service.CreateDeliveryShipmentAsync(deliveryId, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>Garden owner/staff: chi tiết đơn giao (sản phẩm + địa chỉ nhận) để đóng gói. Chỉ trả hàng thuộc đúng store này.</summary>
+    [HttpGet("deliveries/{deliveryId:guid}/detail")]
+    public async Task<IActionResult> GetDeliveryDetail(Guid deliveryId, CancellationToken ct)
+        => ToActionResult(await _service.GetDeliveryDetailAsync(deliveryId, CurrentUserId, IsAdmin, ct));
 }

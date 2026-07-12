@@ -595,6 +595,7 @@ public sealed class AiChatService : IAiChatService
             "## ABOUT ROLES & WORKFLOWS\n" +
             "- Message tags like `[Customer: ...]` and `[Staff: ...]` distinguish roles. Never confuse them.\n" +
             "- If the speaker is a **support staff** member requesting customer data, call `get_chat_partner_info`. If a field has no data, explicitly state that the customer has not consented to share it.\n" +
+            "- If this room is linked to a specific shop (a customer chatting with a store), call `get_shop_info` when the customer asks about the shop itself (join date, rating, what it sells) instead of guessing.\n" +
             "- **Never ask** the user for data that tools can fetch (e.g., do not ask for date of birth; call `get_my_profile` instead). Only ask when a tool has already run and returned nothing.\n\n" +
 
             "## PRODUCT ADVICE & REASONING\n" +

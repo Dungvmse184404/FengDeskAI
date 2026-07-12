@@ -7,5 +7,10 @@ public enum ParticipantType
     Staff = 1,
     Manager = 2,
     Admin = 3,
+
+    /// <summary>Garden owner/staff trả lời trong phòng hỗ trợ CỦA MỘT SHOP (Chatbox.GardenStoreId != null).
+    /// Khác Staff/Manager/Admin (platform CSKH) — không được tự join phòng hỗ trợ platform và ngược lại.</summary>
+    Vendor = 4,
+
     AiBot = 9,
 }

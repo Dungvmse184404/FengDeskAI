@@ -99,4 +99,11 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
             .ToListAsync(ct);
         return (items, total);
     }
+
+    public Task<Delivery?> GetDeliveryDetailAsync(Guid deliveryId, CancellationToken ct = default)
+        => _context.Set<Delivery>().AsNoTracking()
+            .Include(d => d.Store)
+            .Include(d => d.Items)
+            .Include(d => d.Order).ThenInclude(o => o.ShippingAddress).ThenInclude(a => a.Ward).ThenInclude(w => w.District).ThenInclude(dt => dt.Province)
+            .FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
 }

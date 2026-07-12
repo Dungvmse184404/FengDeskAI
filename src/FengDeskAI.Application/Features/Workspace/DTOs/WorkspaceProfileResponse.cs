@@ -26,4 +26,7 @@ public class WorkspaceProfileResponse
     public int CompletenessPercent { get; set; }
     /// <summary>Gợi ý field nên bổ sung + lợi ích, vd "Thêm hướng cửa để nhận gợi ý vị trí đặt".</summary>
     public IReadOnlyList<string> MissingFieldHints { get; set; } = Array.Empty<string>();
+
+    /// <summary>Màu/vật liệu/hình khối hiện trạng phòng đã lưu — FE prefill tag picker khi sửa.</summary>
+    public List<WorkspaceProfileInputDto> Inputs { get; set; } = new();
 }

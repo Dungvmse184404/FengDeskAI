@@ -37,6 +37,27 @@ public class WorkspaceTypeElementSeeder : IDataSeeder
         ["Co-working Booth"]   = ((0.20m, 0.25m, 0.15m, 0.30m, 0.10m), (0.30m, 0.25m, 0.10m, 0.25m, 0.10m)),
         ["Open Workspace"]     = ((0.20m, 0.20m, 0.20m, 0.30m, 0.10m), (0.30m, 0.25m, 0.10m, 0.25m, 0.10m)),
         ["Reception / Lounge"] = ((0.30m, 0.25m, 0.10m, 0.15m, 0.20m), (0.35m, 0.25m, 0.10m, 0.10m, 0.20m)),
+
+        // Không gian sinh hoạt tại nhà — Ideal theo công năng, Interior theo vật liệu/décor điển hình.
+        ["Kitchen"]      = ((0.25m, 0.15m, 0.10m, 0.15m, 0.35m), (0.20m, 0.30m, 0.10m, 0.10m, 0.30m)),
+        ["Living Room"]  = ((0.25m, 0.15m, 0.15m, 0.25m, 0.20m), (0.25m, 0.15m, 0.15m, 0.30m, 0.15m)),
+        ["Bedroom"]      = ((0.25m, 0.10m, 0.30m, 0.25m, 0.10m), (0.25m, 0.10m, 0.20m, 0.35m, 0.10m)),
+        ["Dining Room"]  = ((0.35m, 0.15m, 0.10m, 0.15m, 0.25m), (0.30m, 0.15m, 0.10m, 0.30m, 0.15m)),
+        ["Kids Room"]    = ((0.25m, 0.05m, 0.15m, 0.35m, 0.20m), (0.25m, 0.10m, 0.15m, 0.30m, 0.20m)),
+        ["Balcony"]      = ((0.20m, 0.10m, 0.25m, 0.35m, 0.10m), (0.20m, 0.10m, 0.20m, 0.40m, 0.10m)),
+        ["Home Gym"]     = ((0.20m, 0.25m, 0.10m, 0.15m, 0.30m), (0.15m, 0.35m, 0.10m, 0.15m, 0.25m)),
+
+        // Mở rộng thêm — không gian đặc trưng nhà ở Việt Nam + phòng chức năng còn thiếu.
+        ["Altar Room"]      = ((0.40m, 0.15m, 0.05m, 0.10m, 0.30m), (0.25m, 0.10m, 0.05m, 0.30m, 0.30m)),
+        ["Bathroom"]        = ((0.15m, 0.20m, 0.45m, 0.10m, 0.10m), (0.20m, 0.30m, 0.35m, 0.10m, 0.05m)),
+        ["Study Room"]      = ((0.20m, 0.15m, 0.30m, 0.30m, 0.05m), (0.25m, 0.15m, 0.20m, 0.35m, 0.05m)),
+        ["Home Theater"]    = ((0.15m, 0.30m, 0.10m, 0.15m, 0.30m), (0.20m, 0.35m, 0.10m, 0.10m, 0.25m)),
+        ["Walk-in Closet"]  = ((0.25m, 0.35m, 0.10m, 0.15m, 0.15m), (0.20m, 0.30m, 0.10m, 0.25m, 0.15m)),
+        ["Garage"]          = ((0.25m, 0.45m, 0.10m, 0.05m, 0.15m), (0.30m, 0.40m, 0.10m, 0.05m, 0.15m)),
+        ["Rooftop Garden"]  = ((0.15m, 0.05m, 0.20m, 0.45m, 0.15m), (0.20m, 0.05m, 0.15m, 0.50m, 0.10m)),
+        ["Guest Room"]      = ((0.30m, 0.20m, 0.20m, 0.20m, 0.10m), (0.30m, 0.20m, 0.15m, 0.25m, 0.10m)),
+        ["Meditation Room"] = ((0.25m, 0.05m, 0.35m, 0.30m, 0.05m), (0.30m, 0.05m, 0.25m, 0.35m, 0.05m)),
+        ["Laundry Room"]    = ((0.15m, 0.30m, 0.40m, 0.10m, 0.05m), (0.15m, 0.35m, 0.35m, 0.10m, 0.05m)),
     };
 
     public async Task SeedAsync(CancellationToken ct = default)

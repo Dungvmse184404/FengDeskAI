@@ -149,6 +149,12 @@ public sealed class RecommendationScorer : IRecommendationScorer
         WorkPurpose.Reading => VibeCodes.Calm,
         WorkPurpose.Creative => VibeCodes.Creative,
         WorkPurpose.Gaming => VibeCodes.Energize,
+        WorkPurpose.Cooking => VibeCodes.Energize,
+        WorkPurpose.Dining => VibeCodes.Relax,
+        WorkPurpose.Relaxation => VibeCodes.Relax,
+        WorkPurpose.Sleep => VibeCodes.Calm,
+        WorkPurpose.Childcare => VibeCodes.Calm,
+        WorkPurpose.Exercise => VibeCodes.Energize,
         WorkPurpose.Mixed => VibeCodes.Focus,
         _ => null, // Other → không lọc theo intent
     };

@@ -2,10 +2,14 @@ using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.Workspace.DTOs;
 
-/// <summary>Mô tả không gian bằng lời (10..2000 ký tự) — AI phân tích thành draft, KHÔNG lưu DB.</summary>
+/// <summary>
+/// Mô tả không gian bằng lời (10..2000 ký tự, hoặc rỗng nếu có ít nhất 1 ảnh) — AI phân tích thành
+/// draft, KHÔNG lưu DB. <see cref="ImageUrls"/> (tối đa 3) là link đã upload qua endpoint images.
+/// </summary>
 public sealed class ParseWorkspaceDescriptionRequest
 {
     public string Description { get; set; } = null!;
+    public List<string>? ImageUrls { get; set; }
 }
 
 /// <summary>
@@ -19,6 +23,9 @@ public sealed class WorkspaceProfileDraftResponse
     public Guid? WorkspaceTypeId { get; set; }
     public string? StyleCode { get; set; }
     public LightingType? Lighting { get; set; }
+
+    /// <summary>true = có bàn làm việc, false = rõ ràng không có (vd bếp/phòng khách), null = không đủ căn cứ.</summary>
+    public bool? HasDesk { get; set; }
     public DeskType? DeskType { get; set; }
     public CompassDirection? DeskOrientation { get; set; }
     public CompassDirection? RoomFacingDirection { get; set; }
