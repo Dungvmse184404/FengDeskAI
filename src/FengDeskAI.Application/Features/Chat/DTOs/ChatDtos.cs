@@ -17,6 +17,9 @@ public class ChatboxResponse
     public bool IsGroup { get; set; }
     public bool IsSupport { get; set; }
 
+    /// <summary>Store liên quan nếu phòng là hỗ trợ khách ↔ một shop cụ thể. Null = phòng hỗ trợ nền tảng chung.</summary>
+    public Guid? GardenStoreId { get; set; }
+
     /// <summary>Phòng đã đóng (khách xóa nhưng còn tin nhắn) — suy từ Chatbox.IsDeleted. FE hiện mờ + khoá gửi.</summary>
     public bool IsClosed { get; set; }
     public string? Title { get; set; }

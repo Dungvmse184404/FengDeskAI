@@ -1,6 +1,7 @@
 using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Chat;
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Entities.Vendor;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -21,6 +22,7 @@ public class ChatboxConfiguration : IEntityTypeConfiguration<Chatbox>
         builder.Property(c => c.ProductId).HasColumnName("product_id");
         builder.Property(c => c.IsAiEnabled).HasColumnName("is_ai_enabled").HasDefaultValue(false);
         builder.Property(c => c.IsSupport).HasColumnName("is_support").HasDefaultValue(false);
+        builder.Property(c => c.GardenStoreId).HasColumnName("garden_store_id");
 
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
         builder.Property(c => c.UpdatedAt).HasColumnName("updated_at");
@@ -30,6 +32,7 @@ public class ChatboxConfiguration : IEntityTypeConfiguration<Chatbox>
 
         builder.HasIndex(c => c.ProductId);
         builder.HasIndex(c => c.CreatedByUserId);
+        builder.HasIndex(c => c.GardenStoreId);
 
         builder.HasOne<User>()
             .WithMany()
@@ -39,6 +42,11 @@ public class ChatboxConfiguration : IEntityTypeConfiguration<Chatbox>
         builder.HasOne<Product>()
             .WithMany()
             .HasForeignKey(c => c.ProductId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne<GardenStore>()
+            .WithMany()
+            .HasForeignKey(c => c.GardenStoreId)
             .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasMany(c => c.Participants)

@@ -13,4 +13,8 @@ public interface IReviewRepository : IGenericRepository<Review>
 
     /// <summary>Kiểm tra user đã review sản phẩm này chưa (tránh trùng).</summary>
     Task<bool> HasUserReviewedProductAsync(Guid userId, Guid productId, CancellationToken ct = default);
+
+    /// <summary>Đánh giá trung bình của 1 shop = trung bình Rating của mọi review thuộc các sản phẩm của shop đó
+    /// (chưa có bảng đánh giá riêng cho Store). Count=0 khi shop chưa có review nào.</summary>
+    Task<(double Average, int Count)> GetStoreRatingSummaryAsync(Guid storeId, CancellationToken ct = default);
 }

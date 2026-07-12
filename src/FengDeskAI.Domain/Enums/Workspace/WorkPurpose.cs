@@ -7,6 +7,12 @@ public enum WorkPurpose
     Creative,
     Reading,
     Gaming,
+    Cooking,
+    Dining,
+    Relaxation,
+    Sleep,
+    Childcare,
+    Exercise,
     Mixed,
     Other,
 }

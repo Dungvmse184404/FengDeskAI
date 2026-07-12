@@ -37,4 +37,13 @@ public class ReviewRepository : GenericRepository<Review>, IReviewRepository
 
     public Task<bool> HasUserReviewedProductAsync(Guid userId, Guid productId, CancellationToken ct = default)
         => _set.AnyAsync(r => r.UserId == userId && r.ProductId == productId, ct);
+
+    public async Task<(double Average, int Count)> GetStoreRatingSummaryAsync(Guid storeId, CancellationToken ct = default)
+    {
+        var query = _set.AsNoTracking().Where(r => r.Product.GardenStoreId == storeId);
+        var count = await query.CountAsync(ct);
+        if (count == 0) return (0, 0);
+        var average = await query.AverageAsync(r => r.Rating, ct);
+        return (average, count);
+    }
 }

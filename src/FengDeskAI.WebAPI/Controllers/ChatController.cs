@@ -57,6 +57,23 @@ public class ChatController : ApiControllerBase
     public async Task<IActionResult> GetOpenSupport([FromQuery] PageRequest page, CancellationToken ct)
         => ToActionResult(await _service.GetOpenSupportRoomsAsync(page, ct));
 
+    // ───────────── Phòng hỗ trợ của một SHOP cụ thể (vendor: garden owner/staff) ─────────────
+
+    /// <summary>Khách: lấy/tạo phòng hỗ trợ với một shop cụ thể (nút "Nhắn tin" trên trang shop).</summary>
+    [HttpPost("support/stores/{storeId:guid}")]
+    public async Task<IActionResult> StartStoreSupport(Guid storeId, CancellationToken ct)
+        => ToActionResult(await _service.GetOrStartStoreSupportAsync(CurrentUserId, CurrentUser.Role, storeId, ct));
+
+    /// <summary>Vendor (owner/staff store): hàng đợi phòng hỗ trợ đang mở của store mình.</summary>
+    [HttpGet("support/stores/{storeId:guid}/open")]
+    public async Task<IActionResult> GetOpenStoreSupport(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
+        => ToActionResult(await _service.GetOpenStoreSupportRoomsAsync(storeId, CurrentUserId, User.IsInRole(Roles.Admin), page, ct));
+
+    /// <summary>Vendor: danh sách phòng của store mình đã nhận hỗ trợ.</summary>
+    [HttpGet("support/stores/{storeId:guid}/mine")]
+    public async Task<IActionResult> GetMyStoreSupport(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
+        => ToActionResult(await _service.GetMyStoreChatboxesAsync(storeId, CurrentUserId, User.IsInRole(Roles.Admin), page, ct));
+
     /// <summary>Tạo phòng nhóm (mình là Owner).</summary>
     [HttpPost("groups")]
     public async Task<IActionResult> CreateGroup([FromBody] CreateGroupRequest request, CancellationToken ct)
