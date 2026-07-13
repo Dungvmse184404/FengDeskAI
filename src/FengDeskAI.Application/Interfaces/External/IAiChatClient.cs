@@ -29,7 +29,12 @@ public sealed record AiChatCompletion(string Content, string Model, IReadOnlyLis
 /// </summary>
 /// <param name="Think">Bật/tắt thinking của model (Ollama "think"). null = theo mặc định model.
 /// Tắt (false) giúp model nhỏ đỡ "lạc" câu trả lời vào thinking block.</param>
-public sealed record AiCompletionOptions(double? Temperature = null, bool JsonMode = false, bool? Think = null);
+/// <param name="Stream">Ollama "stream":true — đọc phản hồi theo từng chunk (NDJSON) thay vì đợi
+/// 1 lần rồi gộp lại, KHÔNG đổi contract phía trên (vẫn trả về 1 <see cref="AiChatCompletion"/> đầy
+/// đủ). Mục đích duy nhất: giữ traffic chảy liên tục qua proxy/tunnel (vd ngrok free) có ngắt kết nối
+/// khi im lặng quá lâu — câu trả lời càng dài (ảnh, tool nhiều bước...) càng dễ dính nếu stream=false.</param>
+public sealed record AiCompletionOptions(
+    double? Temperature = null, bool JsonMode = false, bool? Think = null, bool Stream = false);
 
 /// <summary>
 /// Cổng gọi LLM hội thoại (Ollama / OpenAI-compatible) — thuần transport, không giữ state.

@@ -111,6 +111,8 @@ public sealed class AiChatService : IAiChatService
             completion = await RunWithToolsAsync(model, outgoing, ctx, activity, ct);
             // Bảo hiểm deterministic: tool đã trả sản phẩm nào mà model nhắc tên nhưng quên link → BE tự chèn.
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
+            // Kiểm duyệt GUID "trần" model lỡ phun ra cho user (giữ nguyên GUID trong URL /products/...).
+            completion = completion with { Content = CensorEntityIds(completion.Content) };
         }
         catch (Exception ex)
         {
@@ -120,7 +122,7 @@ public sealed class AiChatService : IAiChatService
             //                          .NET <-> Ollama (OS/ngrok cắt giữa chừng) -> đáng để điều tra hạ tầng.
             _logger.LogError(ex, "[AiChat] Gọi LLM thất bại (chatbox {ChatboxId}, model {Model}, clientCancelled={ClientCancelled}).",
                 chatbox.Id, model, ct.IsCancellationRequested);
-            await activity.PhaseAsync("error", null, ct);
+            await activity.PhaseAsync("error", null, ct: ct);
             return ServiceResult<AiChatResponse>.Failure(
                 ApiStatusCodes.ServiceUnavailable, "Không kết nối được tới dịch vụ AI. Vui lòng thử lại sau.");
         }
@@ -246,11 +248,13 @@ public sealed class AiChatService : IAiChatService
             var ctx = new AiToolContext(triggeredByUserId, null, null, chatboxId, IsPrivateRoom: false);
             completion = await RunWithToolsAsync(_options.DefaultModel, outgoing, ctx, activity, ct);
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
+            // Kiểm duyệt GUID "trần" model lỡ phun ra cho user (giữ nguyên GUID trong URL /products/...).
+            completion = completion with { Content = CensorEntityIds(completion.Content) };
         }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[AiChat] Bot trả lời phòng {ChatboxId} thất bại.", chatboxId);
-            await activity.PhaseAsync("error", null, ct);
+            await activity.PhaseAsync("error", null, ct: ct);
             return;
         }
 
@@ -285,7 +289,8 @@ public sealed class AiChatService : IAiChatService
         AiChatCompletion? lastWithContent = null;
 
         // Temperature + think theo cấu hình riêng của chatbox (Ai:Chat) — null = mặc định model.
-        var callOptions = new AiCompletionOptions(Temperature: _options.Temperature, Think: _options.Think);
+        var callOptions = new AiCompletionOptions(
+            Temperature: _options.Temperature, Think: _options.Think, Stream: _options.Stream);
 
         // Model nhỏ hay "hứa" đi lấy dữ liệu bằng TEXT ("Đang lấy dữ liệu...") mà không emit tool_calls
         // rồi dừng hẳn → user nhận câu cụt. Phát hiện stall → nhắc lại buộc gọi tool thật (tối đa N lần).
@@ -296,7 +301,7 @@ public sealed class AiChatService : IAiChatService
 
         for (var round = 0; round < maxRounds; round++)
         {
-            await activity.PhaseAsync("thinking", null, ct);
+            await activity.PhaseAsync("thinking", null, ct: ct);
 
             AiChatCompletion completion;
             try
@@ -308,7 +313,7 @@ public sealed class AiChatService : IAiChatService
             {
                 // LLM lỗi/timeout giữa chuỗi nhưng đã có câu trả lời khả dụng → cứu nó thay vì ném lỗi trắng tay.
                 _logger.LogWarning(ex, "[AiChat] LLM lỗi ở vòng {Round} — dùng câu trả lời đã có thay vì fail cả lượt.", round);
-                await activity.PhaseAsync("writing", null, ct);
+                await activity.PhaseAsync("writing", null, ct: ct);
                 return salvage;
             }
 
@@ -334,7 +339,7 @@ public sealed class AiChatService : IAiChatService
 
             if (!hasToolCalls)
             {
-                await activity.PhaseAsync("writing", null, ct);
+                await activity.PhaseAsync("writing", null, ct: ct);
                 return completion; // câu trả lời cuối (không gọi tool)
             }
 
@@ -347,14 +352,14 @@ public sealed class AiChatService : IAiChatService
             messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content, ToolCalls: completion.ToolCalls));
             foreach (var call in completion.ToolCalls!)
             {
-                await activity.PhaseAsync("calling_tool", call.Name, ct);
+                await activity.PhaseAsync("calling_tool", call.Name, ToolFriendlyNote(call.Name), ct);
                 var output = await ExecuteToolAsync(call, ctx, ct);
                 messages.Add(new AiChatMessage(AiChatRoles.Tool, output, ToolName: call.Name));
             }
         }
 
         // Hết vòng mà vẫn đòi tool → gọi lần cuối KHÔNG kèm tools để ép ra câu trả lời text.
-        await activity.PhaseAsync("writing", null, ct);
+        await activity.PhaseAsync("writing", null, ct: ct);
         try
         {
             var forced = await _client.CompleteAsync(model, messages, null, options: callOptions, ct: ct);
@@ -397,6 +402,22 @@ public sealed class AiChatService : IAiChatService
         return content;
     }
 
+    /// <summary>
+    /// GUID đầy đủ đứng "trần" trong văn bản (KHÔNG đứng sau '/', tức không phải phần của URL như
+    /// /products/{id}, và không dính vào token dài hơn). Dùng để rút gọn khi hiển thị cho user.
+    /// </summary>
+    private static readonly System.Text.RegularExpressions.Regex EntityIdRegex = new(
+        @"(?<![\w/-])([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![\w-])",
+        System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    /// <summary>
+    /// Kiểm duyệt ID: mọi GUID trần model lỡ đưa ra → còn 8 ký tự đầu + "-..." (vd 1b904ba9-...).
+    /// KHÔNG đụng GUID trong link sản phẩm ("/products/{id}") vì đó là URL người dùng bấm được.
+    /// Chỉ ảnh hưởng phần hiển thị/lưu; model nội bộ vẫn nhận ID đầy đủ để gọi tool.
+    /// </summary>
+    private static string CensorEntityIds(string content)
+        => string.IsNullOrEmpty(content) ? content : EntityIdRegex.Replace(content, "$1-...");
+
     /// <summary>Số lần nhắc model khi nó "hứa" gọi tool bằng text mà không emit tool_calls.</summary>
     private const int MaxStallNudges = 2;
 
@@ -437,6 +458,30 @@ public sealed class AiChatService : IAiChatService
     /// <summary>Tool có tác dụng phụ (tạo đơn) — chỉ được đưa vào danh sách tool cho LLM / thực thi ở phòng riêng.</summary>
     private static readonly HashSet<string> PrivateRoomOnlyTools =
         new(StringComparer.OrdinalIgnoreCase) { "prepare_order", "confirm_order" };
+
+    /// <summary>
+    /// Nhãn tiếng Việt thân thiện hiển thị cho user khi AI đang gọi 1 tool (phase="calling_tool"),
+    /// thay vì lộ tên tool thô (vd "prepare_order") — xem AiActivityIndicator.tsx phía FE.
+    /// Tool không có trong map (vd tool mới thêm quên cập nhật) → FE tự fallback về text mặc định.
+    /// </summary>
+    private static readonly IReadOnlyDictionary<string, string> ToolFriendlyNotes =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["search_products"] = "Đang tìm sản phẩm phù hợp…",
+            ["get_product"] = "Đang xem chi tiết sản phẩm…",
+            ["recommend_products"] = "Đang tư vấn sản phẩm theo phong thủy…",
+            ["list_my_workspaces"] = "Đang lấy hồ sơ không gian của bạn…",
+            ["get_my_profile"] = "Đang lấy thông tin tài khoản của bạn…",
+            ["list_my_orders"] = "Đang lấy danh sách đơn hàng của bạn…",
+            ["get_payment_status"] = "Đang kiểm tra trạng thái thanh toán…",
+            ["get_chat_partner_info"] = "Đang lấy thông tin khách hàng…",
+            ["list_my_addresses"] = "Đang lấy danh sách địa chỉ của bạn…",
+            ["prepare_order"] = "Đang chuẩn bị đơn hàng của bạn…",
+            ["confirm_order"] = "Đang xác nhận và tạo đơn hàng…",
+        };
+
+    private static string? ToolFriendlyNote(string toolName)
+        => ToolFriendlyNotes.TryGetValue(toolName, out var note) ? note : null;
 
     private IReadOnlyList<AiToolSpec>? BuildToolSpecs(bool isPrivateRoom)
     {

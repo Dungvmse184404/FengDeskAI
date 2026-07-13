@@ -20,6 +20,15 @@ public sealed class AiChatOptions
     /// false → model trả lời thẳng vào content, hết bệnh "lạc" câu trả lời vào thinking block.
     /// </summary>
     public bool? Think { get; set; } = true;
+
+    /// <summary>
+    /// Ollama "stream":true — đọc phản hồi theo từng chunk thay vì đợi 1 lần. KHÔNG lộ ra ngoài
+    /// (client vẫn nhận 1 câu trả lời đầy đủ như cũ); chỉ để giữ kết nối "sống" qua ngrok/proxy khi
+    /// câu trả lời dài (ảnh, nhiều vòng tool...) — stream=false từng khiến các tunnel free-tier ngắt
+    /// kết nối do im lặng quá lâu trong lúc model sinh chữ.
+    /// </summary>
+    public bool Stream { get; set; } = true;
+
     /// <summary>Danh sách model được phép đổi. Rỗng → chấp nhận mọi model client gửi.</summary>
     public List<string> AllowedModels { get; set; } = new();
 

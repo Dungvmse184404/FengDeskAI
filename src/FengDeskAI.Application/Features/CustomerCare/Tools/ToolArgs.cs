@@ -27,6 +27,9 @@ internal static class ToolArgs
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
     {
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+        // Enum → TÊN chuỗi (vd status "Cancelled" thay vì 4, paymentMethod "Cod" thay vì 0) để model hiểu
+        // ngữ nghĩa, khỏi phải chú thích bảng enum thủ công cho từng tool. Áp cho MỌI tool result.
+        Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() },
     };
 
     public static string Json(object? value) => JsonSerializer.Serialize(value, JsonOptions);
