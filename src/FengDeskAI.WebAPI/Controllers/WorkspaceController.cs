@@ -33,15 +33,23 @@ public class WorkspaceProfilesController : ApiControllerBase
     }
 
     /// <summary>
-    /// AI intake: mô tả không gian bằng lời (+ ảnh tùy chọn) → draft prefill form. Stateless — KHÔNG
-    /// lưu DB; user review/sửa rồi submit qua <see cref="Create"/> như bình thường.
+    /// AI intake (ASYNC): mô tả không gian bằng lời (+ ảnh tùy chọn) → đẩy job nền, trả operationId NGAY
+    /// (không chờ LLM ~80s → tránh FE timeout). Client nghe realtime qua SignalR group "ai-op-{operationId}"
+    /// (event "workspaceIntakeResult" / "workspaceIntakeFailed") hoặc poll <see cref="GetIntakeStatus"/> để
+    /// lấy kết quả. Stateless — KHÔNG lưu DB; user review/sửa rồi submit qua <see cref="Create"/>.
     /// </summary>
     [HttpPost("parse-description")]
     [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
     [EnableRateLimiting("workspace-intake")]
     public async Task<IActionResult> ParseDescription(
         [FromBody] ParseWorkspaceDescriptionRequest request, CancellationToken ct)
-        => ToActionResult(await _intakeService.ParseAsync(CurrentUserId, request, ct));
+        => ToActionResult(await _intakeService.StartParseAsync(CurrentUserId, request, ct));
+
+    /// <summary>Trạng thái/kết quả 1 job intake (pending/done/failed) — fallback khi client F5 hoặc lỡ event realtime.</summary>
+    [HttpGet("parse-description/{operationId}")]
+    [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
+    public IActionResult GetIntakeStatus(string operationId)
+        => ToActionResult(_intakeService.GetJobStatus(operationId));
 
     /// <summary>Tải ảnh không gian lên storage (multipart, field "file") → trả link để đính kèm parse-description.</summary>
     [HttpPost("images")]

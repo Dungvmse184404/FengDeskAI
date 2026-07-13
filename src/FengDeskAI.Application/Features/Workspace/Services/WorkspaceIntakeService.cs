@@ -27,6 +27,8 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     private const int MaxDeskAreaCm2 = 100_000;
     private const int MaxImages = 3;
     private static readonly TimeSpan VocabularyCacheTtl = TimeSpan.FromMinutes(10);
+    // Kết quả job giữ đủ lâu để client F5/kết nối lại vẫn lấy được, nhưng không phình bộ nhớ.
+    private static readonly TimeSpan JobResultTtl = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions RawJsonOptions = new()
     {
@@ -38,6 +40,9 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     private readonly IMemoryCache _cache;
     private readonly IFileStorage _storage;
     private readonly IImageEncoder _encoder;
+    private readonly IWorkspaceIntakeQueue _queue;
+    private readonly IWorkspaceIntakeNotifier _notifier;
+    private readonly IAiActivityNotifier _activity;
     private readonly WorkspaceIntakeOptions _options;
     private readonly ILogger<WorkspaceIntakeService> _logger;
 
@@ -47,6 +52,9 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         IMemoryCache cache,
         IFileStorage storage,
         IImageEncoder encoder,
+        IWorkspaceIntakeQueue queue,
+        IWorkspaceIntakeNotifier notifier,
+        IAiActivityNotifier activity,
         IOptions<WorkspaceIntakeOptions> options,
         ILogger<WorkspaceIntakeService> logger)
     {
@@ -55,9 +63,14 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         _cache = cache;
         _storage = storage;
         _encoder = encoder;
+        _queue = queue;
+        _notifier = notifier;
+        _activity = activity;
         _options = options.Value;
         _logger = logger;
     }
+
+    private static string JobKey(string operationId) => $"workspace-intake-job:{operationId}";
 
     public async Task<IServiceResult<string>> UploadImageAsync(
         Guid userId, Stream content, string fileName, string contentType, CancellationToken ct = default)
@@ -73,19 +86,90 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         return ServiceResult<string>.Success(stored.Url, "Tải ảnh thành công.");
     }
 
-    public async Task<IServiceResult<WorkspaceProfileDraftResponse>> ParseAsync(
-        Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default)
+    /// <summary>Validate + chuẩn hóa input dùng chung cho cả sync (ParseAsync) lẫn async (StartParseAsync). Trả lỗi hoặc null.</summary>
+    private static string? ValidateRequest(
+        ParseWorkspaceDescriptionRequest request, out string description, out List<string> imageUrls)
     {
-        var description = request.Description?.Trim() ?? string.Empty;
-        var imageUrls = (request.ImageUrls ?? new List<string>())
+        description = request.Description?.Trim() ?? string.Empty;
+        imageUrls = (request.ImageUrls ?? new List<string>())
             .Where(u => !string.IsNullOrWhiteSpace(u)).Take(MaxImages).ToList();
 
         if (imageUrls.Count == 0 && description.Length is < MinDescriptionLength or > MaxDescriptionLength)
-            return ServiceResult<WorkspaceProfileDraftResponse>.Failure(
-                ApiStatusCodes.BadRequest, $"Mô tả phải từ {MinDescriptionLength} đến {MaxDescriptionLength} ký tự (hoặc đính kèm ít nhất 1 ảnh).");
+            return $"Mô tả phải từ {MinDescriptionLength} đến {MaxDescriptionLength} ký tự (hoặc đính kèm ít nhất 1 ảnh).";
         if (description.Length > MaxDescriptionLength)
-            return ServiceResult<WorkspaceProfileDraftResponse>.Failure(
-                ApiStatusCodes.BadRequest, $"Mô tả tối đa {MaxDescriptionLength} ký tự.");
+            return $"Mô tả tối đa {MaxDescriptionLength} ký tự.";
+        return null;
+    }
+
+    /// <summary>
+    /// Async: validate nhanh rồi đẩy job vào hàng đợi nền, trả operationId ngay. Đặt trạng thái "pending"
+    /// vào cache trước để nếu FE poll trước khi worker chạy vẫn thấy job tồn tại.
+    /// </summary>
+    public Task<IServiceResult<WorkspaceIntakeStartResponse>> StartParseAsync(
+        Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default)
+    {
+        var error = ValidateRequest(request, out var description, out var imageUrls);
+        if (error is not null)
+            return Task.FromResult<IServiceResult<WorkspaceIntakeStartResponse>>(
+                ServiceResult<WorkspaceIntakeStartResponse>.Failure(ApiStatusCodes.BadRequest, error));
+
+        var operationId = Guid.NewGuid().ToString("N");
+        _cache.Set(JobKey(operationId), WorkspaceIntakeJobStatusResponse.Pending(), JobResultTtl);
+        _queue.Enqueue(new WorkspaceIntakeJob(operationId, userId, description, imageUrls, request.Think));
+
+        _logger.LogInformation(
+            "[WorkspaceIntake] Nhận job async {OperationId} cho user {UserId} ({Length} ký tự, {ImageCount} ảnh).",
+            operationId, userId, description.Length, imageUrls.Count);
+
+        return Task.FromResult<IServiceResult<WorkspaceIntakeStartResponse>>(
+            ServiceResult<WorkspaceIntakeStartResponse>.Success(
+                new WorkspaceIntakeStartResponse(operationId), "Đã bắt đầu phân tích."));
+    }
+
+    /// <summary>Worker nền gọi: phát tiến trình realtime, chạy parse, cache kết quả + push draft/lỗi. Best-effort.</summary>
+    public async Task RunJobAsync(WorkspaceIntakeJob job, CancellationToken ct = default)
+    {
+        // Scope tự phát "done" khi dispose (trừ khi ta đặt phase cuối = "error").
+        await using var activity = _activity.Begin(job.OperationId);
+        await activity.PhaseAsync("thinking", ct: ct);
+
+        var request = new ParseWorkspaceDescriptionRequest
+        {
+            Description = job.Description!,
+            ImageUrls = job.ImageUrls,
+            Think = job.Think,
+        };
+        var result = await ParseAsync(job.UserId, request, ct);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _cache.Set(JobKey(job.OperationId), WorkspaceIntakeJobStatusResponse.Done(result.Data), JobResultTtl);
+            await _notifier.PublishResultAsync(job.OperationId, result.Data, ct);
+        }
+        else
+        {
+            var message = result.Message ?? "Trợ lý đang bận, bạn có thể điền form thủ công.";
+            await activity.PhaseAsync("error", ct: ct); // chặn "done" tự phát → indicator hiện lỗi
+            _cache.Set(JobKey(job.OperationId), WorkspaceIntakeJobStatusResponse.Failed(message), JobResultTtl);
+            await _notifier.PublishFailedAsync(job.OperationId, message, ct);
+        }
+    }
+
+    /// <summary>Trạng thái job từ cache (fallback khi FE lỡ mất event realtime). NotFound nếu không tồn tại/hết hạn.</summary>
+    public IServiceResult<WorkspaceIntakeJobStatusResponse> GetJobStatus(string operationId)
+    {
+        if (_cache.TryGetValue(JobKey(operationId), out WorkspaceIntakeJobStatusResponse? status) && status is not null)
+            return ServiceResult<WorkspaceIntakeJobStatusResponse>.Success(status);
+        return ServiceResult<WorkspaceIntakeJobStatusResponse>.Failure(
+            ApiStatusCodes.NotFound, "Không tìm thấy phiên phân tích (có thể đã hết hạn).");
+    }
+
+    public async Task<IServiceResult<WorkspaceProfileDraftResponse>> ParseAsync(
+        Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default)
+    {
+        var error = ValidateRequest(request, out var description, out var imageUrls);
+        if (error is not null)
+            return ServiceResult<WorkspaceProfileDraftResponse>.Failure(ApiStatusCodes.BadRequest, error);
 
         var sw = System.Diagnostics.Stopwatch.StartNew();
         AiChatCompletion? completion = null;
@@ -108,14 +192,22 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
                 new(AiChatRoles.User, userContent, imagesBase64),
             };
 
+            // Có ảnh → PHẢI dùng vision model, không thì model text bỏ qua ảnh (không nhận màu/cây cảnh...).
+            var hasImages = imagesBase64 is { Count: > 0 };
+            var model = hasImages && !string.IsNullOrWhiteSpace(_options.VisionModel)
+                ? _options.VisionModel!
+                : _options.Model;
+            // Think: cho phép override theo từng request (công tắc phía user) — null = theo cấu hình Ai:Intake.
+            var think = request.Think ?? _options.Think;
+
             _logger.LogInformation(
                 "[WorkspaceIntake] Bắt đầu parse cho user {UserId} (mô tả {Length} ký tự, {ImageCount} ảnh, model {Model}, think={Think}).",
-                userId, description.Length, imageUrls.Count, _options.Model, _options.Think);
+                userId, description.Length, imageUrls.Count, model, think);
 
             // Model + temperature riêng cho intake (Ai:Intake) — không dùng chung với chatbox.
             completion = await _client.CompleteAsync(
-                _options.Model, messages, tools: null,
-                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, _options.Think), ct: ct);
+                model, messages, tools: null,
+                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, think, _options.Stream), ct: ct);
 
             var raw = ParseRaw(completion.Content);
             var draft = Normalize(raw, vocab);

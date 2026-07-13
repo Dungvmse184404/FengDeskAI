@@ -270,8 +270,9 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             (profile.DeskOrientation.HasValue, "Thêm hướng bàn để AI diễn giải sát hơn"),
             (profile.RoomFacingDirection.HasValue, "Thêm hướng phòng để AI diễn giải sát hơn"),
             (profile.DeskArea.HasValue, "Thêm diện tích mặt bàn để lọc vật phẩm vừa kích thước"),
-            (profile.EntranceDirection.HasValue, "Thêm hướng cửa ra vào để nhận gợi ý vị trí đặt"),
-            (profile.ToiletDirection.HasValue, "Thêm hướng nhà vệ sinh để tránh gợi ý sai vị trí"),
+            // EntranceDirection/ToiletDirection: KHÔNG có ô nhập ở form (Create/Update lẫn UI) → hint mãi
+            // không thoả được + chặn completeness ở 78%. Bỏ khỏi checklist. RecommendationService vẫn dùng
+            // 2 field này nếu có giá trị (nạp từ nguồn khác), chỉ là không nhắc user điền nữa.
             (hasProfileInput, "Mô tả thêm màu sắc/vật liệu không gian để engine tính ngũ hành sát hơn"),
         };
 
