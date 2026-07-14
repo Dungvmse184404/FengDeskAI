@@ -24,6 +24,11 @@ services:
       - .env
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+    # Cho container gọi được Ollama chạy trên MÁY HOST (localhost trong container = chính nó, không phải host).
+    # Trong .env đặt: Ai__Relay__Providers__0__BaseUrl=http://host.docker.internal:11434
+    # (Docker Desktop Win/Mac tự có host.docker.internal; dòng dưới để Linux cũng dùng được.)
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
   # Service một lần: apply migrations + chạy seeder (Program.cs xử lý arg "seed").
   migrate:

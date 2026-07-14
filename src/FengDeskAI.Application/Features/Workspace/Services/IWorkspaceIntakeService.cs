@@ -11,7 +11,8 @@ namespace FengDeskAI.Application.Features.Workspace.Services;
 public interface IWorkspaceIntakeService
 {
     Task<IServiceResult<WorkspaceProfileDraftResponse>> ParseAsync(
-        Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default);
+        Guid userId, ParseWorkspaceDescriptionRequest request,
+        IProgress<AiStreamChunk>? onDelta = null, CancellationToken ct = default);
 
     /// <summary>
     /// Nhận yêu cầu intake, validate nhanh (đồng bộ), rồi ĐẨY job vào hàng đợi nền → trả operationId ngay

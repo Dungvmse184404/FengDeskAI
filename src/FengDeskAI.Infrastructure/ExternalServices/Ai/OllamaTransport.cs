@@ -6,94 +6,83 @@ using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
 using FengDeskAI.Application.Interfaces.External;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 
 namespace FengDeskAI.Infrastructure.ExternalServices.Ai;
 
 /// <summary>
-/// Gọi LLM hội thoại kiểu Ollama <c>POST /api/chat</c> (stream=false). Hỗ trợ tool calling:
-/// gửi <c>tools</c> + parse <c>message.tool_calls</c>. Trung lập provider: chỉ map sang wire format.
+/// Transport Ollama <c>POST /api/chat</c> (hỗ trợ stream NDJSON + tool calling). Wire logic tách khỏi
+/// HttpClient/config → dùng chung cho mọi provider Type="Ollama" trong chuỗi relay.
 /// </summary>
-public sealed class OllamaChatClient : IAiChatClient
+internal sealed class OllamaTransport : IAiChatTransport
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
-    private readonly HttpClient _http;
-    private readonly AiProviderOptions _options;
-    private readonly ILogger<OllamaChatClient> _logger;
+    private readonly ILogger<OllamaTransport> _logger;
 
-    public OllamaChatClient(HttpClient http, IOptions<AiProviderOptions> options, ILogger<OllamaChatClient> logger)
-    {
-        _options = options.Value;
-        _logger = logger;
-        _http = http;
-        _http.BaseAddress = new Uri(_options.BaseUrl);
-        _http.Timeout = TimeSpan.FromSeconds(_options.TimeoutSeconds);
+    public OllamaTransport(ILogger<OllamaTransport> logger) => _logger = logger;
 
-        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
-            _http.DefaultRequestHeaders.TryAddWithoutValidation(_options.ApiKeyHeader, _options.ApiKey);
-    }
+    public string Type => "Ollama";
 
-    /// <summary>Số lần thử lại tối đa khi lỗi transport tạm thời (socket bị OS/tunnel cắt ngang giữa chừng).</summary>
-    private const int MaxTransientRetries = 2;
+    // Chỉ retry lỗi tầng kết nối/stream (socket bị cắt GIỮA CHỪNG khi model đang lên). HTTP non-success
+    // (vd ngrok 404 offline = máy tắt) KHÔNG retry — để relay sang provider kế ngay. 1 lần là đủ.
+    private const int MaxTransientRetries = 1;
+    private static readonly TimeSpan[] RetryDelays = { TimeSpan.FromMilliseconds(400) };
 
-    /// <summary>Delay giữa các lần retry — ngắn vì Ollama có prompt cache checkpoint, thử lại gần như không mất phí xử lý lại prompt.</summary>
-    private static readonly TimeSpan[] RetryDelays = { TimeSpan.FromMilliseconds(400), TimeSpan.FromMilliseconds(1200) };
-
-    /// <summary>
-    /// Lỗi "transient" ở tầng transport (socket bị Windows/ngrok cắt ngang giữa chừng — WSA 995,
-    /// connection reset...) — AN TOÀN để thử lại vì <paramref name="ct"/> (request gốc của user) CHƯA bị hủy.
-    /// Nếu <paramref name="ct"/> đã bị hủy thật (user đóng tab/reload) thì KHÔNG retry.
-    /// </summary>
+    /// <summary>Lỗi transport tạm thời (socket bị OS/tunnel cắt) — an toàn thử lại khi ct chưa bị hủy.
+    /// KHÔNG gồm lỗi status HTTP (ta ném <see cref="AiEndpointDownException"/> cho ca đó → không retry).</summary>
     private static bool IsTransient(Exception ex, CancellationToken ct)
         => !ct.IsCancellationRequested
            && ex is HttpRequestException or IOException or SocketException or OperationCanceledException;
 
+    /// <summary>Endpoint trả HTTP non-success (offline/lỗi server) — dứt khoát, KHÔNG retry, để relay fallback ngay.</summary>
+    private sealed class AiEndpointDownException(string message) : Exception(message);
+
     public async Task<AiChatCompletion> CompleteAsync(
-        string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools = null,
-        AiCompletionOptions? options = null, CancellationToken ct = default)
+        HttpClient http, AiProviderConfig cfg, string model, IReadOnlyList<AiChatMessage> messages,
+        IReadOnlyList<AiToolSpec>? tools, AiCompletionOptions? options, IProgress<AiStreamChunk>? onDelta, CancellationToken ct)
     {
+        // Ollama hiểu tên model do caller chọn (qwen3.5 / qwen3-vl khi có ảnh); cfg.Model chỉ là mặc định.
+        var effectiveModel = !string.IsNullOrWhiteSpace(model) ? model : cfg.Model;
         for (var attempt = 1; ; attempt++)
         {
             try
             {
-                return await SendOnceAsync(model, messages, tools, options, ct);
+                return await SendOnceAsync(http, cfg, effectiveModel, messages, tools, options, onDelta, ct);
             }
             catch (Exception ex) when (attempt <= MaxTransientRetries && IsTransient(ex, ct))
             {
                 _logger.LogWarning(ex,
-                    "[AiChat] Ollama lỗi kết nối tạm thời (lần {Attempt}/{Max}) — thử lại (prompt cache sẽ giúp lần sau nhanh hơn).",
-                    attempt, MaxTransientRetries);
+                    "[Ollama] Lỗi kết nối tạm thời (lần {Attempt}/{Max}) — thử lại.", attempt, MaxTransientRetries);
                 await Task.Delay(RetryDelays[attempt - 1], ct);
             }
         }
     }
 
     private async Task<AiChatCompletion> SendOnceAsync(
-        string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools,
-        AiCompletionOptions? options, CancellationToken ct)
+        HttpClient http, AiProviderConfig cfg, string model, IReadOnlyList<AiChatMessage> messages,
+        IReadOnlyList<AiToolSpec>? tools, AiCompletionOptions? options, IProgress<AiStreamChunk>? onDelta, CancellationToken ct)
     {
         var streaming = options?.Stream ?? false;
         var payload = new OllamaChatRequest
         {
             Model = model,
             Stream = streaming,
-            KeepAlive = string.IsNullOrWhiteSpace(_options.KeepAlive) ? null : _options.KeepAlive,
+            KeepAlive = string.IsNullOrWhiteSpace(cfg.KeepAlive) ? null : cfg.KeepAlive,
             Messages = messages.Select(ToWire).ToList(),
             Tools = tools is { Count: > 0 } ? tools.Select(ToWireTool).ToList() : null,
             Format = options?.JsonMode == true ? "json" : null,
             Think = options?.Think,
-            Options = BuildOllamaOptions(options),
+            Options = BuildOllamaOptions(cfg, options),
         };
 
-        _logger.LogInformation("[AiChat] POST {Path} model={Model} stream={Stream} ({Count} tin nhắn, {Tools} tools).",
-            _options.ChatPath, model, streaming, payload.Messages.Count, payload.Tools?.Count ?? 0);
+        _logger.LogInformation("[Ollama] POST {Url} model={Model} stream={Stream} ({Count} tin, {Tools} tools).",
+            cfg.ChatUrl, model, streaming, payload.Messages.Count, payload.Tools?.Count ?? 0);
 
-        using var request = new HttpRequestMessage(HttpMethod.Post, _options.ChatPath)
+        using var request = new HttpRequestMessage(HttpMethod.Post, cfg.ChatUrl)
         {
             Content = JsonContent.Create(payload, options: JsonOptions),
         };
-        using var resp = await _http.SendAsync(
+        using var resp = await http.SendAsync(
             request,
             streaming ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
             ct);
@@ -101,21 +90,23 @@ public sealed class OllamaChatClient : IAiChatClient
         if (!resp.IsSuccessStatusCode)
         {
             var err = await resp.Content.ReadAsStringAsync(ct);
-            // Model không hỗ trợ tools → thử lại KHÔNG kèm tools để chat vẫn chạy.
             if (payload.Tools is { Count: > 0 } && err.Contains("does not support tools", StringComparison.OrdinalIgnoreCase))
             {
-                _logger.LogWarning("[AiChat] Model {Model} không hỗ trợ tools — fallback chat thường.", model);
-                return await CompleteAsync(model, messages, tools: null, options: options, ct: ct);
+                _logger.LogWarning("[Ollama] Model {Model} không hỗ trợ tools — fallback chat thường.", model);
+                return await SendOnceAsync(http, cfg, model, messages, tools: null, options, onDelta, ct);
             }
-            _logger.LogError("[AiChat] LLM lỗi {Status}: {Err}", resp.StatusCode, err);
-            resp.EnsureSuccessStatusCode(); // ném lỗi
+            // Non-success = server đã trả lời dứt khoát (vd ngrok "offline" 404) → KHÔNG retry, ném lỗi
+            // non-transient để relay chuyển ngay sang provider kế.
+            var preview = err.Length > 200 ? err[..200] : err;
+            _logger.LogWarning("[Ollama] HTTP {Status} — không retry, để relay fallback. {Err}", resp.StatusCode, preview);
+            throw new AiEndpointDownException($"Ollama trả HTTP {(int)resp.StatusCode}.");
         }
 
         var body = streaming
-            ? await ReadStreamedResponseAsync(resp, ct)
+            ? await ReadStreamedResponseAsync(resp, onDelta, ct)
             : await resp.Content.ReadFromJsonAsync<OllamaChatResponse>(JsonOptions, ct);
         if (body?.Message is null)
-            throw new InvalidOperationException("LLM trả về body rỗng.");
+            throw new InvalidOperationException("Ollama trả về body rỗng.");
 
         var toolCalls = body.Message.ToolCalls?
             .Where(tc => tc.Function is not null)
@@ -123,32 +114,23 @@ public sealed class OllamaChatClient : IAiChatClient
             .ToList();
 
         var content = body.Message.Content;
-
-        // Model thinking (vd qwen3.5) thỉnh thoảng viết CẢ câu trả lời vào "thinking", content rỗng
-        // → cứu bằng thinking thay vì ném lỗi làm mất lượt. (Muốn tắt hẳn: Ai:Chat:Think=false.)
         if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content)
             && !string.IsNullOrWhiteSpace(body.Message.Thinking))
         {
-            _logger.LogWarning("[AiChat] Content rỗng nhưng thinking có nội dung — dùng thinking làm câu trả lời.");
+            _logger.LogWarning("[Ollama] Content rỗng nhưng thinking có nội dung — dùng thinking làm câu trả lời.");
             content = body.Message.Thinking;
         }
 
-        // Có tool_calls → content có thể rỗng (model chờ kết quả tool).
         if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content))
-            throw new InvalidOperationException("LLM trả về tin rỗng (không content, không tool call).");
+            throw new InvalidOperationException("Ollama trả về tin rỗng (không content, không tool call).");
 
         return new AiChatCompletion(content ?? string.Empty, body.Model ?? model,
             toolCalls is { Count: > 0 } ? toolCalls : null);
     }
 
-    /// <summary>
-    /// Đọc phản hồi Ollama streaming (mỗi dòng 1 JSON object, "message.content" là DELTA — không
-    /// phải full text tích luỹ) — gộp lại thành 1 <see cref="OllamaChatResponse"/> duy nhất để phần
-    /// còn lại của <see cref="SendOnceAsync"/> xử lý y hệt đường non-streaming. Chỉ đổi CÁCH ĐỌC WIRE;
-    /// mục đích duy nhất là giữ traffic chảy liên tục qua tunnel/proxy trong lúc model sinh câu trả
-    /// lời dài, không lộ chunk ra ngoài (caller vẫn nhận đúng 1 <see cref="AiChatCompletion"/> đầy đủ).
-    /// </summary>
-    private static async Task<OllamaChatResponse?> ReadStreamedResponseAsync(HttpResponseMessage resp, CancellationToken ct)
+    /// <summary>Gộp stream NDJSON của Ollama thành 1 response (giữ traffic sống qua tunnel; caller vẫn nhận đủ 1 lần).</summary>
+    private static async Task<OllamaChatResponse?> ReadStreamedResponseAsync(
+        HttpResponseMessage resp, IProgress<AiStreamChunk>? onDelta, CancellationToken ct)
     {
         await using var stream = await resp.Content.ReadAsStreamAsync(ct);
         using var reader = new StreamReader(stream);
@@ -174,8 +156,16 @@ public sealed class OllamaChatClient : IAiChatClient
             if (chunk.Message is not null)
             {
                 role ??= chunk.Message.Role;
-                if (!string.IsNullOrEmpty(chunk.Message.Content)) content.Append(chunk.Message.Content);
-                if (!string.IsNullOrEmpty(chunk.Message.Thinking)) thinking.Append(chunk.Message.Thinking);
+                if (!string.IsNullOrEmpty(chunk.Message.Content))
+                {
+                    content.Append(chunk.Message.Content);
+                    onDelta?.Report(new AiStreamChunk(AiStreamKind.Content, chunk.Message.Content));
+                }
+                if (!string.IsNullOrEmpty(chunk.Message.Thinking))
+                {
+                    thinking.Append(chunk.Message.Thinking);
+                    onDelta?.Report(new AiStreamChunk(AiStreamKind.Thinking, chunk.Message.Thinking));
+                }
                 if (chunk.Message.ToolCalls is { Count: > 0 }) toolCalls = chunk.Message.ToolCalls;
             }
             if (chunk.Done) { done = true; break; }
@@ -215,12 +205,12 @@ public sealed class OllamaChatClient : IAiChatClient
             : null,
     };
 
-    private OllamaOptions? BuildOllamaOptions(AiCompletionOptions? options)
+    private static OllamaOptions? BuildOllamaOptions(AiProviderConfig cfg, AiCompletionOptions? options)
     {
-        if (_options.NumCtx <= 0 && options?.Temperature is null) return null;
+        if (cfg.NumCtx <= 0 && options?.Temperature is null) return null;
         return new OllamaOptions
         {
-            NumCtx = _options.NumCtx > 0 ? _options.NumCtx : null,
+            NumCtx = cfg.NumCtx > 0 ? cfg.NumCtx : null,
             Temperature = options?.Temperature,
         };
     }
@@ -256,12 +246,10 @@ public sealed class OllamaChatClient : IAiChatClient
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public List<OllamaTool>? Tools { get; init; }
 
-        /// <summary>"json" ép model trả JSON hợp lệ (workspace intake) — bỏ trống cho chat tự do.</summary>
         [JsonPropertyName("format")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Format { get; init; }
 
-        /// <summary>Bật/tắt thinking (model hỗ trợ như qwen3). null = không gửi, theo mặc định model.</summary>
         [JsonPropertyName("think")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? Think { get; init; }
@@ -287,7 +275,6 @@ public sealed class OllamaChatClient : IAiChatClient
         public string Role { get; init; } = string.Empty;
         public string Content { get; init; } = string.Empty;
 
-        /// <summary>Chuỗi suy luận của model thinking — chỉ đọc từ response, không gửi đi.</summary>
         [JsonPropertyName("thinking")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public string? Thinking { get; init; }

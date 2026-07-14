@@ -112,7 +112,7 @@ public sealed class AiChatService : IAiChatService
             // Bảo hiểm deterministic: tool đã trả sản phẩm nào mà model nhắc tên nhưng quên link → BE tự chèn.
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
             // Kiểm duyệt GUID "trần" model lỡ phun ra cho user (giữ nguyên GUID trong URL /products/...).
-            completion = completion with { Content = CensorEntityIds(completion.Content) };
+            completion = completion with { Content = Common.AiTextSanitizer.CensorEntityIds(completion.Content) };
         }
         catch (Exception ex)
         {
@@ -249,7 +249,7 @@ public sealed class AiChatService : IAiChatService
             completion = await RunWithToolsAsync(_options.DefaultModel, outgoing, ctx, activity, ct);
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
             // Kiểm duyệt GUID "trần" model lỡ phun ra cho user (giữ nguyên GUID trong URL /products/...).
-            completion = completion with { Content = CensorEntityIds(completion.Content) };
+            completion = completion with { Content = Common.AiTextSanitizer.CensorEntityIds(completion.Content) };
         }
         catch (Exception ex)
         {
@@ -306,7 +306,8 @@ public sealed class AiChatService : IAiChatService
             AiChatCompletion completion;
             try
             {
-                completion = await _client.CompleteAsync(model, messages, tools, options: callOptions, ct: ct);
+                completion = await _client.CompleteAsync(
+                    model, messages, tools, options: callOptions, onDelta: activity.ThinkingProgress(), ct: ct);
             }
             catch (Exception ex) when (ex is not OperationCanceledException
                 && (lastWithContent ?? stalledCandidate) is { } salvage)
@@ -362,7 +363,8 @@ public sealed class AiChatService : IAiChatService
         await activity.PhaseAsync("writing", null, ct: ct);
         try
         {
-            var forced = await _client.CompleteAsync(model, messages, null, options: callOptions, ct: ct);
+            var forced = await _client.CompleteAsync(
+                model, messages, null, options: callOptions, onDelta: activity.ThinkingProgress(), ct: ct);
             if (!string.IsNullOrWhiteSpace(forced.Content)) return forced;
         }
         catch (Exception ex)
@@ -402,21 +404,6 @@ public sealed class AiChatService : IAiChatService
         return content;
     }
 
-    /// <summary>
-    /// GUID đầy đủ đứng "trần" trong văn bản (KHÔNG đứng sau '/', tức không phải phần của URL như
-    /// /products/{id}, và không dính vào token dài hơn). Dùng để rút gọn khi hiển thị cho user.
-    /// </summary>
-    private static readonly System.Text.RegularExpressions.Regex EntityIdRegex = new(
-        @"(?<![\w/-])([0-9a-fA-F]{8})-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}(?![\w-])",
-        System.Text.RegularExpressions.RegexOptions.Compiled);
-
-    /// <summary>
-    /// Kiểm duyệt ID: mọi GUID trần model lỡ đưa ra → còn 8 ký tự đầu + "-..." (vd 1b904ba9-...).
-    /// KHÔNG đụng GUID trong link sản phẩm ("/products/{id}") vì đó là URL người dùng bấm được.
-    /// Chỉ ảnh hưởng phần hiển thị/lưu; model nội bộ vẫn nhận ID đầy đủ để gọi tool.
-    /// </summary>
-    private static string CensorEntityIds(string content)
-        => string.IsNullOrEmpty(content) ? content : EntityIdRegex.Replace(content, "$1-...");
 
     /// <summary>Số lần nhắc model khi nó "hứa" gọi tool bằng text mà không emit tool_calls.</summary>
     private const int MaxStallNudges = 2;
@@ -467,17 +454,17 @@ public sealed class AiChatService : IAiChatService
     private static readonly IReadOnlyDictionary<string, string> ToolFriendlyNotes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["search_products"] = "Đang tìm sản phẩm phù hợp…",
-            ["get_product"] = "Đang xem chi tiết sản phẩm…",
-            ["recommend_products"] = "Đang tư vấn sản phẩm theo phong thủy…",
-            ["list_my_workspaces"] = "Đang lấy hồ sơ không gian của bạn…",
-            ["get_my_profile"] = "Đang lấy thông tin tài khoản của bạn…",
-            ["list_my_orders"] = "Đang lấy danh sách đơn hàng của bạn…",
-            ["get_payment_status"] = "Đang kiểm tra trạng thái thanh toán…",
-            ["get_chat_partner_info"] = "Đang lấy thông tin khách hàng…",
-            ["list_my_addresses"] = "Đang lấy danh sách địa chỉ của bạn…",
-            ["prepare_order"] = "Đang chuẩn bị đơn hàng của bạn…",
-            ["confirm_order"] = "Đang xác nhận và tạo đơn hàng…",
+            ["search_products"] = "Đang tìm sản phẩm phù hợp",
+            ["get_product"] = "Đang xem chi tiết sản phẩm",
+            ["recommend_products"] = "Đang tư vấn sản phẩm theo phong thủy",
+            ["list_my_workspaces"] = "Đang lấy hồ sơ không gian của bạn",
+            ["get_my_profile"] = "Đang lấy thông tin tài khoản của bạn",
+            ["list_my_orders"] = "Đang lấy danh sách đơn hàng của bạn",
+            ["get_payment_status"] = "Đang kiểm tra trạng thái thanh toán",
+            ["get_chat_partner_info"] = "Đang lấy thông tin khách hàng",
+            ["list_my_addresses"] = "Đang lấy danh sách địa chỉ của bạn",
+            ["prepare_order"] = "Đang chuẩn bị đơn hàng của bạn",
+            ["confirm_order"] = "Đang xác nhận và tạo đơn hàng",
         };
 
     private static string? ToolFriendlyNote(string toolName)

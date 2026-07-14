@@ -139,7 +139,8 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             ImageUrls = job.ImageUrls,
             Think = job.Think,
         };
-        var result = await ParseAsync(job.UserId, request, ct);
+        // Stream thinking (nếu model bật think) → "chữ chạy" trên progress bar intake.
+        var result = await ParseAsync(job.UserId, request, activity.ThinkingProgress(), ct);
 
         if (result.IsSuccess && result.Data is not null)
         {
@@ -165,7 +166,8 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     }
 
     public async Task<IServiceResult<WorkspaceProfileDraftResponse>> ParseAsync(
-        Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default)
+        Guid userId, ParseWorkspaceDescriptionRequest request,
+        IProgress<AiStreamChunk>? onDelta = null, CancellationToken ct = default)
     {
         var error = ValidateRequest(request, out var description, out var imageUrls);
         if (error is not null)
@@ -207,7 +209,8 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             // Model + temperature riêng cho intake (Ai:Intake) — không dùng chung với chatbox.
             completion = await _client.CompleteAsync(
                 model, messages, tools: null,
-                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, think, _options.Stream), ct: ct);
+                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, think, _options.Stream),
+                onDelta: onDelta, ct: ct);
 
             var raw = ParseRaw(completion.Content);
             var draft = Normalize(raw, vocab);

@@ -1,3 +1,5 @@
+using FengDeskAI.Application.Common;
+
 namespace FengDeskAI.Application.Interfaces.External;
 
 /// <summary>
@@ -55,5 +57,59 @@ public sealed class AiActivityScope : IAsyncDisposable
         _disposed = true;
         if (_lastPhase == "error") return ValueTask.CompletedTask;
         return new ValueTask(_notifier.PublishAsync(new AiActivityEvent(_operationId, "done")));
+    }
+
+    /// <summary>
+    /// Sink nhận delta stream từ model → gom (coalesce) rồi phát phase="thinking" kèm ĐUÔI chuỗi suy luận
+    /// (để FE hiện "1 dòng chữ chạy"). Truyền vào <c>IAiChatClient.CompleteAsync(onDelta:)</c>.
+    /// </summary>
+    public IProgress<AiStreamChunk> ThinkingProgress() => new AiThinkingProgress(this);
+}
+
+/// <summary>
+/// Gom delta thinking (chống flood SignalR): cứ ~120ms HOẶC mỗi ~40 ký tự mới thì phát 1 lần, gửi phần
+/// ĐUÔI (tối đa ~180 ký tự) để hợp 1 dòng chạy. Fire-and-forget, best-effort — không chặn luồng model.
+/// Bỏ qua delta "content" (ở đây chỉ lo thinking; muốn stream đáp án thì xử lý riêng).
+/// </summary>
+internal sealed class AiThinkingProgress : IProgress<AiStreamChunk>
+{
+    private const int FlushChars = 40;
+    private const int TailChars = 180;
+    private static readonly TimeSpan FlushInterval = TimeSpan.FromMilliseconds(120);
+
+    private readonly AiActivityScope _scope;
+    private readonly System.Text.StringBuilder _buffer = new();
+    private readonly object _lock = new();
+    private DateTime _lastFlush = DateTime.MinValue;
+    private int _sinceFlush;
+
+    public AiThinkingProgress(AiActivityScope scope) => _scope = scope;
+
+    public void Report(AiStreamChunk chunk)
+    {
+        if (chunk.Kind != AiStreamKind.Thinking || string.IsNullOrEmpty(chunk.Text)) return;
+
+        string? tail = null;
+        lock (_lock)
+        {
+            _buffer.Append(chunk.Text);
+            _sinceFlush += chunk.Text.Length;
+            var now = DateTime.UtcNow;
+            if (_sinceFlush >= FlushChars || now - _lastFlush >= FlushInterval)
+            {
+                _lastFlush = now;
+                _sinceFlush = 0;
+                var s = _buffer.ToString();
+                tail = s.Length > TailChars ? s[^TailChars..] : s;
+            }
+        }
+        if (tail is not null) _ = SafePublishAsync(tail);
+    }
+
+    private async Task SafePublishAsync(string tail)
+    {
+        // Che GUID trần model lỡ "nghĩ" ra (vd lý giải về tool result chứa ID) trước khi lên UI.
+        try { await _scope.PhaseAsync("thinking", note: AiTextSanitizer.CensorEntityIds(tail)); }
+        catch { /* best-effort: lỗi realtime không được chặn model */ }
     }
 }

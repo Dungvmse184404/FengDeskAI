@@ -36,16 +36,27 @@ public sealed record AiChatCompletion(string Content, string Model, IReadOnlyLis
 public sealed record AiCompletionOptions(
     double? Temperature = null, bool JsonMode = false, bool? Think = null, bool Stream = false);
 
+/// <summary>Loại delta khi stream: chuỗi suy luận (thinking) hay nội dung đáp án (content).</summary>
+public enum AiStreamKind { Thinking, Content }
+
+/// <summary>Một mẩu delta stream từ model (chỉ phần MỚI, không tích lũy). Best-effort, không lưu DB.</summary>
+public readonly record struct AiStreamChunk(AiStreamKind Kind, string Text);
+
 /// <summary>
 /// Cổng gọi LLM hội thoại (Ollama / OpenAI-compatible) — thuần transport, không giữ state.
 /// Việc nhớ lịch sử + chọn model + vòng lặp tool do <c>AiChatService</c> đảm nhiệm phía Application.
 /// </summary>
 public interface IAiChatClient
 {
+    /// <param name="onDelta">
+    /// Nếu khác null + provider stream được: nhận delta thinking/content realtime (để đẩy "chữ chạy" lên UI).
+    /// Best-effort — provider không stream thì bỏ qua, caller vẫn nhận đủ 1 <see cref="AiChatCompletion"/>.
+    /// </param>
     Task<AiChatCompletion> CompleteAsync(
         string model,
         IReadOnlyList<AiChatMessage> messages,
         IReadOnlyList<AiToolSpec>? tools = null,
         AiCompletionOptions? options = null,
+        IProgress<AiStreamChunk>? onDelta = null,
         CancellationToken ct = default);
 }

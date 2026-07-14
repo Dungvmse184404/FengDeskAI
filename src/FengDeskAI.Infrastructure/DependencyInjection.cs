@@ -233,11 +233,15 @@ public static class DependencyInjection
         else
             services.AddHttpClient<IAiRecommendationClient, HttpAiRecommendationClient>();
 
-        // AI LLM — transport chung (Ai:Provider) + cấu hình per-function: chatbox (Ai:Chat), intake (Ai:Intake).
-        services.AddSettings<AiProviderOptions>(configuration);
+        // AI LLM — chuỗi relay (Ai:Relay: nhiều backend, thử theo thứ tự) + cấu hình per-function:
+        // chatbox (Ai:Chat), intake (Ai:Intake). Chat/intake dùng chung IAiChatClient = RelayChatClient.
+        services.AddSettings<AiRelayOptions>(configuration);
         services.AddSettings<AiChatOptions>(configuration);
         services.AddSettings<WorkspaceIntakeOptions>(configuration);
-        services.AddHttpClient<IAiChatClient, OllamaChatClient>();
+        services.AddHttpClient(); // bật IHttpClientFactory — RelayChatClient tạo client per-provider
+        services.AddSingleton<IAiChatTransport, OllamaTransport>();
+        services.AddSingleton<IAiChatTransport, OpenAiTransport>();
+        services.AddSingleton<IAiChatClient, RelayChatClient>();
 
         // Object storage (Supabase) cho ảnh sản phẩm/người dùng + encoder ảnh → base64 để feed AI.
         services.AddSettings<SupabaseStorageOptions>(configuration);
