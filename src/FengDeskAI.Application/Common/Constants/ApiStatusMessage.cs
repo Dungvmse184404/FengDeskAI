@@ -276,6 +276,27 @@ public static class ApiStatusMessages
         public const string ImageTypeInvalid = "Chỉ chấp nhận ảnh JPG, PNG, BMP hoặc GIF.";
         public const string ImageNotFound = "Không tìm thấy ảnh.";
         public const string ImageDeleteNotAllowed = "Chỉ xóa được ảnh khi yêu cầu đang chờ duyệt.";
+        public const string PayloadInvalid = "Dữ liệu yêu cầu không hợp lệ (JSON sai định dạng).";
+
+        // RMA v2
+        public const string EvidenceRequired = "Vui lòng đính kèm ít nhất một ảnh bằng chứng khi tạo yêu cầu.";
+        public const string ImageAddNotAllowed = "Chỉ thêm được ảnh khi yêu cầu đang chờ duyệt hoặc chờ bổ sung bằng chứng.";
+        public const string StaffOnly = "Chỉ nhân viên nền tảng (Staff) mới được thực hiện thao tác này.";
+        public const string ManagerOnly = "Chỉ quản lý (Manager) mới được thực hiện thao tác này.";
+        public const string RejectReasonRequired = "Vui lòng nhập lý do từ chối.";
+        public const string DisputeReasonRequired = "Vui lòng nhập lý do phản đối.";
+        public const string RefundNotFound = "Không tìm thấy lệnh hoàn tiền.";
+        public const string RefundNotRetryable = "Lệnh hoàn tiền không ở trạng thái có thể retry.";
+        public const string RefundNotManualConfirmable = "Chỉ xác nhận thủ công khi lệnh hoàn tiền đang chờ Manager (ManagerReview).";
+        public const string RefundNotCancellable = "Chỉ hủy được lệnh hoàn tiền khi đang chờ xử lý (Pending).";
+        public const string ManualEvidenceRequired = "Xác nhận thủ công cần đủ lý do và URL bằng chứng.";
+        public const string WebhookInvalid = "Webhook hoàn tiền không hợp lệ.";
+        public const string WebhookProcessed = "Đã xử lý webhook hoàn tiền.";
+        public const string LiabilityForbidden = "Bạn không có quyền xem/thao tác công nợ của garden này.";
+        public const string LiabilityNotFound = "Không tìm thấy khoản công nợ.";
+        public const string LiabilityDisputeExpired = "Đã quá hạn phản đối khoản công nợ.";
+        public const string LiabilityNotDisputable = "Khoản công nợ không ở trạng thái có thể phản đối.";
+        public const string LiabilityNotResolvable = "Khoản công nợ không ở trạng thái có thể phán quyết.";
 
         public const string Created = "Đã gửi yêu cầu trả hàng/đổi trả.";
         public const string Approved = "Đã duyệt yêu cầu trả hàng.";

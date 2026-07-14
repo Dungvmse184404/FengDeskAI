@@ -20,6 +20,41 @@ public interface IReturnRepository : IGenericRepository<ReturnRequest>
     /// <summary>Tất cả yêu cầu (màn admin).</summary>
     Task<(List<ReturnRequest> Items, int Total)> GetAllPagedAsync(int skip, int take, CancellationToken ct = default);
 
+    /// <summary>Ticket đang chờ Staff xử lý (Requested/UnderReview/Reviewing) — hàng đợi của Staff.</summary>
+    Task<(List<ReturnRequest> Items, int Total)> GetPendingForStaffAsync(int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Ticket ở NeedMoreEvidence đã quá evidence_deadline — worker auto-reject.</summary>
+    Task<List<ReturnRequest>> GetOverdueEvidenceTicketsAsync(DateTime nowUtc, int max, CancellationToken ct = default);
+
+    // ----- Refund (sub-saga) -----
+
+    /// <summary>Lệnh hoàn tiền (tracked) kèm ReturnRequest — để cập nhật trạng thái/ hoàn tất.</summary>
+    Task<Refund?> GetRefundByIdAsync(Guid refundId, CancellationToken ct = default);
+
+    /// <summary>Lệnh hoàn tiền theo idempotency key (chống tạo trùng).</summary>
+    Task<Refund?> GetRefundByIdempotencyKeyAsync(string idempotencyKey, CancellationToken ct = default);
+
+    /// <summary>Lệnh hoàn tiền theo mã tham chiếu cổng (xử lý webhook).</summary>
+    Task<Refund?> GetRefundByProviderRefAsync(string providerRefundId, CancellationToken ct = default);
+
+    /// <summary>Refund cần Manager để mắt (Failed hoặc ManagerReview) — màn Manager.</summary>
+    Task<(List<Refund> Items, int Total)> GetRefundsForManagerAsync(int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Refund Failed còn lượt retry (&lt; maxRetry) — worker auto-retry.</summary>
+    Task<List<Refund>> GetRetryableFailedRefundsAsync(int maxRetry, int max, CancellationToken ct = default);
+
+    // ----- Vendor liability (công nợ) -----
+
+    Task AddVendorLiabilityAsync(VendorLiability liability, CancellationToken ct = default);
+
+    /// <summary>Công nợ (tracked) kèm ReturnRequest — để phán quyết dispute.</summary>
+    Task<VendorLiability?> GetVendorLiabilityAsync(Guid id, CancellationToken ct = default);
+
+    Task<(List<VendorLiability> Items, int Total)> GetLiabilitiesByGardenAsync(Guid gardenId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Công nợ Pending đã quá dispute_deadline — worker auto-settle.</summary>
+    Task<List<VendorLiability>> GetOverdueLiabilitiesAsync(DateTime nowUtc, int max, CancellationToken ct = default);
+
     /// <summary>Delivery kèm Order + Items (OrderItems, tracked) — kiểm tra điều kiện trả & quyền sở hữu.</summary>
     Task<Delivery?> GetDeliveryForReturnAsync(Guid deliveryId, CancellationToken ct = default);
 

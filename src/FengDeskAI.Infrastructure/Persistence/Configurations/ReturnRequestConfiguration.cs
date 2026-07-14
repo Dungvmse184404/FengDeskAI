@@ -35,6 +35,13 @@ public class ReturnRequestConfiguration : IEntityTypeConfiguration<ReturnRequest
         builder.Property(r => r.ReceivedAt).HasColumnName("received_at");
         builder.Property(r => r.ReplacementDeliveryId).HasColumnName("replacement_delivery_id");
 
+        // RMA v2: SLA vendor + bổ sung bằng chứng + người quyết định (luôn Staff).
+        builder.Property(r => r.VendorResponse).HasColumnName("vendor_response").HasConversion<string>().HasMaxLength(20).HasDefaultValue(Domain.Enums.Sales.VendorResponse.Pending);
+        builder.Property(r => r.VendorResponseDeadline).HasColumnName("vendor_response_deadline");
+        builder.Property(r => r.EvidenceDeadline).HasColumnName("evidence_deadline");
+        builder.Property(r => r.DecidedBy).HasColumnName("decided_by");
+        builder.Property(r => r.DecidedAt).HasColumnName("decided_at");
+
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
         builder.Property(r => r.CreatedBy).HasColumnName("created_by");

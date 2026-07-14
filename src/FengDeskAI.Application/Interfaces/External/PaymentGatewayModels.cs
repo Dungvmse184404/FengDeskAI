@@ -8,6 +8,10 @@ public record PaymentLinkResult(string CheckoutUrl, string PaymentLinkId, long O
 
 public record PaymentWebhookResult(bool Success, long OrderCode, int Amount, string? ProviderReference, string? Code, string? Description);
 
-public record RefundRequest(long OrderCode, int Amount, string Reason);
+/// <summary>
+/// Yêu cầu hoàn tiền. <paramref name="IdempotencyKey"/> BẮT BUỘC — cổng phải trả cùng kết quả cho
+/// cùng key (retry an toàn, không hoàn trùng). <paramref name="GatewayRef"/> là mã tham chiếu lần gọi trước (nếu retry).
+/// </summary>
+public record RefundRequest(long OrderCode, int Amount, string Reason, string IdempotencyKey, string? GatewayRef = null);
 
 public record RefundResult(bool Success, string? ProviderRefundId, string? Code, string? Message);

@@ -25,6 +25,9 @@ public class Delivery : BaseEntity
     public decimal ShippingFee { get; set; }
     public decimal Subtotal { get; set; }
 
+    /// <summary>Đơn giao hàng thay thế do đổi trả (RMA) — giá trị 0đ, gửi từ garden gốc cho khách.</summary>
+    public bool IsExchange { get; set; }
+
     public DateTime? AssignedAt { get; set; }
     public DateTime? ShippedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
