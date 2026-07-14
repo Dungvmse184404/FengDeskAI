@@ -1,5 +1,6 @@
 using System.Net.Http.Json;
 using System.Net.Sockets;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using System.Text.Json.Serialization;
@@ -72,10 +73,11 @@ public sealed class OllamaChatClient : IAiChatClient
         string model, IReadOnlyList<AiChatMessage> messages, IReadOnlyList<AiToolSpec>? tools,
         AiCompletionOptions? options, CancellationToken ct)
     {
+        var streaming = options?.Stream ?? false;
         var payload = new OllamaChatRequest
         {
             Model = model,
-            Stream = false,
+            Stream = streaming,
             KeepAlive = string.IsNullOrWhiteSpace(_options.KeepAlive) ? null : _options.KeepAlive,
             Messages = messages.Select(ToWire).ToList(),
             Tools = tools is { Count: > 0 } ? tools.Select(ToWireTool).ToList() : null,
@@ -84,10 +86,18 @@ public sealed class OllamaChatClient : IAiChatClient
             Options = BuildOllamaOptions(options),
         };
 
-        _logger.LogInformation("[AiChat] POST {Path} model={Model} ({Count} tin nhắn, {Tools} tools).",
-            _options.ChatPath, model, payload.Messages.Count, payload.Tools?.Count ?? 0);
+        _logger.LogInformation("[AiChat] POST {Path} model={Model} stream={Stream} ({Count} tin nhắn, {Tools} tools).",
+            _options.ChatPath, model, streaming, payload.Messages.Count, payload.Tools?.Count ?? 0);
 
-        using var resp = await _http.PostAsJsonAsync(_options.ChatPath, payload, JsonOptions, ct);
+        using var request = new HttpRequestMessage(HttpMethod.Post, _options.ChatPath)
+        {
+            Content = JsonContent.Create(payload, options: JsonOptions),
+        };
+        using var resp = await _http.SendAsync(
+            request,
+            streaming ? HttpCompletionOption.ResponseHeadersRead : HttpCompletionOption.ResponseContentRead,
+            ct);
+
         if (!resp.IsSuccessStatusCode)
         {
             var err = await resp.Content.ReadAsStringAsync(ct);
@@ -101,7 +111,9 @@ public sealed class OllamaChatClient : IAiChatClient
             resp.EnsureSuccessStatusCode(); // ném lỗi
         }
 
-        var body = await resp.Content.ReadFromJsonAsync<OllamaChatResponse>(JsonOptions, ct);
+        var body = streaming
+            ? await ReadStreamedResponseAsync(resp, ct)
+            : await resp.Content.ReadFromJsonAsync<OllamaChatResponse>(JsonOptions, ct);
         if (body?.Message is null)
             throw new InvalidOperationException("LLM trả về body rỗng.");
 
@@ -127,6 +139,62 @@ public sealed class OllamaChatClient : IAiChatClient
 
         return new AiChatCompletion(content ?? string.Empty, body.Model ?? model,
             toolCalls is { Count: > 0 } ? toolCalls : null);
+    }
+
+    /// <summary>
+    /// Đọc phản hồi Ollama streaming (mỗi dòng 1 JSON object, "message.content" là DELTA — không
+    /// phải full text tích luỹ) — gộp lại thành 1 <see cref="OllamaChatResponse"/> duy nhất để phần
+    /// còn lại của <see cref="SendOnceAsync"/> xử lý y hệt đường non-streaming. Chỉ đổi CÁCH ĐỌC WIRE;
+    /// mục đích duy nhất là giữ traffic chảy liên tục qua tunnel/proxy trong lúc model sinh câu trả
+    /// lời dài, không lộ chunk ra ngoài (caller vẫn nhận đúng 1 <see cref="AiChatCompletion"/> đầy đủ).
+    /// </summary>
+    private static async Task<OllamaChatResponse?> ReadStreamedResponseAsync(HttpResponseMessage resp, CancellationToken ct)
+    {
+        await using var stream = await resp.Content.ReadAsStreamAsync(ct);
+        using var reader = new StreamReader(stream);
+
+        string? modelName = null;
+        string? role = null;
+        var content = new StringBuilder();
+        var thinking = new StringBuilder();
+        List<OllamaToolCall>? toolCalls = null;
+        var done = false;
+        var sawAnyLine = false;
+
+        while (!reader.EndOfStream)
+        {
+            var line = await reader.ReadLineAsync(ct);
+            if (string.IsNullOrWhiteSpace(line)) continue;
+
+            var chunk = JsonSerializer.Deserialize<OllamaChatResponse>(line, JsonOptions);
+            if (chunk is null) continue;
+            sawAnyLine = true;
+
+            modelName ??= chunk.Model;
+            if (chunk.Message is not null)
+            {
+                role ??= chunk.Message.Role;
+                if (!string.IsNullOrEmpty(chunk.Message.Content)) content.Append(chunk.Message.Content);
+                if (!string.IsNullOrEmpty(chunk.Message.Thinking)) thinking.Append(chunk.Message.Thinking);
+                if (chunk.Message.ToolCalls is { Count: > 0 }) toolCalls = chunk.Message.ToolCalls;
+            }
+            if (chunk.Done) { done = true; break; }
+        }
+
+        if (!sawAnyLine) return null;
+
+        return new OllamaChatResponse
+        {
+            Model = modelName,
+            Done = done,
+            Message = new OllamaMessage
+            {
+                Role = role ?? "assistant",
+                Content = content.ToString(),
+                Thinking = thinking.Length > 0 ? thinking.ToString() : null,
+                ToolCalls = toolCalls,
+            },
+        };
     }
 
     private static OllamaMessage ToWire(AiChatMessage m) => new()

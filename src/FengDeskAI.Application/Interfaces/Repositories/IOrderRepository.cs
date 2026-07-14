@@ -36,4 +36,7 @@ public interface IOrderRepository : IGenericRepository<Order>
 
     /// <summary>Danh sách delivery của một store (kèm Order) — màn vendor.</summary>
     Task<(List<Delivery> Items, int Total)> GetDeliveriesForStoreAsync(Guid storeId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Delivery kèm Store + Items + Order.ShippingAddress (đủ Ward/District/Province) — chi tiết đơn giao cho vendor đóng gói. Read-only.</summary>
+    Task<Delivery?> GetDeliveryDetailAsync(Guid deliveryId, CancellationToken ct = default);
 }

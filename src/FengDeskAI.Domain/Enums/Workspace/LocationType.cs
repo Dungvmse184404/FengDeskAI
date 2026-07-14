@@ -6,5 +6,9 @@ public enum LocationType
     Office,
     Cafe,
     Studio,
+    Coworking,
+    School,
+    Outdoor,
+    Hotel,
     Other,
 }

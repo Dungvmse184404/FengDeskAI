@@ -45,6 +45,27 @@ public class WorkPurposeModifierSeeder : IDataSeeder
         (WorkPurpose.Gaming, FengShuiElement.Thuy, -0.05m),
         // Mixed: cân bằng nhẹ về Thổ.
         (WorkPurpose.Mixed, FengShuiElement.Tho, 0.05m),
+
+        // Cooking: nhiệt (Hỏa, bếp núc) + no đủ (Thổ).
+        (WorkPurpose.Cooking, FengShuiElement.Hoa, 0.10m),
+        (WorkPurpose.Cooking, FengShuiElement.Tho, 0.05m),
+        // Dining: sum vầy no đủ (Thổ) + ấm áp (Hỏa).
+        (WorkPurpose.Dining, FengShuiElement.Tho, 0.10m),
+        (WorkPurpose.Dining, FengShuiElement.Hoa, 0.05m),
+        // Relaxation: linh hoạt thư thái (Thủy) + tươi mới (Mộc), giảm nhiệt (Hỏa).
+        (WorkPurpose.Relaxation, FengShuiElement.Thuy, 0.10m),
+        (WorkPurpose.Relaxation, FengShuiElement.Moc, 0.05m),
+        (WorkPurpose.Relaxation, FengShuiElement.Hoa, -0.05m),
+        // Sleep: tĩnh tâm (Thủy) + phục hồi (Mộc), giảm mạnh nhiệt (Hỏa) để không kích thích.
+        (WorkPurpose.Sleep, FengShuiElement.Thuy, 0.10m),
+        (WorkPurpose.Sleep, FengShuiElement.Moc, 0.05m),
+        (WorkPurpose.Sleep, FengShuiElement.Hoa, -0.10m),
+        // Childcare: sinh trưởng an toàn (Mộc), giảm sắc bén (Kim).
+        (WorkPurpose.Childcare, FengShuiElement.Moc, 0.10m),
+        (WorkPurpose.Childcare, FengShuiElement.Kim, -0.05m),
+        // Exercise: năng lượng vận động (Hỏa) + kỷ luật dẻo dai (Kim).
+        (WorkPurpose.Exercise, FengShuiElement.Hoa, 0.10m),
+        (WorkPurpose.Exercise, FengShuiElement.Kim, 0.05m),
     };
 
     public async Task SeedAsync(CancellationToken ct = default)

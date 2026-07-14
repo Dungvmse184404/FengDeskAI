@@ -37,6 +37,17 @@ public interface IChatService
     /// <summary>Hàng đợi phòng hỗ trợ đang mở (chưa có nhân sự hỗ trợ) — cho staff trở lên.</summary>
     Task<IServiceResult<ChatboxListResponse>> GetOpenSupportRoomsAsync(PageRequest page, CancellationToken ct = default);
 
+    /// <summary>
+    /// Khách: lấy/tạo phòng hỗ trợ với MỘT SHOP cụ thể (nút "Nhắn tin" trên trang shop).
+    /// </summary>
+    Task<IServiceResult<ChatboxResponse>> GetOrStartStoreSupportAsync(Guid userId, string? userRole, Guid storeId, CancellationToken ct = default);
+
+    /// <summary>Vendor (owner/staff store): hàng đợi phòng hỗ trợ đang mở của store mình. Yêu cầu CanManageAsync(store) hoặc admin.</summary>
+    Task<IServiceResult<ChatboxListResponse>> GetOpenStoreSupportRoomsAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);
+
+    /// <summary>Vendor: các phòng của store mình đã nhận hỗ trợ. Yêu cầu CanManageAsync(store) hoặc admin.</summary>
+    Task<IServiceResult<ChatboxListResponse>> GetMyStoreChatboxesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);
+
     /// <summary>Tạo phòng nhóm (creator = Owner). MemberUserIds tuỳ chọn.</summary>
     Task<IServiceResult<ChatboxResponse>> CreateGroupAsync(Guid userId, string? userRole, CreateGroupRequest request, CancellationToken ct = default);
 

@@ -6,6 +6,7 @@ using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Recommendation;
+using FengDeskAI.Domain.Enums.Workspace;
 using Microsoft.Extensions.Logging;
 
 namespace FengDeskAI.Application.Features.Workspace.Services;
@@ -210,6 +211,20 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         return ServiceResult.Success(ApiStatusMessages.WorkspaceProfile.Deleted);
     }
 
+    public async Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(CancellationToken ct = default)
+    {
+        var map = await _uow.ScoringConfig.GetElementInputMapAsync(ct);
+        var byKind = map.GroupBy(m => m.InputKind)
+            .ToDictionary(g => g.Key, g => g.Select(m => m.InputCode).Distinct().OrderBy(c => c).ToList());
+
+        var response = new ElementInputVocabularyResponse(
+            byKind.GetValueOrDefault(ElementInputKind.Color, new List<string>()),
+            byKind.GetValueOrDefault(ElementInputKind.Material, new List<string>()),
+            byKind.GetValueOrDefault(ElementInputKind.DecorItem, new List<string>()));
+
+        return ServiceResult<ElementInputVocabularyResponse>.Success(response);
+    }
+
     /// <summary>Chỉ giữ input có (kind, code) tồn tại trong element_input_map — vd draft AI intake không bịa được.</summary>
     private async Task<List<WorkspaceProfileInput>> ResolveValidInputsAsync(
         IEnumerable<WorkspaceProfileInputDto> inputs, CancellationToken ct)
@@ -233,6 +248,12 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var (percent, hints) = await ComputeCompletenessAsync(profile, ct);
         response.CompletenessPercent = percent;
         response.MissingFieldHints = hints;
+
+        var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
+        response.Inputs = profileInputs
+            .Select(i => new WorkspaceProfileInputDto(i.InputKind, i.InputCode))
+            .ToList();
+
         return response;
     }
 
@@ -249,8 +270,9 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             (profile.DeskOrientation.HasValue, "Thêm hướng bàn để AI diễn giải sát hơn"),
             (profile.RoomFacingDirection.HasValue, "Thêm hướng phòng để AI diễn giải sát hơn"),
             (profile.DeskArea.HasValue, "Thêm diện tích mặt bàn để lọc vật phẩm vừa kích thước"),
-            (profile.EntranceDirection.HasValue, "Thêm hướng cửa ra vào để nhận gợi ý vị trí đặt"),
-            (profile.ToiletDirection.HasValue, "Thêm hướng nhà vệ sinh để tránh gợi ý sai vị trí"),
+            // EntranceDirection/ToiletDirection: KHÔNG có ô nhập ở form (Create/Update lẫn UI) → hint mãi
+            // không thoả được + chặn completeness ở 78%. Bỏ khỏi checklist. RecommendationService vẫn dùng
+            // 2 field này nếu có giá trị (nạp từ nguồn khác), chỉ là không nhắc user điền nữa.
             (hasProfileInput, "Mô tả thêm màu sắc/vật liệu không gian để engine tính ngũ hành sát hơn"),
         };
 

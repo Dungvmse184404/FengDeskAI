@@ -3,6 +3,7 @@ using System;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FengDeskAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260712073507_AddStoreIdToChatbox")]
+    partial class AddStoreIdToChatbox
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -1752,40 +1755,11 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
-                    b.Property<string>("EvidenceUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("evidence_url");
-
-                    b.Property<string>("Gateway")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasDefaultValue("payos")
-                        .HasColumnName("gateway");
-
-                    b.Property<string>("IdempotencyKey")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)")
-                        .HasColumnName("idempotency_key");
-
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
-
-                    b.Property<bool>("IsManual")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_manual");
-
-                    b.Property<string>("ManualReason")
-                        .HasColumnType("text")
-                        .HasColumnName("manual_reason");
 
                     b.Property<string>("Method")
                         .IsRequired()
@@ -1801,10 +1775,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
-                    b.Property<Guid?>("PerformedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("performed_by");
-
                     b.Property<DateTime?>("ProcessedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("processed_at");
@@ -1817,12 +1787,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("provider_refund_id");
-
-                    b.Property<int>("RetryCount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer")
-                        .HasDefaultValue(0)
-                        .HasColumnName("retry_count");
 
                     b.Property<Guid>("ReturnRequestId")
                         .HasColumnType("uuid")
@@ -1847,9 +1811,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnName("updated_by");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("IdempotencyKey")
-                        .IsUnique();
 
                     b.HasIndex("OrderId");
 
@@ -1932,88 +1893,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrderId");
 
                     b.ToTable("transaction", (string)null);
-                });
-
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.VendorLiability", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<decimal>("Amount")
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasColumnName("amount");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<DateTime>("DisputeDeadline")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("dispute_deadline");
-
-                    b.Property<string>("DisputeReason")
-                        .HasColumnType("text")
-                        .HasColumnName("dispute_reason");
-
-                    b.Property<Guid>("GardenStoreId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("garden_id");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_deleted");
-
-                    b.Property<Guid?>("RefundId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("refund_id");
-
-                    b.Property<DateTime?>("ResolvedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("resolved_at");
-
-                    b.Property<Guid?>("ResolvedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("resolved_by");
-
-                    b.Property<Guid>("ReturnRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("ticket_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("status");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("GardenStoreId");
-
-                    b.HasIndex("RefundId");
-
-                    b.HasIndex("ReturnRequestId")
-                        .IsUnique();
-
-                    b.HasIndex("Status");
-
-                    b.ToTable("vendor_liabilities", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.ElementInputMap", b =>
@@ -2482,12 +2361,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<bool>("IsExchange")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_exchange");
-
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
@@ -2861,21 +2734,9 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
-                    b.Property<DateTime?>("DecidedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("decided_at");
-
-                    b.Property<Guid?>("DecidedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("decided_by");
-
                     b.Property<Guid>("DeliveryId")
                         .HasColumnType("uuid")
                         .HasColumnName("delivery_id");
-
-                    b.Property<DateTime?>("EvidenceDeadline")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("evidence_deadline");
 
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
@@ -2944,18 +2805,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
-
-                    b.Property<string>("VendorResponse")
-                        .IsRequired()
-                        .ValueGeneratedOnAdd()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasDefaultValue("Pending")
-                        .HasColumnName("vendor_response");
-
-                    b.Property<DateTime?>("VendorResponseDeadline")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("vendor_response_deadline");
 
                     b.HasKey("Id");
 
@@ -4075,32 +3924,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Order");
                 });
 
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.VendorLiability", b =>
-                {
-                    b.HasOne("FengDeskAI.Domain.Entities.Vendor.GardenStore", "Garden")
-                        .WithMany()
-                        .HasForeignKey("GardenStoreId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("FengDeskAI.Domain.Entities.Payment.Refund", "Refund")
-                        .WithMany()
-                        .HasForeignKey("RefundId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("FengDeskAI.Domain.Entities.Sales.ReturnRequest", "ReturnRequest")
-                        .WithOne("VendorLiability")
-                        .HasForeignKey("FengDeskAI.Domain.Entities.Payment.VendorLiability", "ReturnRequestId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Garden");
-
-                    b.Navigation("Refund");
-
-                    b.Navigation("ReturnRequest");
-                });
-
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.ProductElementInput", b =>
                 {
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", null)
@@ -4472,8 +4295,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Refund");
 
                     b.Navigation("StatusLogs");
-
-                    b.Navigation("VendorLiability");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Vendor.GardenStore", b =>

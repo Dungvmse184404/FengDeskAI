@@ -43,6 +43,15 @@ public class ElementInputMapSeeder : IDataSeeder
         (ElementInputKind.Color, "Brown", FengShuiElement.Moc, 0.4m),
         (ElementInputKind.Color, "Yellow", FengShuiElement.Tho, 1.0m),
         (ElementInputKind.Color, "Beige", FengShuiElement.Tho, 1.0m),
+        (ElementInputKind.Color, "Cream", FengShuiElement.Tho, 1.0m),
+        (ElementInputKind.Color, "Gold", FengShuiElement.Kim, 1.0m),
+        (ElementInputKind.Color, "Navy", FengShuiElement.Thuy, 1.0m),
+        (ElementInputKind.Color, "Turquoise", FengShuiElement.Thuy, 0.6m),
+        (ElementInputKind.Color, "Turquoise", FengShuiElement.Moc, 0.4m),
+        (ElementInputKind.Color, "Maroon", FengShuiElement.Hoa, 0.7m),
+        (ElementInputKind.Color, "Maroon", FengShuiElement.Tho, 0.3m),
+        (ElementInputKind.Color, "Ivory", FengShuiElement.Tho, 0.6m),
+        (ElementInputKind.Color, "Ivory", FengShuiElement.Kim, 0.4m),
 
         // ── Vật liệu ──
         (ElementInputKind.Material, "Wood", FengShuiElement.Moc, 1.0m),
@@ -61,8 +70,18 @@ public class ElementInputMapSeeder : IDataSeeder
         (ElementInputKind.Material, "SaltRock", FengShuiElement.Hoa, 0.6m),
         (ElementInputKind.Material, "SaltRock", FengShuiElement.Tho, 0.4m),
         (ElementInputKind.Material, "Candle", FengShuiElement.Hoa, 1.0m),
+        // Vật liệu nội thất bổ sung — vd "bàn ghế chất liệu gỗ/da/vải".
+        (ElementInputKind.Material, "Fabric", FengShuiElement.Moc, 0.6m),
+        (ElementInputKind.Material, "Fabric", FengShuiElement.Hoa, 0.4m),
+        (ElementInputKind.Material, "Leather", FengShuiElement.Tho, 1.0m),
+        (ElementInputKind.Material, "Marble", FengShuiElement.Tho, 0.6m),
+        (ElementInputKind.Material, "Marble", FengShuiElement.Kim, 0.4m),
+        (ElementInputKind.Material, "Rattan", FengShuiElement.Moc, 1.0m),
+        (ElementInputKind.Material, "Concrete", FengShuiElement.Tho, 1.0m),
+        (ElementInputKind.Material, "Plastic", FengShuiElement.Kim, 0.5m),
+        (ElementInputKind.Material, "Plastic", FengShuiElement.Tho, 0.5m),
 
-        // ── Hình khối ──
+        // ── Hình khối (chủ yếu dùng cho sản phẩm) ──
         (ElementInputKind.Shape, "Sphere", FengShuiElement.Kim, 1.0m),
         (ElementInputKind.Shape, "Round", FengShuiElement.Kim, 1.0m),
         (ElementInputKind.Shape, "Wavy", FengShuiElement.Thuy, 1.0m),
@@ -72,6 +91,34 @@ public class ElementInputMapSeeder : IDataSeeder
         (ElementInputKind.Shape, "Pointed", FengShuiElement.Hoa, 1.0m),
         (ElementInputKind.Shape, "Square", FengShuiElement.Tho, 1.0m),
         (ElementInputKind.Shape, "Flat", FengShuiElement.Tho, 1.0m),
+
+        // ── Vật trang trí (chủ yếu dùng cho workspace — "hiện trạng phòng hiện tại") ──
+        (ElementInputKind.DecorItem, "FishTank", FengShuiElement.Thuy, 1.0m),
+        (ElementInputKind.DecorItem, "Fountain", FengShuiElement.Thuy, 1.0m),
+        (ElementInputKind.DecorItem, "WindChime", FengShuiElement.Kim, 1.0m),
+        (ElementInputKind.DecorItem, "Mirror", FengShuiElement.Thuy, 0.7m),
+        (ElementInputKind.DecorItem, "Mirror", FengShuiElement.Kim, 0.3m),
+        (ElementInputKind.DecorItem, "Painting", FengShuiElement.Hoa, 0.5m),
+        (ElementInputKind.DecorItem, "Painting", FengShuiElement.Moc, 0.5m),
+        (ElementInputKind.DecorItem, "Rug", FengShuiElement.Tho, 1.0m),
+        (ElementInputKind.DecorItem, "Curtain", FengShuiElement.Moc, 0.6m),
+        (ElementInputKind.DecorItem, "Curtain", FengShuiElement.Hoa, 0.4m),
+        (ElementInputKind.DecorItem, "Lamp", FengShuiElement.Hoa, 1.0m),
+        (ElementInputKind.DecorItem, "Clock", FengShuiElement.Kim, 1.0m),
+        (ElementInputKind.DecorItem, "Plant", FengShuiElement.Moc, 1.0m),
+        (ElementInputKind.DecorItem, "Vase", FengShuiElement.Tho, 0.5m),
+        (ElementInputKind.DecorItem, "Vase", FengShuiElement.Thuy, 0.5m),
+        (ElementInputKind.DecorItem, "CrystalBall", FengShuiElement.Kim, 0.5m),
+        (ElementInputKind.DecorItem, "CrystalBall", FengShuiElement.Thuy, 0.5m),
+        (ElementInputKind.DecorItem, "IncenseBurner", FengShuiElement.Hoa, 0.6m),
+        (ElementInputKind.DecorItem, "IncenseBurner", FengShuiElement.Tho, 0.4m),
+        (ElementInputKind.DecorItem, "Bookshelf", FengShuiElement.Moc, 1.0m),
+        (ElementInputKind.DecorItem, "Bonsai", FengShuiElement.Moc, 1.0m),
+        (ElementInputKind.DecorItem, "Lantern", FengShuiElement.Hoa, 1.0m),
+        (ElementInputKind.DecorItem, "Statue", FengShuiElement.Tho, 1.0m),
+        (ElementInputKind.DecorItem, "SaltLamp", FengShuiElement.Hoa, 0.5m),
+        (ElementInputKind.DecorItem, "SaltLamp", FengShuiElement.Tho, 0.5m),
+        (ElementInputKind.DecorItem, "Coins", FengShuiElement.Kim, 1.0m),
     };
 
     public async Task SeedAsync(CancellationToken ct = default)

@@ -104,6 +104,13 @@ builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiBotQ
     sp => sp.GetRequiredService<FengDeskAI.WebAPI.Workers.AiBotQueue>());
 builder.Services.AddHostedService<FengDeskAI.WebAPI.Workers.AiBotWorker>();
 
+// AI intake workspace nền: LLM chậm (kèm ảnh ~80s) → chạy async, push kết quả realtime + cache fallback.
+builder.Services.AddSingleton<FengDeskAI.WebAPI.Workers.WorkspaceIntakeQueue>();
+builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IWorkspaceIntakeQueue>(
+    sp => sp.GetRequiredService<FengDeskAI.WebAPI.Workers.WorkspaceIntakeQueue>());
+builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IWorkspaceIntakeNotifier, FengDeskAI.WebAPI.Hubs.WorkspaceIntakeNotifier>();
+builder.Services.AddHostedService<FengDeskAI.WebAPI.Workers.WorkspaceIntakeWorker>();
+
 // camelCase + enum-as-string cho payload SignalR để KHỚP với FE (mặc định SignalR giữ nguyên tên
 // PascalCase → FE đọc m.chatboxId/m.content ra undefined, tin realtime bị rớt).
 builder.Services.AddSignalR()

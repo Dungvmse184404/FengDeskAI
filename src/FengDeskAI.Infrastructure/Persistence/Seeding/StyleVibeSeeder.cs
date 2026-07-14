@@ -32,6 +32,11 @@ public class StyleVibeSeeder : IDataSeeder
         ("Industrial", "Công nghiệp", 4),
         ("Scandinavian", "Bắc Âu", 5),
         ("Bohemian", "Bohemian", 6),
+        ("Vintage", "Vintage", 7),
+        ("Rustic", "Mộc mạc", 8),
+        ("Luxury", "Sang trọng", 9),
+        ("Japandi", "Japandi", 10),
+        ("Traditional", "Truyền thống", 11),
         ("Other", "Khác", 99),
     };
 

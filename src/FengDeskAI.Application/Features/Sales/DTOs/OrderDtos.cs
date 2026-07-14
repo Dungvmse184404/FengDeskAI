@@ -129,3 +129,40 @@ public class UpdateDeliveryStatusRequest
     public string? ShippingProvider { get; set; }
     public string? Note { get; set; }
 }
+
+/// <summary>Địa chỉ giao — chỉ các field vendor cần để đóng gói/in vận đơn, không lộ toàn bộ UserAddress.</summary>
+public class DeliveryShippingAddressResponse
+{
+    public string RecipientName { get; set; } = null!;
+    public string RecipientPhone { get; set; } = null!;
+    public string StreetAddress { get; set; } = null!;
+    public string FullAddressText { get; set; } = null!;
+}
+
+/// <summary>
+/// Chi tiết một đơn giao (delivery) — màn vendor (garden owner/staff) xem để đóng gói.
+/// Chỉ trả sản phẩm + thông tin thuộc đúng delivery này (không lộ hàng của store khác trong cùng order).
+/// </summary>
+public class DeliveryOrderDetailResponse
+{
+    public Guid Id { get; set; }
+    public Guid GardenStoreId { get; set; }
+    public string? StoreName { get; set; }
+    public DeliveryStatus Status { get; set; }
+    public decimal ShippingFee { get; set; }
+    public decimal Subtotal { get; set; }
+    public string? TrackingCode { get; set; }
+    public string? ShippingProvider { get; set; }
+    public DateTime? ShippedAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+    public DateTime? EstimatedDeliveryDate { get; set; }
+
+    public Guid OrderId { get; set; }
+    public DateTime OrderCreatedAt { get; set; }
+    public PaymentMethod PaymentMethod { get; set; }
+    public OrderStatus OrderStatus { get; set; }
+    public string? OrderNote { get; set; }
+
+    public List<OrderItemResponse> Items { get; set; } = new();
+    public DeliveryShippingAddressResponse ShippingAddress { get; set; } = null!;
+}

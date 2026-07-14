@@ -461,6 +461,56 @@ public class OrderService : IOrderService
         return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.ShipmentCreated);
     }
 
+    public async Task<IServiceResult<DeliveryOrderDetailResponse>> GetDeliveryDetailAsync(Guid deliveryId, Guid userId, bool isAdmin, CancellationToken ct = default)
+    {
+        var delivery = await _uow.Orders.GetDeliveryDetailAsync(deliveryId, ct);
+        if (delivery is null)
+            return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
+            return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
+
+        var order = delivery.Order;
+        var address = order.ShippingAddress;
+        var response = new DeliveryOrderDetailResponse
+        {
+            Id = delivery.Id,
+            GardenStoreId = delivery.GardenStoreId,
+            StoreName = delivery.Store?.Name,
+            Status = delivery.Status,
+            ShippingFee = delivery.ShippingFee,
+            Subtotal = delivery.Subtotal,
+            TrackingCode = delivery.TrackingCode,
+            ShippingProvider = delivery.ShippingProvider,
+            ShippedAt = delivery.ShippedAt,
+            DeliveredAt = delivery.DeliveredAt,
+            EstimatedDeliveryDate = delivery.EstimatedDeliveryDate,
+            OrderId = delivery.OrderId,
+            OrderCreatedAt = order.CreatedAt,
+            PaymentMethod = order.PaymentMethod,
+            OrderStatus = order.Status,
+            OrderNote = order.Note,
+            Items = delivery.Items.Select(i => new OrderItemResponse
+            {
+                Id = i.Id,
+                ProductItemId = i.ProductItemId,
+                DeliveryId = i.DeliveryId,
+                ProductName = i.ProductName,
+                UnitPrice = i.UnitPrice,
+                Quantity = i.Quantity,
+                LineTotal = i.UnitPrice * i.Quantity,
+            }).ToList(),
+            ShippingAddress = new DeliveryShippingAddressResponse
+            {
+                RecipientName = address.RecipientName,
+                RecipientPhone = address.RecipientPhone,
+                StreetAddress = address.StreetAddress,
+                FullAddressText = $"{address.StreetAddress}, {address.Ward.Name}, {address.Ward.District.Name}, {address.Ward.District.Province.Name}",
+            },
+        };
+
+        return ServiceResult<DeliveryOrderDetailResponse>.Success(response);
+    }
+
     private static (NotificationType Type, string Title, string Message) MapDeliveryNotification(DeliveryStatus status)
         => status switch
         {
