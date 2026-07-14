@@ -16,4 +16,7 @@ public interface IWorkspaceProfileService
     Task<IServiceResult<WorkspaceProfileResponse>> UpdateAsync(Guid id, Guid userId, UpdateWorkspaceProfileRequest request, CancellationToken ct = default);
     Task<IServiceResult<WorkspaceProfileResponse>> SetDefaultAsync(Guid id, Guid userId, CancellationToken ct = default);
     Task<IServiceResult> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Từ vựng màu/vật liệu/hình khối hợp lệ — cho FE dựng tag picker "hiện trạng phòng hiện tại".</summary>
+    Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(CancellationToken ct = default);
 }

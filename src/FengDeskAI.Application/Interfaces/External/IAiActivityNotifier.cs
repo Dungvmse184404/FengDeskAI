@@ -34,10 +34,12 @@ public sealed class AiActivityScope : IAsyncDisposable
         _operationId = operationId;
     }
 
-    public Task PhaseAsync(string phase, string? toolName = null, CancellationToken ct = default)
+    /// <paramref name="note"/>: dòng mô tả thân thiện (vd "Đang chuẩn bị đơn hàng của bạn…") hiển thị
+    /// thay cho tên tool thô khi phase="calling_tool" — xem <see cref="FengDeskAI.Application.Features.CustomerCare.Services.AiChatService"/>.
+    public Task PhaseAsync(string phase, string? toolName = null, string? note = null, CancellationToken ct = default)
     {
         _lastPhase = phase;
-        return _notifier.PublishAsync(new AiActivityEvent(_operationId, phase, toolName), ct);
+        return _notifier.PublishAsync(new AiActivityEvent(_operationId, phase, toolName, note), ct);
     }
 
     /// <summary>

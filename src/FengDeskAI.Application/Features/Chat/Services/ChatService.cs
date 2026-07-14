@@ -91,6 +91,60 @@ public class ChatService : IChatService
         });
     }
 
+    public async Task<IServiceResult<ChatboxResponse>> GetOrStartStoreSupportAsync(Guid userId, string? userRole, Guid storeId, CancellationToken ct = default)
+    {
+        var chatbox = await _uow.Chatboxes.GetOrCreateStoreSupportRoomAsync(userId, ChatSenderHelper.TypeFrom(userRole), storeId, ct);
+        if (chatbox.Title is null)
+        {
+            var store = await _uow.Stores.GetByIdAsync(storeId, ct);
+            chatbox.Title = store is not null ? store.Name : "Cửa hàng";
+        }
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
+    }
+
+    public async Task<IServiceResult<ChatboxListResponse>> GetOpenStoreSupportRoomsAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default)
+    {
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(storeId, userId, ct))
+            return ServiceResult<ChatboxListResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem hộp thư của cửa hàng này.");
+
+        var (rooms, total) = await _uow.Chatboxes.GetOpenStoreSupportRoomsAsync(storeId, page.Page, page.PageSize, ct);
+        return ServiceResult<ChatboxListResponse>.Success(new ChatboxListResponse
+        {
+            Items = _mapper.Map<List<ChatboxResponse>>(rooms),
+            Page = page.Page,
+            PageSize = page.PageSize,
+            TotalCount = total,
+            TotalPages = (int)Math.Ceiling(total / (double)page.PageSize),
+        });
+    }
+
+    public async Task<IServiceResult<ChatboxListResponse>> GetMyStoreChatboxesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default)
+    {
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(storeId, userId, ct))
+            return ServiceResult<ChatboxListResponse>.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền xem hộp thư của cửa hàng này.");
+
+        var (chatboxes, total) = await _uow.Chatboxes.GetMyStoreChatboxesAsync(storeId, userId, page.Page, page.PageSize, ct);
+        var items = _mapper.Map<List<ChatboxResponse>>(chatboxes);
+
+        foreach (var (entity, dto) in chatboxes.Zip(items))
+        {
+            var me = entity.Participants.FirstOrDefault(p => p.UserId == userId);
+            var lastRead = me?.LastReadAt ?? DateTime.MinValue;
+            dto.UnreadCount = entity.Messages.Count(
+                m => !m.IsDeleted && m.SenderId != userId && m.CreatedAt > lastRead);
+        }
+
+        return ServiceResult<ChatboxListResponse>.Success(new ChatboxListResponse
+        {
+            Items = items,
+            Page = page.Page,
+            PageSize = page.PageSize,
+            TotalCount = total,
+            TotalPages = (int)Math.Ceiling(total / (double)page.PageSize),
+        });
+    }
+
     public async Task<IServiceResult<ChatboxResponse>> CreateGroupAsync(Guid userId, string? userRole, CreateGroupRequest request, CancellationToken ct = default)
     {
         var members = (request.MemberUserIds ?? new List<Guid>()).Where(id => id != Guid.Empty).Distinct().ToList();
@@ -109,18 +163,33 @@ public class ChatService : IChatService
             return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phòng chat.");
 
         var caller = room.Participants.FirstOrDefault(p => p.UserId == callerId);
-        var callerIsStaff = callerType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin;
+        var callerIsPlatformStaff = callerType is ParticipantType.Staff or ParticipantType.Manager;
+        var callerIsAdmin = callerType == ParticipantType.Admin;
         var isOwner = caller?.Role == ParticipantRole.Owner;
         var isStaffMember = caller is not null &&
-            caller.ParticipantType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin;
+            caller.ParticipantType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin or ParticipantType.Vendor;
 
-        // Owner luôn được; staff đã ở trong phòng được; staff (theo JWT) được tham gia/mời vào phòng hỗ trợ.
-        var canManage = isOwner || isStaffMember || (callerIsStaff && room.IsSupport);
+        // Garden owner/staff của ĐÚNG store phòng này thuộc về → được tự "nhận" (join) phòng hỗ trợ của store đó.
+        // Không dùng callerType (suy từ JWT platform role) vì vendor không có role JWT riêng — check thẳng CanManageAsync.
+        var isStoreVendorJoiningOwnRoom = room.GardenStoreId.HasValue
+            && request.UserId == callerId
+            && await _uow.Stores.CanManageAsync(room.GardenStoreId.Value, callerId, ct);
+
+        // Owner luôn được; staff/vendor đã ở trong phòng được; platform Staff/Manager chỉ được join phòng hỗ trợ
+        // KHÔNG thuộc store nào (tránh xem chat riêng của shop); Admin được join mọi phòng hỗ trợ; vendor được
+        // tự nhận phòng hỗ trợ của đúng store mình quản lý.
+        var canManage = isOwner
+            || isStaffMember
+            || (callerIsAdmin && room.IsSupport)
+            || (callerIsPlatformStaff && room.IsSupport && !room.GardenStoreId.HasValue)
+            || isStoreVendorJoiningOwnRoom;
         if (!canManage)
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không có quyền thêm thành viên vào phòng này.");
 
-        // Staff tự tham gia → gắn đúng type của họ; mời người khác → mặc định Customer.
-        var newType = request.UserId == callerId && callerIsStaff ? callerType : ParticipantType.Customer;
+        // Tự tham gia: vendor → gắn Vendor; platform staff/admin → gắn đúng type của họ. Mời người khác → mặc định Customer.
+        var newType = request.UserId != callerId
+            ? ParticipantType.Customer
+            : isStoreVendorJoiningOwnRoom ? ParticipantType.Vendor : callerType;
         await _uow.Chatboxes.AddParticipantAsync(chatboxId, request.UserId, newType, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success("Đã thêm thành viên.");

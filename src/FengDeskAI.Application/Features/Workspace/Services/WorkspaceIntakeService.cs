@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Interfaces.External;
@@ -24,7 +25,10 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     private const int MaxDescriptionLength = 2000;
     private const int MinDeskAreaCm2 = 400;
     private const int MaxDeskAreaCm2 = 100_000;
+    private const int MaxImages = 3;
     private static readonly TimeSpan VocabularyCacheTtl = TimeSpan.FromMinutes(10);
+    // Kết quả job giữ đủ lâu để client F5/kết nối lại vẫn lấy được, nhưng không phình bộ nhớ.
+    private static readonly TimeSpan JobResultTtl = TimeSpan.FromMinutes(10);
 
     private static readonly JsonSerializerOptions RawJsonOptions = new()
     {
@@ -34,6 +38,11 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     private readonly IAiChatClient _client;
     private readonly IUnitOfWork _uow;
     private readonly IMemoryCache _cache;
+    private readonly IFileStorage _storage;
+    private readonly IImageEncoder _encoder;
+    private readonly IWorkspaceIntakeQueue _queue;
+    private readonly IWorkspaceIntakeNotifier _notifier;
+    private readonly IAiActivityNotifier _activity;
     private readonly WorkspaceIntakeOptions _options;
     private readonly ILogger<WorkspaceIntakeService> _logger;
 
@@ -41,46 +50,188 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         IAiChatClient client,
         IUnitOfWork uow,
         IMemoryCache cache,
+        IFileStorage storage,
+        IImageEncoder encoder,
+        IWorkspaceIntakeQueue queue,
+        IWorkspaceIntakeNotifier notifier,
+        IAiActivityNotifier activity,
         IOptions<WorkspaceIntakeOptions> options,
         ILogger<WorkspaceIntakeService> logger)
     {
         _client = client;
         _uow = uow;
         _cache = cache;
+        _storage = storage;
+        _encoder = encoder;
+        _queue = queue;
+        _notifier = notifier;
+        _activity = activity;
         _options = options.Value;
         _logger = logger;
+    }
+
+    private static string JobKey(string operationId) => $"workspace-intake-job:{operationId}";
+
+    public async Task<IServiceResult<string>> UploadImageAsync(
+        Guid userId, Stream content, string fileName, string contentType, CancellationToken ct = default)
+    {
+        if (!ImageUpload.IsAllowed(contentType))
+            return ServiceResult<string>.Failure(ApiStatusCodes.UnprocessableEntity, "Chỉ chấp nhận ảnh JPG, PNG, BMP hoặc GIF.");
+
+        var ext = Path.GetExtension(fileName);
+        if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(contentType);
+        var objectPath = $"Workspace_intake/{userId}/{Guid.NewGuid():N}{ext}";
+
+        var stored = await _storage.UploadAsync(objectPath, content, contentType, ct);
+        return ServiceResult<string>.Success(stored.Url, "Tải ảnh thành công.");
+    }
+
+    /// <summary>Validate + chuẩn hóa input dùng chung cho cả sync (ParseAsync) lẫn async (StartParseAsync). Trả lỗi hoặc null.</summary>
+    private static string? ValidateRequest(
+        ParseWorkspaceDescriptionRequest request, out string description, out List<string> imageUrls)
+    {
+        description = request.Description?.Trim() ?? string.Empty;
+        imageUrls = (request.ImageUrls ?? new List<string>())
+            .Where(u => !string.IsNullOrWhiteSpace(u)).Take(MaxImages).ToList();
+
+        if (imageUrls.Count == 0 && description.Length is < MinDescriptionLength or > MaxDescriptionLength)
+            return $"Mô tả phải từ {MinDescriptionLength} đến {MaxDescriptionLength} ký tự (hoặc đính kèm ít nhất 1 ảnh).";
+        if (description.Length > MaxDescriptionLength)
+            return $"Mô tả tối đa {MaxDescriptionLength} ký tự.";
+        return null;
+    }
+
+    /// <summary>
+    /// Async: validate nhanh rồi đẩy job vào hàng đợi nền, trả operationId ngay. Đặt trạng thái "pending"
+    /// vào cache trước để nếu FE poll trước khi worker chạy vẫn thấy job tồn tại.
+    /// </summary>
+    public Task<IServiceResult<WorkspaceIntakeStartResponse>> StartParseAsync(
+        Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default)
+    {
+        var error = ValidateRequest(request, out var description, out var imageUrls);
+        if (error is not null)
+            return Task.FromResult<IServiceResult<WorkspaceIntakeStartResponse>>(
+                ServiceResult<WorkspaceIntakeStartResponse>.Failure(ApiStatusCodes.BadRequest, error));
+
+        var operationId = Guid.NewGuid().ToString("N");
+        _cache.Set(JobKey(operationId), WorkspaceIntakeJobStatusResponse.Pending(), JobResultTtl);
+        _queue.Enqueue(new WorkspaceIntakeJob(operationId, userId, description, imageUrls, request.Think));
+
+        _logger.LogInformation(
+            "[WorkspaceIntake] Nhận job async {OperationId} cho user {UserId} ({Length} ký tự, {ImageCount} ảnh).",
+            operationId, userId, description.Length, imageUrls.Count);
+
+        return Task.FromResult<IServiceResult<WorkspaceIntakeStartResponse>>(
+            ServiceResult<WorkspaceIntakeStartResponse>.Success(
+                new WorkspaceIntakeStartResponse(operationId), "Đã bắt đầu phân tích."));
+    }
+
+    /// <summary>Worker nền gọi: phát tiến trình realtime, chạy parse, cache kết quả + push draft/lỗi. Best-effort.</summary>
+    public async Task RunJobAsync(WorkspaceIntakeJob job, CancellationToken ct = default)
+    {
+        // Scope tự phát "done" khi dispose (trừ khi ta đặt phase cuối = "error").
+        await using var activity = _activity.Begin(job.OperationId);
+        await activity.PhaseAsync("thinking", ct: ct);
+
+        var request = new ParseWorkspaceDescriptionRequest
+        {
+            Description = job.Description!,
+            ImageUrls = job.ImageUrls,
+            Think = job.Think,
+        };
+        var result = await ParseAsync(job.UserId, request, ct);
+
+        if (result.IsSuccess && result.Data is not null)
+        {
+            _cache.Set(JobKey(job.OperationId), WorkspaceIntakeJobStatusResponse.Done(result.Data), JobResultTtl);
+            await _notifier.PublishResultAsync(job.OperationId, result.Data, ct);
+        }
+        else
+        {
+            var message = result.Message ?? "Trợ lý đang bận, bạn có thể điền form thủ công.";
+            await activity.PhaseAsync("error", ct: ct); // chặn "done" tự phát → indicator hiện lỗi
+            _cache.Set(JobKey(job.OperationId), WorkspaceIntakeJobStatusResponse.Failed(message), JobResultTtl);
+            await _notifier.PublishFailedAsync(job.OperationId, message, ct);
+        }
+    }
+
+    /// <summary>Trạng thái job từ cache (fallback khi FE lỡ mất event realtime). NotFound nếu không tồn tại/hết hạn.</summary>
+    public IServiceResult<WorkspaceIntakeJobStatusResponse> GetJobStatus(string operationId)
+    {
+        if (_cache.TryGetValue(JobKey(operationId), out WorkspaceIntakeJobStatusResponse? status) && status is not null)
+            return ServiceResult<WorkspaceIntakeJobStatusResponse>.Success(status);
+        return ServiceResult<WorkspaceIntakeJobStatusResponse>.Failure(
+            ApiStatusCodes.NotFound, "Không tìm thấy phiên phân tích (có thể đã hết hạn).");
     }
 
     public async Task<IServiceResult<WorkspaceProfileDraftResponse>> ParseAsync(
         Guid userId, ParseWorkspaceDescriptionRequest request, CancellationToken ct = default)
     {
-        var description = request.Description?.Trim() ?? string.Empty;
-        if (description.Length is < MinDescriptionLength or > MaxDescriptionLength)
-            return ServiceResult<WorkspaceProfileDraftResponse>.Failure(
-                ApiStatusCodes.BadRequest, $"Mô tả phải từ {MinDescriptionLength} đến {MaxDescriptionLength} ký tự.");
+        var error = ValidateRequest(request, out var description, out var imageUrls);
+        if (error is not null)
+            return ServiceResult<WorkspaceProfileDraftResponse>.Failure(ApiStatusCodes.BadRequest, error);
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        AiChatCompletion? completion = null;
         try
         {
             var vocab = await GetVocabularyAsync(userId, ct);
 
+            List<string>? imagesBase64 = null;
+            if (imageUrls.Count > 0)
+            {
+                imagesBase64 = new List<string>(imageUrls.Count);
+                foreach (var url in imageUrls)
+                    imagesBase64.Add(await _encoder.FetchAsBase64Async(url, ct));
+            }
+
+            var userContent = description.Length > 0 ? description : "(Không có mô tả chữ — chỉ có ảnh, hãy phân tích ảnh.)";
             var messages = new List<AiChatMessage>
             {
-                new(AiChatRoles.System, BuildSystemPrompt(vocab)),
-                new(AiChatRoles.User, description),
+                new(AiChatRoles.System, BuildSystemPrompt(vocab, hasImages: imagesBase64 is { Count: > 0 })),
+                new(AiChatRoles.User, userContent, imagesBase64),
             };
 
+            // Có ảnh → PHẢI dùng vision model, không thì model text bỏ qua ảnh (không nhận màu/cây cảnh...).
+            var hasImages = imagesBase64 is { Count: > 0 };
+            var model = hasImages && !string.IsNullOrWhiteSpace(_options.VisionModel)
+                ? _options.VisionModel!
+                : _options.Model;
+            // Think: cho phép override theo từng request (công tắc phía user) — null = theo cấu hình Ai:Intake.
+            var think = request.Think ?? _options.Think;
+
+            _logger.LogInformation(
+                "[WorkspaceIntake] Bắt đầu parse cho user {UserId} (mô tả {Length} ký tự, {ImageCount} ảnh, model {Model}, think={Think}).",
+                userId, description.Length, imageUrls.Count, model, think);
+
             // Model + temperature riêng cho intake (Ai:Intake) — không dùng chung với chatbox.
-            var completion = await _client.CompleteAsync(
-                _options.Model, messages, tools: null,
-                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, _options.Think), ct: ct);
+            completion = await _client.CompleteAsync(
+                model, messages, tools: null,
+                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, think, _options.Stream), ct: ct);
 
             var raw = ParseRaw(completion.Content);
             var draft = Normalize(raw, vocab);
+
+            _logger.LogInformation(
+                "[WorkspaceIntake] Parse thành công cho user {UserId} sau {ElapsedMs}ms — confidence={Confidence}, unrecognized={UnrecognizedCount}.",
+                userId, sw.ElapsedMilliseconds, draft.Confidence, draft.Unrecognized.Count);
+
             return ServiceResult<WorkspaceProfileDraftResponse>.Success(draft);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            _logger.LogWarning(ex, "[WorkspaceIntake] Parse thất bại cho user {UserId}.", userId);
+            // Log NGUYÊN VĂN content model trả về (cắt bớt) — lý do phổ biến nhất khiến parse thất bại
+            // là model trả JSON kèm rác/markdown hoặc field sai schema; không có dòng này thì không cách
+            // nào biết model đã nói gì để sửa prompt.
+            var rawContent = completion?.Content;
+            var preview = string.IsNullOrEmpty(rawContent)
+                ? "(rỗng)"
+                : rawContent.Length > 500 ? rawContent[..500] + "…(cắt bớt)" : rawContent;
+
+            _logger.LogWarning(ex,
+                "[WorkspaceIntake] Parse thất bại cho user {UserId} sau {ElapsedMs}ms. AI trả về: {RawContent}",
+                userId, sw.ElapsedMilliseconds, preview);
+
             return ServiceResult<WorkspaceProfileDraftResponse>.Failure(
                 ApiStatusCodes.ServiceUnavailable, "Trợ lý đang bận, bạn có thể điền form thủ công.");
         }
@@ -114,7 +265,7 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
 
     // ── Prompt ───────────────────────────────────────────────────────────────
 
-    private static string BuildSystemPrompt(Vocabulary vocab)
+    private static string BuildSystemPrompt(Vocabulary vocab, bool hasImages = false)
     {
         var workspaceTypeNames = string.Join(", ", vocab.WorkspaceTypes.Select(t => t.Name));
         var styleCodes = string.Join(", ", vocab.StyleCodes);
@@ -125,19 +276,41 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         var colors = byKind.GetValueOrDefault(ElementInputKind.Color, "(không có)");
         var materials = byKind.GetValueOrDefault(ElementInputKind.Material, "(không có)");
         var shapes = byKind.GetValueOrDefault(ElementInputKind.Shape, "(không có)");
+        var decorItems = byKind.GetValueOrDefault(ElementInputKind.DecorItem, "(không có)");
+
+        var imageRule = hasImages
+            ? "- Có kèm theo (các) ẢNH chụp không gian. Dùng ảnh làm bằng chứng NGANG HÀNG với mô tả chữ: " +
+              "chỉ điền field khi NHÌN THẤY RÕ trong ảnh (vd thấy rõ ánh sáng tự nhiên từ cửa sổ → lighting=Natural; " +
+              "thấy rõ bàn gỗ → inputs Material=Wood; thấy bể cá/cây xanh/gương... → inputs DecorItem tương ứng). " +
+              "KHÔNG suy diễn những gì không thấy rõ trong ảnh (vd không đoán hướng phòng chỉ vì thấy cửa sổ có nắng).\n"
+            : "";
 
         return
             "Bạn là bộ trích xuất dữ liệu (data extractor) cho form \"không gian làm việc\" của FengDeskAI. " +
-            "Nhiệm vụ DUY NHẤT: đọc mô tả tiếng Việt của khách và trả về CHÍNH XÁC MỘT đối tượng JSON theo schema bên dưới — " +
-            "KHÔNG kèm markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON.\n\n" +
+            "Nhiệm vụ DUY NHẤT: đọc mô tả của khách — tiếng Việt HOẶC tiếng Anh, tự nhận diện ngôn ngữ — (và ảnh không gian nếu có) " +
+            "rồi trả về CHÍNH XÁC MỘT đối tượng JSON theo schema bên dưới — " +
+            "KHÔNG kèm markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON. Toàn bộ giá trị field/code vẫn PHẢI theo đúng danh sách " +
+            "cho phép bên dưới (đều là mã tiếng Anh cố định) dù mô tả gốc là tiếng Anh hay tiếng Việt.\n\n" +
 
             "## QUY TẮC TỐI QUAN TRỌNG\n" +
             "- KHÔNG được đoán hay suy diễn. Field nào không được nhắc rõ ràng → để null.\n" +
             "- Chỉ điền field khi văn bản nói TƯỜNG MINH. Vd \"cạnh cửa sổ\" KHÔNG có nghĩa là biết hướng; " +
             "chỉ điền deskOrientation/roomFacingDirection khi user nói rõ như \"hướng đông\", \"bàn quay mặt về hướng tây\", \"nhìn về phía nam\".\n" +
+            imageRule +
             "- CHỈ dùng đúng giá trị trong danh sách cho phép bên dưới — không tự bịa từ khác, không dịch nghĩa.\n" +
+            "- inputs (màu/vật liệu/hình khối/vật trang trí): đây là NGOẠI LỆ — hãy liệt kê CÀNG NHIỀU tín hiệu bạn nhận thấy CÀNG TỐT, " +
+            "KHÔNG giới hạn 1 cái mỗi loại (vd nếu user nhắc \"bàn gỗ, ghế da, có bể cá và cây xanh\" → liệt kê đủ cả Material=Wood, Material=Leather, " +
+            "DecorItem=FishTank, DecorItem=Plant). Rủi ro thấp vì user luôn sửa/xoá lại được ở bước review — thà liệt kê dư rồi để user bỏ bớt, " +
+            "còn hơn bỏ sót.\n" +
             "- mentionedFields: liệt kê CHÍNH XÁC những field-key (theo tên trong schema) mà bạn tin user CÓ nhắc đến trong văn bản, " +
-            "kể cả khi bạn không map được ra giá trị hợp lệ (dùng để tính độ tự tin) — đừng liệt kê field user không hề nhắc.\n\n" +
+            "kể cả khi bạn không map được ra giá trị hợp lệ (dùng để tính độ tự tin) — đừng liệt kê field user không hề nhắc.\n" +
+            "- hasDesk: true nếu user MÔ TẢ rõ có bàn làm việc (nhắc \"bàn\", loại bàn, hướng bàn, hoặc workspaceType kiểu bàn làm việc/văn phòng); " +
+            "false nếu user mô tả rõ đây là loại không gian KHÔNG có bàn làm việc (vd bếp, phòng khách, phòng ngủ, phòng ăn, ban công, phòng tập) " +
+            "và không hề nhắc đến bàn nào; null nếu không đủ căn cứ để kết luận theo cả 2 hướng trên.\n" +
+            "- NGOẠI LỆ DUY NHẤT cho quy tắc \"không đoán\": nếu workspaceType đã xác định chắc chắn và bản thân loại không gian đó " +
+            "gắn với ĐÚNG MỘT công năng hiển nhiên (Kitchen→Cooking, Bedroom→Sleep, Dining Room→Dining, Kids Room→Childcare, Home Gym→Exercise), " +
+            "được phép điền workPurpose tương ứng dù user không nói rõ từ \"mục đích\" — vì đây là suy ra từ định nghĩa loại phòng, không phải đoán mò. " +
+            "Các workspaceType khác (Home Office, Personal Desk...) KHÔNG áp dụng ngoại lệ này — vẫn phải để workPurpose null nếu không nói rõ.\n\n" +
 
             "## SCHEMA (trả đúng các key sau, đúng kiểu, thiếu thì null)\n" +
             "{\n" +
@@ -146,31 +319,43 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             "  \"workspaceType\": string|null,         // TÊN loại không gian, MỘT trong: " + workspaceTypeNames + "\n" +
             "  \"styleCode\": string|null,             // MỘT trong: " + styleCodes + "\n" +
             "  \"lighting\": string|null,              // MỘT trong: " + string.Join(", ", Enum.GetNames<LightingType>()) + "\n" +
+            "  \"hasDesk\": boolean|null,             // xem quy tắc hasDesk phía trên\n" +
             "  \"deskType\": string|null,              // MỘT trong: " + string.Join(", ", Enum.GetNames<DeskType>()) + " — null nếu không có bàn\n" +
             "  \"deskOrientation\": string|null,       // hướng bàn quay mặt về, MỘT trong: " + string.Join(", ", Enum.GetNames<CompassDirection>()) + "\n" +
             "  \"roomFacingDirection\": string|null,   // hướng cửa/phòng, cùng danh sách hướng trên\n" +
             "  \"workPurpose\": string|null,           // MỘT trong: " + string.Join(", ", Enum.GetNames<WorkPurpose>()) + "\n" +
             "  \"deskArea\": number|null,              // diện tích MẶT BÀN, đơn vị cm² (vd bàn 1.2m x 0.6m = 7200), chỉ điền khi user nói rõ kích thước\n" +
-            "  \"inputs\": [ { \"kind\": \"Color\"|\"Material\"|\"Shape\", \"code\": string } ],  // màu/vật liệu/hình khối user nhắc\n" +
-            "        // Color MỘT trong: " + colors + "\n" +
-            "        // Material MỘT trong: " + materials + "\n" +
+            "  \"inputs\": [ { \"kind\": \"Color\"|\"Material\"|\"Shape\"|\"DecorItem\", \"code\": string } ],  // hiện trạng phòng: màu chủ đạo/chất liệu nội thất/hình khối/vật trang trí user nhắc\n" +
+            "        // Color (màu chủ đạo) MỘT trong: " + colors + "\n" +
+            "        // Material (chất liệu nội thất, vd bàn ghế gỗ) MỘT trong: " + materials + "\n" +
             "        // Shape MỘT trong: " + shapes + "\n" +
+            "        // DecorItem (vật trang trí cụ thể, vd bể cá/cây xanh/gương) MỘT trong: " + decorItems + "\n" +
             "  \"mentionedFields\": string[]           // các field-key ở trên mà user CÓ nhắc đến (bất kể map được hay không)\n" +
             "}\n\n" +
 
             "## VÍ DỤ 1\n" +
             "User: \"Bàn làm việc ở nhà cạnh cửa sổ hướng đông, nhiều nắng sáng, bàn gỗ màu nâu, tôi hay ngồi học bài\"\n" +
             "{\"name\":\"Bàn làm việc tại nhà\",\"locationType\":\"Home\",\"workspaceType\":null,\"styleCode\":null," +
-            "\"lighting\":\"Natural\",\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":\"East\"," +
+            "\"lighting\":\"Natural\",\"hasDesk\":true,\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":\"East\"," +
             "\"workPurpose\":\"Study\",\"deskArea\":null," +
             "\"inputs\":[{\"kind\":\"Material\",\"code\":\"Wood\"},{\"kind\":\"Color\",\"code\":\"Brown\"}]," +
-            "\"mentionedFields\":[\"name\",\"locationType\",\"lighting\",\"roomFacingDirection\",\"workPurpose\",\"inputs\"]}\n\n" +
+            "\"mentionedFields\":[\"name\",\"locationType\",\"lighting\",\"hasDesk\",\"roomFacingDirection\",\"workPurpose\",\"inputs\"]}\n\n" +
 
             "## VÍ DỤ 2 (mơ hồ — hầu hết null)\n" +
             "User: \"Phòng tôi khá đẹp\"\n" +
-            "{\"name\":null,\"locationType\":null,\"workspaceType\":null,\"styleCode\":null,\"lighting\":null," +
+            "{\"name\":null,\"locationType\":null,\"workspaceType\":null,\"styleCode\":null,\"lighting\":null,\"hasDesk\":null," +
             "\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":null,\"workPurpose\":null,\"deskArea\":null," +
             "\"inputs\":[],\"mentionedFields\":[]}\n\n" +
+
+            "## VÍ DỤ 3 (không gian rõ ràng không có bàn làm việc + LIỆT KÊ ĐỦ nhiều vật trang trí/chất liệu)\n" +
+            "User: \"Đây sẽ là nhà bếp khá rộng rãi, thuận hướng nắng, nội thất đa phần là gỗ, có bể cá lớn, " +
+            "treo thêm vài bức tranh và đặt vài chậu cây nhỏ cho tươi mát.\"\n" +
+            "{\"name\":null,\"locationType\":\"Home\",\"workspaceType\":\"Kitchen\",\"styleCode\":null," +
+            "\"lighting\":\"Natural\",\"hasDesk\":false,\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":null," +
+            "\"workPurpose\":\"Cooking\",\"deskArea\":null," +
+            "\"inputs\":[{\"kind\":\"Material\",\"code\":\"Wood\"},{\"kind\":\"DecorItem\",\"code\":\"FishTank\"}," +
+            "{\"kind\":\"DecorItem\",\"code\":\"Painting\"},{\"kind\":\"DecorItem\",\"code\":\"Plant\"}]," +
+            "\"mentionedFields\":[\"locationType\",\"workspaceType\",\"lighting\",\"hasDesk\",\"workPurpose\",\"inputs\"]}\n\n" +
 
             "Chỉ trả JSON, không thêm bất kỳ ký tự nào khác.";
     }
@@ -184,6 +369,7 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         public string? WorkspaceType { get; set; }
         public string? StyleCode { get; set; }
         public string? Lighting { get; set; }
+        public bool? HasDesk { get; set; }
         public string? DeskType { get; set; }
         public string? DeskOrientation { get; set; }
         public string? RoomFacingDirection { get; set; }
@@ -245,6 +431,9 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         else if (!string.IsNullOrWhiteSpace(raw.Lighting))
             unrecognized.Add($"Ánh sáng: \"{raw.Lighting}\"");
         resolved["lighting"] = draft.Lighting is not null;
+
+        draft.HasDesk = raw.HasDesk;
+        resolved["hasDesk"] = draft.HasDesk is not null;
 
         if (TryParseEnum<DeskType>(raw.DeskType, out var deskType))
             draft.DeskType = deskType;

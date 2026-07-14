@@ -56,6 +56,7 @@ public static class DependencyInjection
         services.AddScoped<IWorkspaceProfileService, WorkspaceProfileService>();
         services.AddScoped<IWorkspaceTypeService, WorkspaceTypeService>();
         services.AddScoped<IWorkspaceIntakeService, WorkspaceIntakeService>();
+        services.AddScoped<IWorkspaceElementInputClassifierService, WorkspaceElementInputClassifierService>();
 
         services.AddScoped<ILocationService, LocationService>();
         services.AddScoped<IUserAddressService, UserAddressService>();
@@ -110,6 +111,7 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, GetPaymentStatusTool>();
         services.AddScoped<IAiTool, GetChatPartnerInfoTool>();
         services.AddScoped<IAiTool, ListMyAddressesTool>();
+        services.AddScoped<IAiTool, GetShopInfoTool>();
         // Tool có tác dụng phụ (tạo đơn) — chỉ enable ở phòng riêng, xem AiChatService.PrivateRoomOnlyTools.
         services.AddScoped<IAiTool, PrepareOrderTool>();
         services.AddScoped<IAiTool, ConfirmOrderTool>();

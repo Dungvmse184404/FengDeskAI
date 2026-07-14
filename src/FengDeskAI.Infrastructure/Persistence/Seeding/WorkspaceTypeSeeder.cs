@@ -34,17 +34,47 @@ public class WorkspaceTypeSeeder : IDataSeeder
         ("Co-working Booth", true, 0.5m, WorkspaceScope.Shared, "Khoang làm việc chia sẻ."),
         ("Open Workspace", true, 0.5m, WorkspaceScope.Shared, "Khu làm việc mở dùng chung."),
         ("Reception / Lounge", true, 0.5m, WorkspaceScope.Public, "Khu lễ tân / tiếp khách chung."),
+
+        // Không gian sinh hoạt tại nhà — mở rộng ngoài phạm vi "bàn làm việc" thuần túy.
+        ("Kitchen", false, 1.0m, WorkspaceScope.Private, "Bếp — khu vực nấu nướng trong nhà."),
+        ("Living Room", false, 1.0m, WorkspaceScope.Private, "Phòng khách — không gian sinh hoạt chung."),
+        ("Bedroom", false, 1.0m, WorkspaceScope.Private, "Phòng ngủ."),
+        ("Dining Room", false, 1.0m, WorkspaceScope.Private, "Phòng ăn."),
+        ("Kids Room", false, 1.0m, WorkspaceScope.Private, "Phòng trẻ em."),
+        ("Balcony", false, 1.0m, WorkspaceScope.Private, "Ban công / sân nhỏ."),
+        ("Home Gym", false, 1.0m, WorkspaceScope.Private, "Góc tập luyện tại nhà."),
+
+        // Mở rộng thêm — bao quát các không gian đặc trưng của nhà ở Việt Nam + các phòng chức năng còn thiếu.
+        ("Altar Room", false, 1.0m, WorkspaceScope.Private, "Gian thờ — không gian thờ cúng tổ tiên."),
+        ("Bathroom", false, 1.0m, WorkspaceScope.Private, "Phòng tắm / nhà vệ sinh."),
+        ("Study Room", false, 1.0m, WorkspaceScope.Private, "Phòng học — dành cho học sinh, sinh viên."),
+        ("Home Theater", false, 1.0m, WorkspaceScope.Private, "Phòng giải trí / rạp phim mini tại nhà."),
+        ("Walk-in Closet", false, 1.0m, WorkspaceScope.Private, "Phòng thay đồ."),
+        ("Garage", false, 1.0m, WorkspaceScope.Private, "Nhà để xe."),
+        ("Rooftop Garden", false, 1.0m, WorkspaceScope.Private, "Sân thượng / vườn trên mái."),
+        ("Guest Room", false, 1.0m, WorkspaceScope.Private, "Phòng dành cho khách."),
+        ("Meditation Room", false, 1.0m, WorkspaceScope.Private, "Phòng thiền / yoga."),
+        ("Laundry Room", false, 1.0m, WorkspaceScope.Private, "Phòng giặt đồ."),
     };
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
-        if (await _context.Set<WorkspaceType>().AnyAsync(t => t.IsSystemSeeded, ct))
+        // Idempotent THEO TỪNG TÊN (không "skip toàn bộ nếu đã có ít nhất 1 loại") — cho phép
+        // thêm loại mới vào SystemTypes ở các lần deploy sau mà không cần xoá DB.
+        var existingNames = (await _context.Set<WorkspaceType>()
+            .Where(t => t.IsSystemSeeded)
+            .Select(t => t.Name)
+            .ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var toAdd = SystemTypes.Where(t => !existingNames.Contains(t.Name)).ToList();
+        if (toAdd.Count == 0)
         {
-            _logger.LogInformation("Workspace types hệ thống đã tồn tại — bỏ qua seeding.");
+            _logger.LogInformation("Workspace types hệ thống đã đầy đủ — bỏ qua seeding.");
             return;
         }
 
-        var entities = SystemTypes.Select(t => new WorkspaceType
+        var entities = toAdd.Select(t => new WorkspaceType
         {
             Name = t.Name,
             Description = t.Desc,
@@ -57,6 +87,6 @@ public class WorkspaceTypeSeeder : IDataSeeder
         await _context.Set<WorkspaceType>().AddRangeAsync(entities, ct);
         await _context.SaveChangesAsync(ct);
 
-        _logger.LogInformation("Seed {Count} workspace types hệ thống.", SystemTypes.Length);
+        _logger.LogInformation("Seed {Count} workspace types hệ thống mới.", toAdd.Count);
     }
 }

@@ -33,6 +33,17 @@ public static class ElementSemantics
         [(WorkPurpose.Reading, FengShuiElement.Thuy)] = "sự thông suốt, thấm hiểu",
         [(WorkPurpose.Gaming, FengShuiElement.Hoa)] = "phản xạ, sự hưng phấn",
         [(WorkPurpose.Gaming, FengShuiElement.Kim)] = "sự sắc bén, quyết đoán",
+        [(WorkPurpose.Cooking, FengShuiElement.Hoa)] = "nhiệt huyết nấu nướng, sức sống gia đình",
+        [(WorkPurpose.Cooking, FengShuiElement.Tho)] = "sự no đủ, ấm cúng",
+        [(WorkPurpose.Dining, FengShuiElement.Tho)] = "sự sum vầy, no đủ",
+        [(WorkPurpose.Dining, FengShuiElement.Hoa)] = "hơi ấm bữa ăn, gắn kết gia đình",
+        [(WorkPurpose.Relaxation, FengShuiElement.Thuy)] = "sự thư thái, dòng chảy nghỉ ngơi",
+        [(WorkPurpose.Relaxation, FengShuiElement.Moc)] = "sức sống tươi mới, thư giãn",
+        [(WorkPurpose.Sleep, FengShuiElement.Thuy)] = "giấc ngủ sâu, tĩnh tâm",
+        [(WorkPurpose.Sleep, FengShuiElement.Moc)] = "sự phục hồi, tái tạo năng lượng",
+        [(WorkPurpose.Childcare, FengShuiElement.Moc)] = "sự phát triển, an toàn cho trẻ",
+        [(WorkPurpose.Exercise, FengShuiElement.Hoa)] = "sức bền, năng lượng vận động",
+        [(WorkPurpose.Exercise, FengShuiElement.Kim)] = "sự dẻo dai, kỷ luật tập luyện",
     };
 
     // X khắc Y — câu diễn giải mẫu. Key = (X, Y); tra bằng FengShuiCalculator.GetControlledElement(X) == Y.
@@ -52,6 +63,12 @@ public static class ElementSemantics
         [WorkPurpose.Creative] = "sáng tạo",
         [WorkPurpose.Reading] = "đọc sách",
         [WorkPurpose.Gaming] = "chơi game",
+        [WorkPurpose.Cooking] = "nấu ăn",
+        [WorkPurpose.Dining] = "dùng bữa",
+        [WorkPurpose.Relaxation] = "thư giãn",
+        [WorkPurpose.Sleep] = "ngủ nghỉ",
+        [WorkPurpose.Childcare] = "chăm sóc trẻ nhỏ",
+        [WorkPurpose.Exercise] = "tập luyện thể thao",
         [WorkPurpose.Mixed] = "đa năng",
         [WorkPurpose.Other] = "khác",
     };
@@ -81,5 +98,6 @@ public static class ElementSemantics
     /// <summary>Câu diễn giải khắc X→Y (X khắc Y).</summary>
     public static string ControlPhrase(FengShuiElement x, FengShuiElement y) => ControlPhrases[(x, y)];
 
-    public static string PurposeVi(WorkPurpose purpose) => PurposeNames[purpose];
+    public static string PurposeVi(WorkPurpose purpose)
+        => PurposeNames.TryGetValue(purpose, out var name) ? name : purpose.ToString();
 }

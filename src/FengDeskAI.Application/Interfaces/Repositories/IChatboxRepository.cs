@@ -26,8 +26,20 @@ public interface IChatboxRepository : IGenericRepository<Chatbox>
     /// <summary>Luôn tạo MỘT phòng hỗ trợ mới (cho nút "Trò chuyện mới").</summary>
     Task<Chatbox> CreateSupportRoomAsync(Guid userId, ParticipantType userType, CancellationToken ct = default);
 
-    /// <summary>Hàng đợi: các phòng support đang mở (chưa có Staff/Manager/Admin tham gia), paged.</summary>
+    /// <summary>Hàng đợi: các phòng support đang mở (chưa có Staff/Manager/Admin tham gia), paged. Loại phòng store-scoped (GardenStoreId != null).</summary>
     Task<(List<Chatbox> Items, int TotalCount)> GetOpenSupportRoomsAsync(int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>
+    /// Lấy/tạo phòng hỗ trợ "mở" của customer với MỘT SHOP cụ thể (IsSupport, GardenStoreId=storeId, customer=Owner).
+    /// Tái dùng phòng đang mở (chưa có Vendor tham gia, chưa ẩn) gần nhất; nếu chưa có thì tạo mới.
+    /// </summary>
+    Task<Chatbox> GetOrCreateStoreSupportRoomAsync(Guid customerId, ParticipantType customerType, Guid storeId, CancellationToken ct = default);
+
+    /// <summary>Hàng đợi: các phòng support đang mở của MỘT SHOP (chưa có Vendor tham gia), paged.</summary>
+    Task<(List<Chatbox> Items, int TotalCount)> GetOpenStoreSupportRoomsAsync(Guid storeId, int page, int pageSize, CancellationToken ct = default);
+
+    /// <summary>Các phòng của MỘT SHOP mà user (owner/staff) hiện là thành viên (đã "nhận"), paged.</summary>
+    Task<(List<Chatbox> Items, int TotalCount)> GetMyStoreChatboxesAsync(Guid storeId, Guid userId, int page, int pageSize, CancellationToken ct = default);
 
     Task<bool> IsParticipantAsync(Guid chatboxId, Guid userId, CancellationToken ct = default);
     Task<ChatboxParticipant?> GetParticipantAsync(Guid chatboxId, Guid userId, CancellationToken ct = default);

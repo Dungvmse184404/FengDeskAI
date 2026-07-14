@@ -135,7 +135,8 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
         int page, int pageSize, CancellationToken ct = default)
     {
         // "Đang mở" = phòng support chưa có nhân sự hỗ trợ. Phòng đã xóa/đóng (IsDeleted) tự bị loại bởi query filter.
-        var query = _set.Where(c => c.IsSupport &&
+        // GardenStoreId == null → chỉ hàng đợi platform, KHÔNG lẫn phòng hỗ trợ riêng của từng shop (GetOpenStoreSupportRoomsAsync).
+        var query = _set.Where(c => c.IsSupport && c.GardenStoreId == null &&
             !c.Participants.Any(p =>
                 p.ParticipantType == ParticipantType.Staff ||
                 p.ParticipantType == ParticipantType.Manager ||
@@ -146,6 +147,73 @@ public class ChatboxRepository : GenericRepository<Chatbox>, IChatboxRepository
             .Include(c => c.Participants)
             .Include(c => c.Messages).ThenInclude(m => m.Images)
             .OrderBy(c => c.UpdatedAt) // cũ nhất trước → ai chờ lâu nhất lên đầu
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+        return (items, total);
+    }
+
+    public async Task<Chatbox> GetOrCreateStoreSupportRoomAsync(
+        Guid customerId, ParticipantType customerType, Guid storeId, CancellationToken ct = default)
+    {
+        // Tái dùng phòng support đang MỞ (chưa có vendor) gần nhất của customer VỚI ĐÚNG shop này.
+        var existing = await _set
+            .Include(c => c.Participants)
+            .Where(c => c.IsSupport
+                && c.GardenStoreId == storeId
+                && c.Participants.Any(p => p.UserId == customerId && p.Role == ParticipantRole.Owner && !p.IsHidden)
+                && !c.Participants.Any(p => p.ParticipantType == ParticipantType.Vendor))
+            .OrderByDescending(c => c.UpdatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (existing != null) return existing;
+
+        var now = DateTime.UtcNow;
+        var chatbox = new Chatbox
+        {
+            IsGroup = true,
+            IsSupport = true,
+            GardenStoreId = storeId,
+            CreatedByUserId = customerId,
+            Participants =
+            {
+                new ChatboxParticipant { UserId = customerId, ParticipantType = customerType, Role = ParticipantRole.Owner, JoinedAt = now },
+            },
+        };
+        await _set.AddAsync(chatbox, ct);
+        return chatbox;
+    }
+
+    public async Task<(List<Chatbox> Items, int TotalCount)> GetOpenStoreSupportRoomsAsync(
+        Guid storeId, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = _set.Where(c => c.IsSupport && c.GardenStoreId == storeId
+            && !c.Participants.Any(p => p.ParticipantType == ParticipantType.Vendor));
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Include(c => c.Participants)
+            .Include(c => c.Messages).ThenInclude(m => m.Images)
+            .OrderBy(c => c.UpdatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+        return (items, total);
+    }
+
+    public async Task<(List<Chatbox> Items, int TotalCount)> GetMyStoreChatboxesAsync(
+        Guid storeId, Guid userId, int page, int pageSize, CancellationToken ct = default)
+    {
+        var query = _set.IgnoreQueryFilters()
+            .Where(c => c.GardenStoreId == storeId && c.Participants.Any(p => p.UserId == userId && !p.IsHidden))
+            .Where(c => !c.IsDeleted || c.Messages.Any(m => !m.IsDeleted));
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .Include(c => c.Participants)
+            .Include(c => c.Messages).ThenInclude(m => m.Images)
+            .AsSplitQuery()
+            .OrderByDescending(c => c.UpdatedAt)
+            .ThenByDescending(c => c.Id)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .ToListAsync(ct);
