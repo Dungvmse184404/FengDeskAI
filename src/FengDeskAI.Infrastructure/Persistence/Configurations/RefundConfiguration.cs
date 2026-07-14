@@ -26,6 +26,17 @@ public class RefundConfiguration : IEntityTypeConfiguration<Refund>
         builder.Property(r => r.CompletedAt).HasColumnName("completed_at");
         builder.Property(r => r.Note).HasColumnName("note");
 
+        // RMA v2: idempotency + retry + can thiệp thủ công (audit trail).
+        builder.Property(r => r.Gateway).HasColumnName("gateway").HasMaxLength(30).HasDefaultValue("payos");
+        builder.Property(r => r.IdempotencyKey).HasColumnName("idempotency_key").HasMaxLength(120).IsRequired();
+        builder.Property(r => r.RetryCount).HasColumnName("retry_count").HasDefaultValue(0);
+        builder.Property(r => r.IsManual).HasColumnName("is_manual").HasDefaultValue(false);
+        builder.Property(r => r.ManualReason).HasColumnName("manual_reason");
+        builder.Property(r => r.EvidenceUrl).HasColumnName("evidence_url").HasMaxLength(500);
+        builder.Property(r => r.PerformedBy).HasColumnName("performed_by");
+
+        builder.HasIndex(r => r.IdempotencyKey).IsUnique();
+
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
         builder.Property(r => r.CreatedBy).HasColumnName("created_by");

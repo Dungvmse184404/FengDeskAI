@@ -5,32 +5,39 @@ using FengDeskAI.Application.Features.Returns.DTOs;
 namespace FengDeskAI.Application.Features.Returns.Services;
 
 /// <summary>
-/// Luồng trả hàng / hoàn tiền / đổi trả (RMA). Customer tạo & theo dõi; Vendor (store) duyệt &amp;
-/// xử lý các yêu cầu của delivery thuộc store mình; Admin giám sát toàn bộ &amp; xác nhận hoàn tiền.
+/// Luồng RMA v2 (ticket trả hàng / hoàn tiền / đổi trả).
+/// - Customer: tạo ticket + bằng chứng, bổ sung bằng chứng, hủy, theo dõi.
+/// - Staff (nền tảng): tiếp nhận & RA QUYẾT ĐỊNH (duyệt hoàn/đổi, từ chối, yêu cầu bổ sung). Vendor KHÔNG quyết.
+/// - Vendor (garden owner): góp ý trong SLA (acknowledge/dispute, non-blocking) + xác nhận đã nhận hàng.
+/// Quy tắc chuyển trạng thái ở <c>Domain.StateMachines.ReturnStateMachine</c>; transition sai → 409.
 /// </summary>
 public interface IReturnService
 {
     // ----- Customer -----
-    Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
     Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default);
-    Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, RmaActor actor, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);
-    Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> ResubmitEvidenceAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
 
-    /// <summary>Khách tải ảnh bằng chứng (tệp) lên yêu cầu của mình — upload storage rồi gắn URL.</summary>
     Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
-
-    /// <summary>Khách xóa một ảnh bằng chứng — chỉ khi yêu cầu còn ở trạng thái chờ duyệt (Requested).</summary>
     Task<IServiceResult<ReturnDetailResponse>> DeleteImageAsync(Guid id, Guid imageId, Guid userId, CancellationToken ct = default);
 
-    // ----- Vendor / Admin -----
-    Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetForStoreAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);
-    Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetAllAsync(PageRequest page, CancellationToken ct = default);
-    Task<IServiceResult<ReturnDetailResponse>> ApproveAsync(Guid id, Guid userId, bool isAdmin, ApproveReturnRequest request, CancellationToken ct = default);
-    Task<IServiceResult<ReturnDetailResponse>> RejectAsync(Guid id, Guid userId, bool isAdmin, RejectReturnRequest request, CancellationToken ct = default);
-    Task<IServiceResult<ReturnDetailResponse>> ReceiveAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default);
-    Task<IServiceResult<ReturnDetailResponse>> ResolveAsync(Guid id, Guid userId, bool isAdmin, ResolveReturnRequest request, CancellationToken ct = default);
+    // ----- Vendor (non-blocking) -----
+    Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetForStoreAsync(Guid storeId, RmaActor actor, PageRequest page, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> VendorAcknowledgeAsync(Guid id, RmaActor actor, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> VendorDisputeAsync(Guid id, RmaActor actor, VendorDisputeRequest request, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> ConfirmItemReceivedAsync(Guid id, RmaActor actor, CancellationToken ct = default);
 
-    // ----- Admin / Finance -----
-    Task<IServiceResult<ReturnDetailResponse>> CompleteRefundAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default);
+    // ----- Staff (decision) -----
+    Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetPendingForStaffAsync(PageRequest page, CancellationToken ct = default);
+    Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetAllAsync(PageRequest page, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> AcceptAsync(Guid id, RmaActor actor, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> RequestMoreEvidenceAsync(Guid id, RmaActor actor, RequestMoreEvidenceRequest request, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> ApproveRefundAsync(Guid id, RmaActor actor, ApproveRefundRequest request, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> ApproveExchangeAsync(Guid id, RmaActor actor, ApproveExchangeRequest request, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> RejectAsync(Guid id, RmaActor actor, RejectReturnRequest request, CancellationToken ct = default);
+
+    /// <summary>Worker: auto-reject các ticket ở NeedMoreEvidence quá evidence_deadline. Trả số đã xử lý.</summary>
+    Task<int> AutoRejectOverdueEvidenceAsync(CancellationToken ct = default);
 }

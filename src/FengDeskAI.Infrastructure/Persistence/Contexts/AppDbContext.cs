@@ -58,6 +58,7 @@ public class AppDbContext : DbContext
     // Payment
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Refund> Refunds => Set<Refund>();
+    public DbSet<VendorLiability> VendorLiabilities => Set<VendorLiability>();
 
     // CustomerCare
     public DbSet<Review> Reviews => Set<Review>();

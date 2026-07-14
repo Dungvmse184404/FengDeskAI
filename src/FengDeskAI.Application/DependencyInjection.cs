@@ -76,6 +76,7 @@ public static class DependencyInjection
 
         services.AddScoped<IReturnService, ReturnService>();
         services.AddScoped<IRefundService, RefundService>();
+        services.AddScoped<IVendorLiabilityService, VendorLiabilityService>();
 
         services.AddScoped<IShippingService, ShippingService>();
         // Tính phí ship — thuần logic, stateless.

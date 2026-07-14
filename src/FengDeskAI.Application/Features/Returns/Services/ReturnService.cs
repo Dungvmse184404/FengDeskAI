@@ -15,9 +15,14 @@ using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
+using FengDeskAI.Domain.StateMachines;
 
 namespace FengDeskAI.Application.Features.Returns.Services;
 
+/// <summary>
+/// Luồng RMA v2. Quyết định do Staff; Vendor chỉ góp ý (non-blocking) + xác nhận nhận hàng.
+/// Chuyển trạng thái đóng gói trong entity (guard bằng <see cref="ReturnStateMachine"/>); transition sai → 409.
+/// </summary>
 public class ReturnService : IReturnService
 {
     private readonly IUnitOfWork _uow;
@@ -37,8 +42,16 @@ public class ReturnService : IReturnService
 
     // ===================== Customer =====================
 
-    public async Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
     {
+        var fileError = ValidateImageFiles(files);
+        if (fileError is not null) return fileError;
+
+        // Bắt buộc có ảnh bằng chứng khi tạo ticket (guard rule).
+        var hasUrlEvidence = request.ImageUrls is not null && request.ImageUrls.Any(u => !string.IsNullOrWhiteSpace(u));
+        if ((files is null || files.Count == 0) && !hasUrlEvidence)
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.EvidenceRequired);
+
         var delivery = await _uow.Returns.GetDeliveryForReturnAsync(request.DeliveryId, ct);
         if (delivery is null || delivery.Order is null || delivery.Order.CustomerId != userId)
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.DeliveryNotFound);
@@ -54,7 +67,6 @@ public class ReturnService : IReturnService
 
         var orderItemsById = delivery.Items.ToDictionary(i => i.Id);
 
-        // Gộp trùng dòng theo OrderItem + validate cơ bản.
         var requested = new Dictionary<Guid, (int Qty, Guid? Exchange)>();
         foreach (var line in request.Items)
         {
@@ -69,7 +81,6 @@ public class ReturnService : IReturnService
                 requested[line.OrderItemId] = (line.Quantity, line.ExchangeProductItemId);
         }
 
-        // Chặn trả vượt số đã mua (trừ phần đã trả ở các yêu cầu trước).
         var alreadyReturned = await _uow.Returns.GetReturnedQuantitiesAsync(requested.Keys, ct);
         foreach (var (orderItemId, info) in requested)
         {
@@ -83,7 +94,6 @@ public class ReturnService : IReturnService
         var isCod = delivery.Order.PaymentMethod == PaymentMethod.COD;
         var refundMethod = isCod ? RefundMethod.BankTransfer : RefundMethod.Original;
 
-        // Validate đổi hàng + chênh lệch giá.
         decimal returnedValue = 0m, replacementValue = 0m;
         if (request.Type == ReturnType.Exchange)
         {
@@ -106,7 +116,6 @@ public class ReturnService : IReturnService
                 return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeMoreExpensive);
         }
 
-        // COD cần thông tin ngân hàng khi có tiền hoàn (trả hàng, hoặc đổi rẻ hơn).
         var hasRefund = request.Type == ReturnType.Refund || (request.Type == ReturnType.Exchange && replacementValue < returnedValue);
         if (isCod && hasRefund && (string.IsNullOrWhiteSpace(request.BankAccountNumber)
                 || string.IsNullOrWhiteSpace(request.BankAccountName) || string.IsNullOrWhiteSpace(request.BankName)))
@@ -118,7 +127,6 @@ public class ReturnService : IReturnService
             DeliveryId = delivery.Id,
             CustomerId = userId,
             Type = request.Type,
-            Status = ReturnRequestStatus.Requested,
             Reason = request.Reason,
             ReasonDetail = request.ReasonDetail,
             RefundMethod = refundMethod,
@@ -152,7 +160,7 @@ public class ReturnService : IReturnService
             FromStatus = null,
             ToStatus = ReturnRequestStatus.Requested.ToString(),
             ChangedBy = userId,
-            Note = "Tạo yêu cầu trả hàng/đổi trả",
+            Note = "Tạo ticket trả hàng/đổi trả",
             ChangedAt = now,
         });
 
@@ -160,12 +168,15 @@ public class ReturnService : IReturnService
         {
             await _uow.Returns.AddAsync(rr, ct);
             await NotifyAsync(userId, NotificationType.ReturnRequested, "Đã gửi yêu cầu trả hàng",
-                "Yêu cầu trả hàng/đổi trả của bạn đã được gửi và đang chờ cửa hàng duyệt.",
+                "Yêu cầu của bạn đã được gửi và đang chờ nhân viên nền tảng tiếp nhận.",
                 rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
 
-        return await GetByIdAsync(rr.Id, userId, isAdmin: false, ct);
+        if (files is { Count: > 0 })
+            await UploadImagesToReturnAsync(rr.Id, files, rr.Images.Count, ct);
+
+        return await LoadDetailAsync(rr.Id, ct);
     }
 
     public async Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default)
@@ -174,14 +185,14 @@ public class ReturnService : IReturnService
         return Paged(items, page, total);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, RmaActor actor, CancellationToken ct = default)
     {
         var rr = await _uow.Returns.GetDetailAsync(id, null, ct);
         if (rr is null)
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
 
-        var authorized = rr.CustomerId == userId || isAdmin
-            || await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, userId, ct);
+        var authorized = rr.CustomerId == actor.UserId || actor.CanDecide
+            || (actor.IsGardenOwner && await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct));
         if (!authorized)
             return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ViewForbidden);
 
@@ -193,85 +204,73 @@ public class ReturnService : IReturnService
         var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
         if (rr is null || rr.CustomerId != userId)
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
-        if (rr.Status is not (ReturnRequestStatus.Requested or ReturnRequestStatus.Approved))
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.CancelNotAllowed);
+        if (!ReturnStateMachine.CanTransition(rr.Status, ReturnRequestStatus.Cancelled, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.Cancelled);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            Transition(rr, ReturnRequestStatus.Cancelled, userId, "Khách hủy yêu cầu");
+            var from = rr.Status;
+            rr.Cancel();
+            LogTransition(rr, from, "Khách hủy yêu cầu", userId);
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnCancelled, "Đã hủy yêu cầu trả hàng",
                 "Yêu cầu trả hàng/đổi trả của bạn đã được hủy.", rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin: false, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> ResubmitEvidenceAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.TrackingCode))
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.NoItems);
+        var fileError = ValidateImageFiles(files);
+        if (fileError is not null) return fileError;
 
         var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
         if (rr is null || rr.CustomerId != userId)
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
-        if (!ReturnWorkflow.IsValidReturnTransition(rr.Status, ReturnRequestStatus.ReturnInTransit))
-            return InvalidTransition(rr.Status, ReturnRequestStatus.ReturnInTransit);
+        if (!ReturnStateMachine.CanTransition(rr.Status, ReturnRequestStatus.Requested, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.Requested);
+
+        // Upload ảnh bổ sung (nếu có) trước khi đổi trạng thái.
+        if (files is { Count: > 0 })
+            await UploadImagesToReturnAsync(rr.Id, files, rr.Images.Count, ct);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            rr.ReturnTrackingCode = request.TrackingCode;
-            Transition(rr, ReturnRequestStatus.ReturnInTransit, userId, $"Khách gửi hàng trả (mã VĐ: {request.TrackingCode})");
-            await Task.CompletedTask;
+            var from = rr.Status;
+            rr.ResubmitEvidence();
+            LogTransition(rr, from, "Khách bổ sung bằng chứng", userId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnRequested, "Đã bổ sung bằng chứng",
+                "Bằng chứng bổ sung đã được gửi, đang chờ nhân viên xem lại.", rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin: false, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
     public async Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
     {
         if (files is null || files.Count == 0)
             return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageFileRequired);
+        var fileError = ValidateImageFiles(files);
+        if (fileError is not null) return fileError;
 
-        // GetDetailAsync(id, userId): chỉ trả về nếu userId là CHỦ yêu cầu → kiêm luôn kiểm quyền sở hữu.
         var rr = await _uow.Returns.GetDetailAsync(id, userId, ct);
         if (rr is null)
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
+        if (rr.Status is not (ReturnRequestStatus.Requested or ReturnRequestStatus.NeedMoreEvidence))
+            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.ImageAddNotAllowed);
 
-        var sort = rr.Images.Count;
-        foreach (var file in files)
-        {
-            if (file.Content is null || file.Content.Length == 0)
-                return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageFileRequired);
-            if (!ImageUpload.IsAllowed(file.ContentType))
-                return Fail(ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.Returns.ImageTypeInvalid);
-
-            // Mỗi yêu cầu một thư mục riêng: Return_images/{returnId}/{guid}{ext}
-            var ext = Path.GetExtension(file.FileName);
-            if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(file.ContentType);
-            var objectPath = $"Return_images/{id}/{Guid.NewGuid():N}{ext}";
-
-            var stored = await _storage.UploadAsync(objectPath, file.Content, file.ContentType, ct);
-            await _uow.Returns.AddImageAsync(new ReturnRequestImage
-            {
-                ReturnRequestId = id,
-                ImageUrl = stored.Url,
-                SortOrder = sort++,
-            }, ct);
-        }
-        await _uow.SaveChangesAsync(ct);
-
-        return await GetByIdAsync(id, userId, isAdmin: false, ct);
+        await UploadImagesToReturnAsync(id, files, rr.Images.Count, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
     public async Task<IServiceResult<ReturnDetailResponse>> DeleteImageAsync(Guid id, Guid imageId, Guid userId, CancellationToken ct = default)
     {
-        // Owner-scoped: null nếu không phải chủ yêu cầu.
         var rr = await _uow.Returns.GetDetailAsync(id, userId, ct);
         if (rr is null)
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
-        if (rr.Status != ReturnRequestStatus.Requested)
+        if (rr.Status is not (ReturnRequestStatus.Requested or ReturnRequestStatus.NeedMoreEvidence))
             return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageDeleteNotAllowed);
 
         var image = await _uow.Returns.GetImageAsync(id, imageId, ct);
@@ -280,20 +279,80 @@ public class ReturnService : IReturnService
 
         _uow.Returns.RemoveImage(image);
         await _uow.SaveChangesAsync(ct);
-        // Xóa file trên storage best-effort sau khi DB đã commit (không chặn nghiệp vụ nếu lỗi).
         await _storage.DeleteByUrlAsync(image.ImageUrl, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin: false, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
-    // ===================== Vendor / Admin =====================
+    // ===================== Vendor (non-blocking) =====================
 
-    public async Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetForStoreAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default)
+    public async Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetForStoreAsync(Guid storeId, RmaActor actor, PageRequest page, CancellationToken ct = default)
     {
-        if (!isAdmin && !await _uow.Stores.CanManageAsync(storeId, userId, ct))
+        if (!actor.CanDecide && !(actor.IsGardenOwner && await _uow.Stores.CanManageAsync(storeId, actor.UserId, ct)))
             return ServiceResult<PagedResult<ReturnListItemResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManageForbidden);
 
         var (items, total) = await _uow.Returns.GetForStoreAsync(storeId, page.Skip, page.PageSize, ct);
+        return Paged(items, page, total);
+    }
+
+    public async Task<IServiceResult<ReturnDetailResponse>> VendorAcknowledgeAsync(Guid id, RmaActor actor, CancellationToken ct = default)
+    {
+        var (rr, error) = await LoadForVendorAsync(id, actor, ct);
+        if (error is not null) return error;
+
+        rr!.VendorAcknowledge();
+        await _uow.SaveChangesAsync(ct);
+        return await LoadDetailAsync(id, ct);
+    }
+
+    public async Task<IServiceResult<ReturnDetailResponse>> VendorDisputeAsync(Guid id, RmaActor actor, VendorDisputeRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.DisputeReasonRequired);
+
+        var (rr, error) = await LoadForVendorAsync(id, actor, ct);
+        if (error is not null) return error;
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            rr!.VendorDispute();
+            // Ghi log để Staff thấy phản đối — KHÔNG chặn quyết định của Staff.
+            LogTransition(rr, rr.Status, $"Vendor phản đối: {request.Reason}", actor.UserId);
+            await Task.CompletedTask;
+            return null;
+        }, ct);
+
+        return await LoadDetailAsync(id, ct);
+    }
+
+    public async Task<IServiceResult<ReturnDetailResponse>> ConfirmItemReceivedAsync(Guid id, RmaActor actor, CancellationToken ct = default)
+    {
+        var (rr, error) = await LoadForVendorAsync(id, actor, ct);
+        if (error is not null) return error;
+        if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.ItemReceived, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.ItemReceived);
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            var now = DateTime.UtcNow;
+            var from = rr.Status;
+            rr.ConfirmItemReceived(now);      // ReturnInTransit → ItemReceived
+            LogTransition(rr, from, "Vendor xác nhận đã nhận hàng trả", actor.UserId);
+            rr.MoveToReviewing();             // ItemReceived → Reviewing (chuyển cho Staff quyết định)
+            LogTransition(rr, ReturnRequestStatus.ItemReceived, "Chuyển sang bước Staff ra quyết định", actor.UserId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnReceived, "Đã nhận hàng trả",
+                "Cửa hàng đã nhận hàng trả của bạn; nền tảng đang xử lý.", rr.Id, ReferenceType.Return, ct);
+            return null;
+        }, ct);
+
+        return await LoadDetailAsync(id, ct);
+    }
+
+    // ===================== Staff (decision) =====================
+
+    public async Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetPendingForStaffAsync(PageRequest page, CancellationToken ct = default)
+    {
+        var (items, total) = await _uow.Returns.GetPendingForStaffAsync(page.Skip, page.PageSize, ct);
         return Paged(items, page, total);
     }
 
@@ -303,156 +362,204 @@ public class ReturnService : IReturnService
         return Paged(items, page, total);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> ApproveAsync(Guid id, Guid userId, bool isAdmin, ApproveReturnRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> AcceptAsync(Guid id, RmaActor actor, CancellationToken ct = default)
     {
-        var (rr, error) = await LoadForManageAsync(id, userId, isAdmin, ct);
+        var (rr, error) = await LoadForDecisionAsync(id, actor, ct);
         if (error is not null) return error;
-        if (!ReturnWorkflow.IsValidReturnTransition(rr!.Status, ReturnRequestStatus.Approved))
-            return InvalidTransition(rr.Status, ReturnRequestStatus.Approved);
+        if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.UnderReview, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.UnderReview);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            rr.ApprovedBy = userId;
-            rr.ApprovedAt = DateTime.UtcNow;
-            Transition(rr, ReturnRequestStatus.Approved, userId, string.IsNullOrWhiteSpace(request.Note) ? "Đã duyệt yêu cầu" : request.Note);
-            await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Yêu cầu trả hàng được duyệt",
-                "Cửa hàng đã duyệt yêu cầu. Vui lòng gửi hàng trả về theo hướng dẫn.", rr.Id, ReferenceType.Return, ct);
+            var now = DateTime.UtcNow;
+            var from = rr.Status;
+            rr.Accept(now.AddHours(ReturnWorkflow.VendorResponseSlaHours)); // Requested → UnderReview
+            LogTransition(rr, from, "Staff tiếp nhận; thông báo vendor (SLA phản hồi, non-blocking)", actor.UserId);
+
+            var routedFrom = rr.Status;
+            rr.RouteAfterAccept(); // UnderReview → Reviewing (plant_health) | ReturnInTransit (hàng vật lý)
+            LogTransition(rr, routedFrom,
+                rr.Reason == ReturnReason.PlantHealth
+                    ? "Cây chết — bỏ qua thu hồi, chuyển thẳng bước quyết định"
+                    : "Yêu cầu khách gửi hàng trả về để thu hồi", actor.UserId);
+
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Yêu cầu đang được xử lý",
+                rr.Reason == ReturnReason.PlantHealth
+                    ? "Nền tảng đã tiếp nhận yêu cầu và đang xem xét (không cần gửi trả cây)."
+                    : "Nền tảng đã tiếp nhận. Vui lòng gửi hàng trả về theo hướng dẫn.",
+                rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> RejectAsync(Guid id, Guid userId, bool isAdmin, RejectReturnRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> RequestMoreEvidenceAsync(Guid id, RmaActor actor, RequestMoreEvidenceRequest request, CancellationToken ct = default)
     {
-        if (string.IsNullOrWhiteSpace(request.Reason))
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.NoItems);
-
-        var (rr, error) = await LoadForManageAsync(id, userId, isAdmin, ct);
+        var (rr, error) = await LoadForDecisionAsync(id, actor, ct);
         if (error is not null) return error;
-        if (!ReturnWorkflow.IsValidReturnTransition(rr!.Status, ReturnRequestStatus.Rejected))
-            return InvalidTransition(rr.Status, ReturnRequestStatus.Rejected);
+        if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.NeedMoreEvidence, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.NeedMoreEvidence);
+
+        var hours = request.DeadlineHours is > 0 ? request.DeadlineHours!.Value : ReturnWorkflow.EvidenceSlaHours;
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            var from = rr.Status;
+            rr.RequestMoreEvidence(DateTime.UtcNow.AddHours(hours));
+            LogTransition(rr, from, string.IsNullOrWhiteSpace(request.Note) ? "Yêu cầu bổ sung bằng chứng" : request.Note!, actor.UserId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnRequested, "Cần bổ sung bằng chứng",
+                $"Vui lòng bổ sung bằng chứng trong {hours} giờ để yêu cầu được tiếp tục.", rr.Id, ReferenceType.Return, ct);
+            return null;
+        }, ct);
+
+        return await LoadDetailAsync(id, ct);
+    }
+
+    public async Task<IServiceResult<ReturnDetailResponse>> ApproveRefundAsync(Guid id, RmaActor actor, ApproveRefundRequest request, CancellationToken ct = default)
+    {
+        var (rr, error) = await LoadForDecisionAsync(id, actor, ct);
+        if (error is not null) return error;
+        if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.Refunding, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.Refunding);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            rr.RejectedReason = request.Reason;
-            Transition(rr, ReturnRequestStatus.Rejected, userId, $"Từ chối: {request.Reason}");
-            await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu trả hàng bị từ chối",
-                $"Yêu cầu của bạn đã bị từ chối. Lý do: {request.Reason}", rr.Id, ReferenceType.Return, ct);
+            var now = DateTime.UtcNow;
+            // Hoàn kho chỉ khi có thu hồi hàng (không áp dụng cây chết).
+            if (request.Restock && rr.Reason != ReturnReason.PlantHealth)
+                await RestockAsync(rr, ct);
+
+            var from = rr.Status;
+            rr.ApproveRefund(actor.UserId, now); // Reviewing → Refunding
+            LogTransition(rr, from, string.IsNullOrWhiteSpace(request.Note) ? "Staff duyệt hoàn tiền" : request.Note!, actor.UserId);
+
+            // Ứng tiền hoàn cho khách NGAY (không chờ vendor).
+            await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn tiền ticket #{rr.Id}", ct);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Yêu cầu hoàn tiền được duyệt",
+                "Nền tảng đã duyệt hoàn tiền và đang xử lý chuyển tiền cho bạn.", rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> ReceiveAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> ApproveExchangeAsync(Guid id, RmaActor actor, ApproveExchangeRequest request, CancellationToken ct = default)
     {
-        var (rr, error) = await LoadForManageAsync(id, userId, isAdmin, ct);
+        var (rr, error) = await LoadForDecisionAsync(id, actor, ct);
         if (error is not null) return error;
-        if (!ReturnWorkflow.IsValidReturnTransition(rr!.Status, ReturnRequestStatus.ItemReceived))
-            return InvalidTransition(rr.Status, ReturnRequestStatus.ItemReceived);
+        if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.Exchanging, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.Exchanging);
+        if (rr.Type != ReturnType.Exchange || !rr.Items.Any(i => i.ExchangeProductItemId.HasValue))
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeItemRequired);
 
-        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        // Nạp biến thể thay thế + kiểm tồn kho.
+        var exIds = rr.Items.Where(i => i.ExchangeProductItemId.HasValue)
+            .Select(i => i.ExchangeProductItemId!.Value).Distinct().ToList();
+        var exItems = (await _uow.Returns.GetProductItemsWithProductAsync(exIds, ct)).ToDictionary(p => p.Id);
+        var outOfStock = false;
+        foreach (var ri in rr.Items.Where(i => i.ExchangeProductItemId.HasValue))
         {
-            rr.ReceivedAt = DateTime.UtcNow;
-            Transition(rr, ReturnRequestStatus.ItemReceived, userId, "Đã nhận hàng trả, đang kiểm tra");
-            await NotifyAsync(rr.CustomerId, NotificationType.ReturnReceived, "Đã nhận hàng trả",
-                "Cửa hàng đã nhận hàng trả của bạn và đang xử lý.", rr.Id, ReferenceType.Return, ct);
-            return null;
-        }, ct);
-
-        return await GetByIdAsync(id, userId, isAdmin, ct);
-    }
-
-    public async Task<IServiceResult<ReturnDetailResponse>> ResolveAsync(Guid id, Guid userId, bool isAdmin, ResolveReturnRequest request, CancellationToken ct = default)
-    {
-        var (rr, error) = await LoadForManageAsync(id, userId, isAdmin, ct);
-        if (error is not null) return error;
-
-        var target = rr!.Type == ReturnType.Refund ? ReturnRequestStatus.Refunding : ReturnRequestStatus.Exchanging;
-        if (!ReturnWorkflow.IsValidReturnTransition(rr.Status, target))
-            return InvalidTransition(rr.Status, target);
-
-        // Đổi hàng: nạp + kiểm tồn kho biến thể thay thế TRƯỚC transaction (entity tracked dùng tiếp để trừ kho).
-        Dictionary<Guid, ProductItem> exItems = new();
-        if (rr.Type == ReturnType.Exchange)
-        {
-            var exIds = rr.Items.Where(i => i.ExchangeProductItemId.HasValue)
-                .Select(i => i.ExchangeProductItemId!.Value).Distinct().ToList();
-            exItems = (await _uow.Returns.GetProductItemsWithProductAsync(exIds, ct)).ToDictionary(p => p.Id);
-            foreach (var ri in rr.Items.Where(i => i.ExchangeProductItemId.HasValue))
-            {
-                if (!exItems.TryGetValue(ri.ExchangeProductItemId!.Value, out var ex) || ex.Product is null)
-                    return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeItemNotFound);
-                if (ex.Stock < ri.Quantity)
-                    return Fail(ApiStatusCodes.BadRequest,
-                        string.Format(ApiStatusMessages.Returns.ExchangeOutOfStockFormat,
-                            ex.Name is null ? ex.Product.Name : $"{ex.Product.Name} - {ex.Name}", ex.Stock));
-            }
+            if (!exItems.TryGetValue(ri.ExchangeProductItemId!.Value, out var ex) || ex.Product is null)
+                return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeItemNotFound);
+            if (ex.Stock < ri.Quantity) outOfStock = true;
         }
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
             var now = DateTime.UtcNow;
+            if (request.Restock && rr.Reason != ReturnReason.PlantHealth)
+                await RestockAsync(rr, ct);
 
-            // Hoàn kho hàng trả (nếu kiểm đạt).
-            if (request.Restock)
-            {
-                var productItemIds = rr.Items.Select(i => i.OrderItem.ProductItemId).Distinct();
-                var byId = (await _uow.Orders.GetProductItemsAsync(productItemIds, ct)).ToDictionary(p => p.Id);
-                foreach (var ri in rr.Items)
-                    if (byId.TryGetValue(ri.OrderItem.ProductItemId, out var pi))
-                        pi.Stock += ri.Quantity;
-            }
+            var from = rr.Status;
+            rr.ApproveExchange(actor.UserId, now); // Reviewing → Exchanging
+            LogTransition(rr, from, string.IsNullOrWhiteSpace(request.Note) ? "Staff duyệt đổi hàng" : request.Note!, actor.UserId);
 
-            if (rr.Type == ReturnType.Refund)
+            if (outOfStock)
             {
-                await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn tiền trả hàng #{rr.Id}", ct);
-                Transition(rr, ReturnRequestStatus.Refunding, userId, string.IsNullOrWhiteSpace(request.Note) ? "Chấp nhận hoàn tiền" : request.Note);
+                // Hết hàng thay thế → fallback sang hoàn tiền (không dead-end).
+                var exFrom = rr.Status;
+                rr.FallbackToRefund(); // Exchanging → Refunding
+                LogTransition(rr, exFrom, "Hết hàng thay thế — chuyển sang hoàn tiền", actor.UserId);
+                rr.RefundAmount = ReturnWorkflow.ComputeRefundAmount(rr.Items);
+                await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn tiền (hết hàng đổi) ticket #{rr.Id}", ct);
+                await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Chuyển sang hoàn tiền",
+                    "Sản phẩm đổi đã hết hàng, nền tảng sẽ hoàn tiền cho bạn.", rr.Id, ReferenceType.Return, ct);
             }
             else
             {
                 await CreateReplacementDeliveryAsync(rr, exItems, now, ct);
-                if (rr.RefundAmount > 0)
-                    await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn chênh lệch đổi hàng #{rr.Id}", ct);
+                var exFrom = rr.Status;
+                rr.CompleteExchange(); // Exchanging → Completed
+                LogTransition(rr, exFrom, "Đã tạo đơn giao hàng thay thế", actor.UserId);
 
-                Transition(rr, ReturnRequestStatus.Exchanging, userId, string.IsNullOrWhiteSpace(request.Note) ? "Chấp nhận đổi hàng" : request.Note);
-                Transition(rr, ReturnRequestStatus.Completed, userId, "Đã tạo đơn giao hàng thay thế");
+                // Đổi rẻ hơn → hoàn chênh lệch (refund độc lập, không đổi trạng thái ticket).
+                if (rr.RefundAmount > 0)
+                    await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn chênh lệch đổi hàng ticket #{rr.Id}", ct);
+
                 await NotifyAsync(rr.CustomerId, NotificationType.ExchangeShipped, "Đang giao hàng đổi",
-                    "Cửa hàng đã tạo đơn giao hàng thay thế cho yêu cầu đổi của bạn.", rr.Id, ReferenceType.Return, ct);
+                    "Nền tảng đã tạo đơn giao hàng thay thế cho bạn.", rr.Id, ReferenceType.Return, ct);
             }
             return null;
         }, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin, ct);
+        return await LoadDetailAsync(id, ct);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> CompleteRefundAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> RejectAsync(Guid id, RmaActor actor, RejectReturnRequest request, CancellationToken ct = default)
     {
-        var (rr, error) = await LoadForManageAsync(id, userId, isAdmin, ct);
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.RejectReasonRequired);
+
+        var (rr, error) = await LoadForDecisionAsync(id, actor, ct);
         if (error is not null) return error;
-        if (rr!.Status != ReturnRequestStatus.Refunding)
-            return InvalidTransition(rr.Status, ReturnRequestStatus.Completed);
-        if (rr.Refund is null)
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.NoRefundToComplete);
+        if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.Rejected, rr.Reason))
+            return InvalidTransition(rr.Status, ReturnRequestStatus.Rejected);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            _refund.Complete(rr.Refund, userId);
-            Transition(rr, ReturnRequestStatus.Completed, userId, "Đã hoàn tất hoàn tiền");
-            await NotifyAsync(rr.CustomerId, NotificationType.RefundCompleted, "Đã hoàn tiền",
-                $"Khoản hoàn tiền {rr.RefundAmount:#,##0} đ cho yêu cầu của bạn đã được xử lý.", rr.Id, ReferenceType.Refund, ct);
+            var from = rr.Status;
+            rr.Reject(actor.UserId, DateTime.UtcNow, request.Reason);
+            LogTransition(rr, from, $"Từ chối: {request.Reason}", actor.UserId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu trả hàng bị từ chối",
+                $"Yêu cầu của bạn đã bị từ chối. Lý do: {request.Reason}", rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
 
-        return await GetByIdAsync(id, userId, isAdmin, ct);
+        return await LoadDetailAsync(id, ct);
+    }
+
+    // ===================== Worker =====================
+
+    public async Task<int> AutoRejectOverdueEvidenceAsync(CancellationToken ct = default)
+    {
+        var now = DateTime.UtcNow;
+        var overdue = await _uow.Returns.GetOverdueEvidenceTicketsAsync(now, 100, ct);
+        foreach (var rr in overdue)
+        {
+            var from = rr.Status;
+            rr.RejectForEvidenceTimeout(); // NeedMoreEvidence → Rejected
+            LogTransition(rr, from, "Tự động từ chối: quá hạn bổ sung bằng chứng", null);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu bị từ chối",
+                "Bạn không bổ sung bằng chứng kịp thời hạn nên yêu cầu đã bị từ chối.", rr.Id, ReferenceType.Return, ct);
+        }
+        if (overdue.Count > 0) await _uow.SaveChangesAsync(ct);
+        return overdue.Count;
     }
 
     // ===================== Helpers =====================
 
+    private async Task RestockAsync(ReturnRequest rr, CancellationToken ct)
+    {
+        var productItemIds = rr.Items.Select(i => i.OrderItem.ProductItemId).Distinct();
+        var byId = (await _uow.Orders.GetProductItemsAsync(productItemIds, ct)).ToDictionary(p => p.Id);
+        foreach (var ri in rr.Items)
+            if (byId.TryGetValue(ri.OrderItem.ProductItemId, out var pi))
+                pi.Stock += ri.Quantity;
+    }
+
     /// <summary>
-    /// Tạo delivery thay thế cho hàng đổi: thêm delivery + LƯU NGAY (để order_items tham chiếu hợp lệ),
-    /// thêm order_items mới của biến thể thay thế, trừ kho, tạo vận đơn qua provider.
+    /// Tạo delivery thay thế (0đ, is_exchange = true) cho hàng đổi: thêm delivery + LƯU NGAY,
+    /// thêm order_items biến thể thay thế, trừ kho, tạo vận đơn qua provider.
     /// </summary>
     private async Task CreateReplacementDeliveryAsync(ReturnRequest rr, Dictionary<Guid, ProductItem> exItems, DateTime now, CancellationToken ct)
     {
@@ -462,6 +569,7 @@ public class ReturnService : IReturnService
             GardenStoreId = rr.Delivery.GardenStoreId,
             Status = DeliveryStatus.Pending,
             ShippingFee = 0m,
+            IsExchange = true,
         };
         await _uow.Orders.AddDeliveriesAsync(new[] { replacement }, ct);
         await _uow.SaveChangesAsync(ct);
@@ -487,12 +595,11 @@ public class ReturnService : IReturnService
                 ex.WeightGram, ex.LengthCm, ex.WidthCm, ex.HeightCm));
             totalWeightGram += ex.WeightGram * ri.Quantity;
             subtotal += ex.Price * ri.Quantity;
-            ex.Stock -= ri.Quantity; // trừ kho biến thể thay thế
+            ex.Stock -= ri.Quantity;
         }
         await _uow.Orders.AddOrderItemsAsync(newItems, ct);
         replacement.Subtotal = subtotal;
 
-        // Gom điểm lấy hàng (store) + điểm giao (khách) để tạo vận đơn hàng đổi (không thu thêm tiền → COD = 0).
         var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { replacement.GardenStoreId }, ct)).FirstOrDefault();
         var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(rr.Order.ShippingAddressId, ct);
 
@@ -519,32 +626,72 @@ public class ReturnService : IReturnService
         rr.ReplacementDeliveryId = replacement.Id;
     }
 
-    private async Task<(ReturnRequest? Rr, IServiceResult<ReturnDetailResponse>? Error)> LoadForManageAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct)
+    private async Task<(ReturnRequest? Rr, IServiceResult<ReturnDetailResponse>? Error)> LoadForDecisionAsync(Guid id, RmaActor actor, CancellationToken ct)
+    {
+        if (!actor.CanDecide)
+            return (null, Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.StaffOnly));
+        var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
+        if (rr is null)
+            return (null, Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound));
+        return (rr, null);
+    }
+
+    private async Task<(ReturnRequest? Rr, IServiceResult<ReturnDetailResponse>? Error)> LoadForVendorAsync(Guid id, RmaActor actor, CancellationToken ct)
     {
         var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
         if (rr is null)
             return (null, Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound));
-        if (!isAdmin && !await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, userId, ct))
+        var allowed = actor.IsAdmin
+            || (actor.IsGardenOwner && await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct));
+        if (!allowed)
             return (null, Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManageForbidden));
         return (rr, null);
     }
 
-    private void Transition(ReturnRequest rr, ReturnRequestStatus to, Guid? actorId, string note)
+    private void LogTransition(ReturnRequest rr, ReturnRequestStatus from, string note, Guid? actorId)
     {
-        var from = rr.Status;
-        rr.Status = to;
         rr.StatusChangeNote = note;
-        // Add tường minh qua DbSet (Added → INSERT). Add qua navigation vào rr đã-tracked bị EF
-        // đánh Modified (UPDATE 0 rows) vì BaseEntity set sẵn Id — xem ghi chú ở PaymentService.
         _uow.Returns.AddStatusLog(new ReturnStatusLog
         {
             ReturnRequestId = rr.Id,
             FromStatus = from.ToString(),
-            ToStatus = to.ToString(),
+            ToStatus = rr.Status.ToString(),
             ChangedBy = actorId,
             Note = note,
             ChangedAt = DateTime.UtcNow,
         });
+    }
+
+    private static ServiceResult<ReturnDetailResponse>? ValidateImageFiles(IReadOnlyList<ReturnImageFile>? files)
+    {
+        if (files is null) return null;
+        foreach (var file in files)
+        {
+            if (file.Content is null || file.Content.Length == 0)
+                return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ImageFileRequired);
+            if (!ImageUpload.IsAllowed(file.ContentType))
+                return Fail(ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.Returns.ImageTypeInvalid);
+        }
+        return null;
+    }
+
+    private async Task UploadImagesToReturnAsync(Guid returnId, IReadOnlyList<ReturnImageFile> files, int baseSort, CancellationToken ct)
+    {
+        var sort = baseSort;
+        foreach (var file in files)
+        {
+            var ext = Path.GetExtension(file.FileName);
+            if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(file.ContentType);
+            var objectPath = $"Return_images/{returnId}/{Guid.NewGuid():N}{ext}";
+            var stored = await _storage.UploadAsync(objectPath, file.Content, file.ContentType, ct);
+            await _uow.Returns.AddImageAsync(new ReturnRequestImage
+            {
+                ReturnRequestId = returnId,
+                ImageUrl = stored.Url,
+                SortOrder = sort++,
+            }, ct);
+        }
+        await _uow.SaveChangesAsync(ct);
     }
 
     private Task NotifyAsync(Guid userId, NotificationType type, string title, string message, Guid refId, ReferenceType refType, CancellationToken ct)
@@ -559,6 +706,14 @@ public class ReturnService : IReturnService
             IsRead = false,
         }, ct);
 
+    private async Task<IServiceResult<ReturnDetailResponse>> LoadDetailAsync(Guid id, CancellationToken ct)
+    {
+        var rr = await _uow.Returns.GetDetailAsync(id, null, ct);
+        return rr is null
+            ? Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound)
+            : ServiceResult<ReturnDetailResponse>.Success(_mapper.Map<ReturnDetailResponse>(rr));
+    }
+
     private IServiceResult<PagedResult<ReturnListItemResponse>> Paged(List<ReturnRequest> items, PageRequest page, int total)
         => ServiceResult<PagedResult<ReturnListItemResponse>>.Success(
             new PagedResult<ReturnListItemResponse>(_mapper.Map<List<ReturnListItemResponse>>(items), page.Page, page.PageSize, total));
@@ -567,6 +722,6 @@ public class ReturnService : IReturnService
         => ServiceResult<ReturnDetailResponse>.Failure(code, message);
 
     private static ServiceResult<ReturnDetailResponse> InvalidTransition(ReturnRequestStatus from, ReturnRequestStatus to)
-        => ServiceResult<ReturnDetailResponse>.Failure(ApiStatusCodes.BadRequest,
+        => ServiceResult<ReturnDetailResponse>.Failure(ApiStatusCodes.Conflict,
             string.Format(ApiStatusMessages.Returns.InvalidTransitionFormat, from, to));
 }
