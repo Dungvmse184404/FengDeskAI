@@ -54,8 +54,9 @@ public class ProductModel3DService : IProductModel3DService
         if (!await CanManageStoreAsync(product.GardenStoreId, userId, isAdmin, ct))
             return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.ManageForbidden);
 
-        var existing = await _uow.Products.GetModel3DAsync(productId, ct);
-        if (existing is { Status: Model3DStatus.Processing })
+        // Lấy cả bản đã soft-delete để hồi sinh & tái sử dụng — tránh INSERT trùng unique index product_id.
+        var existing = await _uow.Products.GetModel3DIncludingDeletedAsync(productId, ct);
+        if (existing is { IsDeleted: false, Status: Model3DStatus.Processing })
             return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DAlreadyProcessing);
 
         // Chọn ảnh nguồn: chỉ định cụ thể hoặc ảnh primary (SortOrder nhỏ nhất).
@@ -97,6 +98,7 @@ public class ProductModel3DService : IProductModel3DService
         else
         {
             model = existing;
+            model.IsDeleted = false; // hồi sinh nếu trước đó đã bị xoá mềm
         }
 
         model.Status = Model3DStatus.Processing;

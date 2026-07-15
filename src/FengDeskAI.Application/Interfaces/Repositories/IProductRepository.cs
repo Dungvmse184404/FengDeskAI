@@ -43,6 +43,11 @@ public interface IProductRepository : IGenericRepository<Product>
 
     // Model 3D (1–1 với product)
     Task<ProductModel3D?> GetModel3DAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>Tìm model 3D của product KỂ CẢ bản đã soft-delete (bỏ query filter) — dùng khi sinh lại
+    /// để hồi sinh & tái sử dụng row cũ, tránh đụng unique index <c>product_id</c>.</summary>
+    Task<ProductModel3D?> GetModel3DIncludingDeletedAsync(Guid productId, CancellationToken ct = default);
+
     Task AddModel3DAsync(ProductModel3D model, CancellationToken ct = default);
     void RemoveModel3D(ProductModel3D model);
 
