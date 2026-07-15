@@ -30,6 +30,7 @@ public class ProductService : IProductService
             StoreId = query.StoreId,
             CategoryId = query.CategoryId,
             Search = query.Search,
+            Element = query.Element,
             ActiveOnly = true,
             Skip = query.Skip,
             Take = query.PageSize,

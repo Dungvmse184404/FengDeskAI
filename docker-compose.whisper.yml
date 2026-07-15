@@ -1,0 +1,52 @@
+# =====================================================================
+# STT self-host — faster-whisper qua "speaches" (chuẩn OpenAI /audio/transcriptions).
+# Dùng khi muốn chạy Whisper trên máy/VPS có GPU thay vì Groq cloud.
+#
+#   GPU:  docker compose -f docker-compose.whisper.yml up -d
+#   CPU:  docker compose -f docker-compose.whisper.yml --profile cpu up -d whisper-cpu
+#
+# Pull model 1 lần (PhoWhisper — fine-tune tiếng Việt):
+#   curl -X POST http://localhost:8000/v1/models -H "Content-Type: application/json" \
+#        -d '{"model":"kiendt/PhoWhisper-large-ct2"}'
+#
+# Sau đó trỏ BE tới nó — trong .env của API:
+#   Speech__BaseUrl=http://host.docker.internal:8000/v1
+#   Speech__ApiKey=
+#   Speech__Model=kiendt/PhoWhisper-large-ct2
+#
+# GPU/CPU chỉ bị chiếm KHI đang dịch (có request audio); idle giữa các lần gọi → không tải liên tục.
+# PhoWhisper chuyên tiếng Việt — nói trộn nhiều tiếng Anh có thể kém hơn Whisper đa ngữ.
+# =====================================================================
+
+services:
+  # --- Bản GPU (khuyến nghị nếu VPS/máy có NVIDIA GPU + nvidia-container-toolkit) ---
+  whisper:
+    image: ghcr.io/speaches-ai/speaches:latest-cuda
+    container_name: fengdeskai-whisper
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"   # chỉ mở nội bộ — BE gọi qua host.docker.internal, KHÔNG lộ ra internet
+    volumes:
+      - whisper-models:/home/ubuntu/.cache/huggingface   # cache model, không tải lại mỗi lần khởi động
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  # --- Bản CPU (không cần GPU; chậm hơn nhiều, chỉ nên dùng để thử hoặc audio ngắn) ---
+  whisper-cpu:
+    image: ghcr.io/speaches-ai/speaches:latest-cpu
+    container_name: fengdeskai-whisper-cpu
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - whisper-models:/home/ubuntu/.cache/huggingface
+    profiles:
+      - cpu
+
+volumes:
+  whisper-models:

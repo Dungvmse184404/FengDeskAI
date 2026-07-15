@@ -171,4 +171,7 @@ public class ProductQueryParams : PageRequest
     public Guid? StoreId { get; set; }
     public Guid? CategoryId { get; set; }
     public string? Search { get; set; }
+
+    /// <summary>Lọc theo hành phong thủy (Kim/Moc/Thuy/Hoa/Tho) — khớp cả hành chính lẫn hành phụ.</summary>
+    public FengShuiElement? Element { get; set; }
 }

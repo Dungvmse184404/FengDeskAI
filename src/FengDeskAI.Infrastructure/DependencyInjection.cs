@@ -252,6 +252,11 @@ public static class DependencyInjection
         services.AddSettings<MeshySettings>(configuration);
         services.AddHttpClient<IModel3DGenerator, MeshyModel3DGenerator>();
 
+        // STT (Whisper): giọng nói → text cho workspace intake. Provider đổi qua config Speech:BaseUrl
+        // (Groq cloud hoặc faster-whisper self-host — cùng chuẩn OpenAI /audio/transcriptions).
+        services.AddSettings<ExternalServices.Speech.SpeechSettings>(configuration);
+        services.AddHttpClient<ISpeechToTextService, ExternalServices.Speech.WhisperSpeechToTextService>();
+
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, ScoringParamSeeder>();
         services.AddScoped<IDataSeeder, ElementInputMapSeeder>();

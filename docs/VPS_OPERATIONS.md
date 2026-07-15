@@ -6,10 +6,21 @@
 ## 1. Truy cập
 
 ```bash
-ssh <user>@<vps-ip>
+ssh <user>@<vps-ip>          # ví dụ: ssh dungvu@103.241.43.36
 ```
 
-Quy tắc: **không gửi mật khẩu qua chat/AI tool**. Dùng SSH key cá nhân, xin admin thêm public key vào `~/.ssh/authorized_keys`.
+Quy tắc: **không gửi mật khẩu qua chat/AI tool**. Dùng SSH key cá nhân — bỏ **public key** (`id_ed25519.pub`, bắt đầu `ssh-ed25519 AAAA...`) vào `~/.ssh/authorized_keys`, **KHÔNG bỏ private key**.
+
+### Quyền chạy lệnh (quan trọng)
+
+Docs này viết theo kiểu **root**. Tài khoản thường (vd `dungvu`) đã được cấu hình để chạy được mọi lệnh:
+
+- **docker / docker compose / đọc log nginx** (`tail /var/log/nginx/*`): chạy trực tiếp, KHÔNG cần `sudo`.
+- **Lệnh hệ thống** (nginx, systemctl, sửa `/etc/nginx`, ...): cần quyền root. Chọn 1 trong 2:
+  - Thêm `sudo` phía trước từng lệnh: `sudo nginx -t`, `sudo systemctl reload nginx`.
+  - Hoặc gõ `sudo -i` **một lần** để thành root, rồi chạy mọi lệnh docs y nguyên (không cần `sudo`).
+
+Tài khoản `dungvu` có sudo không hỏi mật khẩu — tiện nhưng đồng nghĩa key của nó tương đương quyền root, nên **giữ private key thật kỹ**.
 
 ## 2. Kiến trúc & vị trí quan trọng
 
@@ -85,7 +96,7 @@ Quy trình khi PR có migration mới:
 
 ```bash
 cd /opt/fengdeskai/backend
-docker compose run --rm api seed
+docker compose run --rm migrate      # service "migrate" chạy "dotnet FengDeskAI.WebAPI.dll seed"
 ```
 
 3. Xác nhận: `docker logs --tail 100 fengdeskai-api` không còn `42703`.

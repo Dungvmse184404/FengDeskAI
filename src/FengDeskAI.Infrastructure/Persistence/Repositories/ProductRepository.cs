@@ -38,6 +38,8 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         if (filter.StoreId is { } storeId) query = query.Where(p => p.GardenStoreId == storeId);
         if (filter.CategoryId is { } categoryId)
             query = query.Where(p => p.ProductCategories.Any(pc => pc.CategoryId == categoryId));
+        if (filter.Element is { } element)
+            query = query.Where(p => p.Elements.Any(e => e.Element == element));
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             // Tách query thành từng từ, mỗi từ khớp ở: TÊN / MÔ TẢ / TÊN DANH MỤC ("Đèn trang trí") /

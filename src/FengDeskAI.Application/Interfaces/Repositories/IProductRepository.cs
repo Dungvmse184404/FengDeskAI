@@ -9,6 +9,9 @@ public class ProductSearchFilter
     public Guid? StoreId { get; set; }
     public Guid? CategoryId { get; set; }
     public string? Search { get; set; }
+
+    /// <summary>Lọc theo hành phong thủy — khớp cả hành chính lẫn hành phụ.</summary>
+    public FengShuiElement? Element { get; set; }
     public bool ActiveOnly { get; set; } = true;
     public int Skip { get; set; }
     public int Take { get; set; } = 20;

@@ -2,6 +2,9 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Features.Workspace.Services;
+using FengDeskAI.Application.Interfaces.External;
+using FengDeskAI.Infrastructure.ExternalServices.Speech;
+using Microsoft.Extensions.Options;
 using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -21,15 +24,21 @@ public class WorkspaceProfilesController : ApiControllerBase
     private readonly IWorkspaceProfileService _service;
     private readonly IWorkspaceIntakeService _intakeService;
     private readonly IWorkspaceElementInputClassifierService _classifier;
+    private readonly ISpeechToTextService _speechToText;
+    private readonly SpeechSettings _speechSettings;
 
     public WorkspaceProfilesController(
         IWorkspaceProfileService service,
         IWorkspaceIntakeService intakeService,
-        IWorkspaceElementInputClassifierService classifier)
+        IWorkspaceElementInputClassifierService classifier,
+        ISpeechToTextService speechToText,
+        IOptions<SpeechSettings> speechSettings)
     {
         _service = service;
         _intakeService = intakeService;
         _classifier = classifier;
+        _speechToText = speechToText;
+        _speechSettings = speechSettings.Value;
     }
 
     /// <summary>
@@ -50,6 +59,46 @@ public class WorkspaceProfilesController : ApiControllerBase
     [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
     public IActionResult GetIntakeStatus(string operationId)
         => ToActionResult(_intakeService.GetJobStatus(operationId));
+
+    /// <summary>Cờ bật/tắt STT (Whisper) — FE đọc để quyết định có ghi âm gọi Whisper hay chỉ dùng Web Speech.</summary>
+    [HttpGet("speech-config")]
+    [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
+    public IActionResult GetSpeechConfig()
+        => ToActionResult(ServiceResult<object>.Success(new { enabled = _speechSettings.Enabled }));
+
+    /// <summary>
+    /// Giọng nói → text bằng Whisper (multipart, field "file" — webm/ogg/mp3/wav). Tự nhận diện
+    /// tiếng Việt / Anh / nói trộn, không cần chọn ngôn ngữ. FE dùng Web Speech browser làm preview
+    /// live + fallback khi endpoint này lỗi (giữ flow cũ khi AI down).
+    /// </summary>
+    [HttpPost("transcriptions")]
+    [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
+    [EnableRateLimiting("workspace-intake")]
+    public async Task<IActionResult> Transcribe(IFormFile file, CancellationToken ct = default)
+    {
+        if (!_speechSettings.Enabled)
+            return ToActionResult(ServiceResult<string>.Failure(
+                ApiStatusCodes.ServiceUnavailable, "STT đang tắt.")); // FE fallback Web Speech
+        if (file is null || file.Length == 0)
+            return ToActionResult(ServiceResult<string>.Failure(ApiStatusCodes.BadRequest, "Vui lòng gửi tệp âm thanh."));
+        var maxBytes = _speechSettings.MaxFileSizeMb * 1024L * 1024L;
+        if (file.Length > maxBytes)
+            return ToActionResult(ServiceResult<string>.Failure(
+                ApiStatusCodes.BadRequest, $"Tệp âm thanh vượt quá {_speechSettings.MaxFileSizeMb}MB."));
+
+        try
+        {
+            await using var stream = file.OpenReadStream();
+            var text = await _speechToText.TranscribeAsync(stream, file.FileName, ct);
+            return ToActionResult(ServiceResult<string>.Success(text));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // FE sẽ fallback về text Web Speech — trả 503 để phân biệt với lỗi request của client.
+            return ToActionResult(ServiceResult<string>.Failure(
+                ApiStatusCodes.ServiceUnavailable, "Dịch vụ nhận diện giọng nói tạm thời không khả dụng."));
+        }
+    }
 
     /// <summary>Tải ảnh không gian lên storage (multipart, field "file") → trả link để đính kèm parse-description.</summary>
     [HttpPost("images")]
