@@ -3,6 +3,7 @@ using System;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FengDeskAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260713065010_RefactorReturnRmaFlow")]
+    partial class RefactorReturnRmaFlow
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -884,10 +887,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by_user_id");
 
-                    b.Property<Guid?>("GardenStoreId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("garden_store_id");
-
                     b.Property<bool>("IsAiEnabled")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -932,8 +931,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("GardenStoreId");
 
                     b.HasIndex("ProductId");
 
@@ -3889,11 +3886,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasForeignKey("CreatedByUserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.HasOne("FengDeskAI.Domain.Entities.Vendor.GardenStore", null)
-                        .WithMany()
-                        .HasForeignKey("GardenStoreId")
-                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", null)
                         .WithMany()

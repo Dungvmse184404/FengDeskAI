@@ -131,6 +131,10 @@ builder.Services.AddHostedService<OrderExpirationWorker>();
 // Worker poll job sinh model 3D (Meshy) đang xử lý → hoàn tất / đánh dấu lỗi.
 builder.Services.AddHostedService<Model3DPollingWorker>();
 
+// Worker SLA cho RMA: auto-reject quá hạn bằng chứng, auto-retry refund thất bại, auto-settle công nợ.
+builder.Services.AddSettings<ReturnSlaOptions>(builder.Configuration);
+builder.Services.AddHostedService<ReturnSlaWorker>();
+
 builder.Services.AddAuthorization(options =>
 {
     // Thứ tự quyền: Customer < Staff < Manager < Admin. "...OrAbove" gồm role đó + mọi role cao hơn.

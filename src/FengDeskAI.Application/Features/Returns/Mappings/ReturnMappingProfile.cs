@@ -5,7 +5,7 @@ using FengDeskAI.Domain.Entities.Sales;
 
 namespace FengDeskAI.Application.Features.Returns.Mappings;
 
-/// <summary>Map chiều đọc (entity → response) cho luồng trả hàng/hoàn tiền. Tạo entity dựng tay trong service.</summary>
+/// <summary>Map chiều đọc (entity → response) cho luồng RMA/hoàn tiền. Tạo entity dựng tay trong service.</summary>
 public class ReturnMappingProfile : Profile
 {
     public ReturnMappingProfile()
@@ -15,6 +15,7 @@ public class ReturnMappingProfile : Profile
             .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.UnitPrice * s.Quantity));
 
         CreateMap<Refund, RefundResponse>();
+        CreateMap<VendorLiability, VendorLiabilityResponse>();
         CreateMap<ReturnStatusLog, ReturnStatusLogResponse>();
 
         CreateMap<ReturnRequest, ReturnListItemResponse>()

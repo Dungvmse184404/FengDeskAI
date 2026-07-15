@@ -119,7 +119,9 @@ public class PayOsPaymentGateway : IPaymentGateway
     /// </summary>
     public Task<RefundResult> RefundAsync(RefundRequest request, CancellationToken ct = default)
     {
-        var refundId = $"REFUND-{request.OrderCode}-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}";
+        // Mã tham chiếu suy ra TẤT ĐỊNH từ idempotency key → gọi lại cùng key trả cùng kết quả
+        // (mô phỏng hành vi idempotent của cổng thật). Khi có API refund thật, thay bằng lời gọi HTTP.
+        var refundId = request.GatewayRef ?? $"REFUND-{request.IdempotencyKey}";
         return Task.FromResult(new RefundResult(
             Success: true,
             ProviderRefundId: refundId,
