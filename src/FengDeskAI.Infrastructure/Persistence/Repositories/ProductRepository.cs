@@ -148,6 +148,9 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
     public Task<ProductModel3D?> GetModel3DAsync(Guid productId, CancellationToken ct = default)
         => _context.Set<ProductModel3D>().FirstOrDefaultAsync(m => m.ProductId == productId, ct);
 
+    public Task<ProductModel3D?> GetModel3DIncludingDeletedAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<ProductModel3D>().IgnoreQueryFilters().FirstOrDefaultAsync(m => m.ProductId == productId, ct);
+
     public async Task AddModel3DAsync(ProductModel3D model, CancellationToken ct = default)
         => await _context.Set<ProductModel3D>().AddAsync(model, ct);
 

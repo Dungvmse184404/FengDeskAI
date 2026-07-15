@@ -248,13 +248,9 @@ public static class DependencyInjection
         services.AddHttpClient<IFileStorage, SupabaseFileStorage>();
         services.AddHttpClient<IImageEncoder, ImageEncoder>();
 
-        // Sinh model 3D từ ảnh (Meshy AI). Mock mặc định để khỏi tốn credit; toggle MeshySettings:UseMock.
+        // Sinh model 3D từ ảnh — luôn dùng Meshy AI thật.
         services.AddSettings<MeshySettings>(configuration);
-        var meshySettings = configuration.GetSettings<MeshySettings>();
-        if (meshySettings.UseMock)
-            services.AddHttpClient<IModel3DGenerator, MockModel3DGenerator>();
-        else
-            services.AddHttpClient<IModel3DGenerator, MeshyModel3DGenerator>();
+        services.AddHttpClient<IModel3DGenerator, MeshyModel3DGenerator>();
 
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, ScoringParamSeeder>();
