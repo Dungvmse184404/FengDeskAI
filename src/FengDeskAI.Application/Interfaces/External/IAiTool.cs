@@ -15,6 +15,12 @@ public sealed record AiToolCall(string Name, string ArgumentsJson);
 public sealed record AiProductRef(Guid Id, string Name);
 
 /// <summary>
+/// Thanh toán PayOS do confirm_order tạo trong lượt chat. AiChatService gắn block máy-đọc-được vào
+/// cuối tin nhắn AI (deterministic — không phó mặc model chép lại link) để FE render card QR/nút thanh toán.
+/// </summary>
+public sealed record AiPaymentRef(Guid OrderId, decimal Amount, string CheckoutUrl, string? QrCode, int ExpiresInMinutes);
+
+/// <summary>
 /// Ngữ cảnh thực thi tool — scope theo user để không lộ dữ liệu người khác.
 /// <paramref name="ChatboxId"/>: phòng đang hội thoại (dùng cho tool đọc thông tin đối phương theo consent).
 /// <paramref name="IsPrivateRoom"/>: true = phòng riêng user↔AI (SendAsync); false = phòng chung nhiều người
@@ -29,6 +35,9 @@ public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEm
     /// không phó mặc cho model nhớ quy tắc hyperlink.
     /// </summary>
     public List<AiProductRef> Products { get; } = new();
+
+    /// <summary>Thanh toán tạo trong lượt này (confirm_order + PayOS). Null = không có.</summary>
+    public AiPaymentRef? Payment { get; set; }
 }
 
 /// <summary>

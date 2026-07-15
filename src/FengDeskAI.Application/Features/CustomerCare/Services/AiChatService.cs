@@ -113,6 +113,8 @@ public sealed class AiChatService : IAiChatService
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
             // Kiểm duyệt GUID "trần" model lỡ phun ra cho user (giữ nguyên GUID trong URL /products/...).
             completion = completion with { Content = Common.AiTextSanitizer.CensorEntityIds(completion.Content) };
+            // Gắn card thanh toán SAU khi censor (block chứa orderId GUID — censor trước sẽ phá hỏng).
+            completion = completion with { Content = AppendPaymentBlock(completion.Content, ctx.Payment) };
         }
         catch (Exception ex)
         {
@@ -402,6 +404,26 @@ public sealed class AiChatService : IAiChatService
             content = content.Remove(idx, p.Name.Length).Insert(idx, $"[{matched}]({url})");
         }
         return content;
+    }
+
+    /// <summary>
+    /// Gắn block thanh toán máy-đọc-được vào CUỐI tin nhắn AI khi confirm_order vừa tạo link PayOS.
+    /// Định dạng <c>@@payment:{json}@@</c> — FE tách block này ra, render card QR + nút thanh toán
+    /// (phần "đính kèm" do hệ thống xử lý, không phải model tự chép link). Lưu cùng Content nên
+    /// card vẫn hiện lại khi nạp lịch sử.
+    /// </summary>
+    private static string AppendPaymentBlock(string content, AiPaymentRef? payment)
+    {
+        if (payment is null) return content;
+        var json = System.Text.Json.JsonSerializer.Serialize(new
+        {
+            orderId = payment.OrderId,
+            amount = payment.Amount,
+            checkoutUrl = payment.CheckoutUrl,
+            qrCode = payment.QrCode,
+            expiresInMinutes = payment.ExpiresInMinutes,
+        });
+        return $"{content}\n\n@@payment:{json}@@";
     }
 
 

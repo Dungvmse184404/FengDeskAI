@@ -125,12 +125,19 @@ public sealed class ConfirmOrderTool : IAiTool
             });
         }
 
+        // Ghi vào context để AiChatService gắn card thanh toán (QR + nút) vào cuối tin nhắn — FE render,
+        // model KHÔNG cần (và không nên) tự chép link.
+        context.Payment = new AiPaymentRef(
+            order.Id, paymentResult.Data.Amount, paymentResult.Data.CheckoutUrl,
+            paymentResult.Data.QrCode, ExpiresInMinutes: 15);
+
         return ToolArgs.Json(new
         {
             orderId = order.Id,
             status = order.Status.ToString(),
-            checkoutUrl = paymentResult.Data.CheckoutUrl,
             expiresInMinutes = 15,
+            note = "Payment link and QR code are ALREADY displayed to the user as an attachment below your reply. " +
+                   "Do NOT repeat or invent any payment URL — just confirm the order and remind them to pay within 15 minutes.",
         });
     }
 }
