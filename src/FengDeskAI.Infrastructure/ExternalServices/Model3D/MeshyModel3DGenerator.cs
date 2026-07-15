@@ -10,7 +10,6 @@ namespace FengDeskAI.Infrastructure.ExternalServices.Model3D;
 
 /// <summary>
 /// Gọi Meshy AI image-to-3D (bất đồng bộ): POST tạo job → nhận task id; GET poll trạng thái.
-/// Bật bằng <c>MeshySettings.UseMock = false</c>.
 /// </summary>
 public sealed class MeshyModel3DGenerator : IModel3DGenerator
 {

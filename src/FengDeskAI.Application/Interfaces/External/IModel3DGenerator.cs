@@ -23,8 +23,7 @@ public sealed record Model3DTaskResult(
     Model3DGenerationState State, int Progress, string? GlbUrl, string? ThumbnailUrl, string? Error);
 
 /// <summary>
-/// Sinh model 3D từ ảnh — impl mặc định gọi Meshy AI (image-to-3D, bất đồng bộ).
-/// Bật/tắt mock bằng <c>MeshySettings.UseMock</c>. Job chạy ngầm: caller start → nhận taskId,
+/// Sinh model 3D từ ảnh — gọi Meshy AI (image-to-3D, bất đồng bộ). Job chạy ngầm: caller start → nhận taskId,
 /// worker nền poll qua <see cref="GetTaskAsync"/> tới khi Succeeded rồi tải GLB qua <see cref="DownloadAsync"/>.
 /// </summary>
 public interface IModel3DGenerator

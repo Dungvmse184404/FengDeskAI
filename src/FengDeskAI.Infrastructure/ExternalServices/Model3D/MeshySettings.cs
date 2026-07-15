@@ -5,9 +5,6 @@ public class MeshySettings
 {
     public const string SectionName = "MeshySettings";
 
-    /// <summary>True → dùng mock (không gọi Meshy, không tốn credit); False → gọi Meshy thật.</summary>
-    public bool UseMock { get; set; } = true;
-
     /// <summary>Base URL của Meshy OpenAPI.</summary>
     public string BaseUrl { get; set; } = "https://api.meshy.ai";
 
@@ -36,7 +33,4 @@ public class MeshySettings
 
     /// <summary>Có sinh texture hay không.</summary>
     public bool ShouldTexture { get; set; } = true;
-
-    /// <summary>URL mock trả về khi <see cref="UseMock"/> = true (một file GLB công khai để demo).</summary>
-    public string MockGlbUrl { get; set; } = "https://modelviewer.dev/shared-assets/models/Astronaut.glb";
 }
