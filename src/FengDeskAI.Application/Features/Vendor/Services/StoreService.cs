@@ -477,6 +477,38 @@ public class StoreService : IStoreService
     }
 
     /// <summary>Owner của store hoặc Admin (KHÔNG gồm nhân viên — staff không được sửa store).</summary>
+    // ===== Membership + thống kê =====
+
+    public async Task<IServiceResult<StoreMembershipResponse>> GetMyMembershipAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default)
+    {
+        if (!await _uow.Stores.ExistsAsync(id, ct))
+            return ServiceResult<StoreMembershipResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+
+        var owner = await _uow.Stores.GetOwnerAsync(id, userId, ct);
+        // Staff chỉ tính khi KHÔNG phải owner — owner luôn thắng.
+        var isStaff = owner is null && await _uow.Stores.IsAcceptedStaffAsync(id, userId, ct);
+
+        return ServiceResult<StoreMembershipResponse>.Success(new StoreMembershipResponse
+        {
+            IsPrimaryOwner = owner?.IsPrimary == true,
+            IsOwner = owner is not null,
+            IsStaff = isStaff,
+            IsAdmin = isAdmin,
+            CanManage = owner is not null || isStaff || isAdmin,
+        });
+    }
+
+    public async Task<IServiceResult<StoreStatisticsResponse>> GetStatisticsAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default)
+    {
+        if (!await _uow.Stores.ExistsAsync(id, ct))
+            return ServiceResult<StoreStatisticsResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+        // Chỉ owner (chính/đồng sở hữu) hoặc admin — garden staff KHÔNG xem được thống kê.
+        if (!await IsOwnerOrAdminAsync(id, actorUserId, isAdmin, ct))
+            return ServiceResult<StoreStatisticsResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.StatisticsForbidden);
+
+        return ServiceResult<StoreStatisticsResponse>.Success(await _uow.Stores.GetStatisticsAsync(id, ct));
+    }
+
     private async Task<bool> IsOwnerOrAdminAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
         => isAdmin || await _uow.Stores.IsOwnerAsync(storeId, userId, ct);
 

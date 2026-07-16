@@ -110,3 +110,47 @@ public class InvitationResponse
     public InvitationStatus Status { get; set; }
     public DateTime InvitedAt { get; set; }
 }
+
+/// <summary>
+/// Vai trò của user hiện tại đối với 1 store — nguồn sự thật để FE ẩn/hiện tab.
+/// Owner (chính/đồng sở hữu) full quyền; Staff (Accepted) chỉ xử lý đơn/ship,
+/// KHÔNG sửa hồ sơ, KHÔNG xem thống kê/nhân viên.
+/// </summary>
+public class StoreMembershipResponse
+{
+    /// <summary>Owner chính (IsPrimary) của store.</summary>
+    public bool IsPrimaryOwner { get; set; }
+    /// <summary>Owner chính hoặc đồng sở hữu.</summary>
+    public bool IsOwner { get; set; }
+    /// <summary>Garden staff với assignment Accepted (chỉ tính khi không phải owner).</summary>
+    public bool IsStaff { get; set; }
+    /// <summary>Platform admin.</summary>
+    public bool IsAdmin { get; set; }
+    /// <summary>Được thao tác nghiệp vụ trên store (owner | staff | admin).</summary>
+    public bool CanManage { get; set; }
+}
+
+/// <summary>Thống kê cửa hàng cho dashboard vendor (chỉ owner/admin).</summary>
+public class StoreStatisticsResponse
+{
+    /// <summary>Tổng doanh thu hàng (Subtotal) của các delivery đã Delivered.</summary>
+    public decimal TotalRevenue { get; set; }
+    /// <summary>Tổng phí ship của các delivery đã Delivered.</summary>
+    public decimal TotalShippingFee { get; set; }
+    public int TotalDeliveries { get; set; }
+    /// <summary>Đếm delivery theo trạng thái (Pending/Preparing/Shipped/Delivered/…).</summary>
+    public Dictionary<string, int> DeliveriesByStatus { get; set; } = new();
+    public int ProductCount { get; set; }
+    /// <summary>Số nhân viên Accepted.</summary>
+    public int StaffCount { get; set; }
+    /// <summary>Doanh thu 6 tháng gần nhất (gồm tháng hiện tại).</summary>
+    public List<MonthlyRevenuePoint> RevenueByMonth { get; set; } = new();
+}
+
+public class MonthlyRevenuePoint
+{
+    public int Year { get; set; }
+    public int Month { get; set; }
+    public decimal Revenue { get; set; }
+    public int DeliveredCount { get; set; }
+}

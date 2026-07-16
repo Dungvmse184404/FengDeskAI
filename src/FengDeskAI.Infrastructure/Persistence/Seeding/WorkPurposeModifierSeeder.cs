@@ -8,85 +8,54 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
 /// <summary>
 /// Seed <c>work_purpose_element_modifiers</c>: bẻ vector lý tưởng theo mục đích làm việc.
-/// Idempotent theo (work_purpose, element).
+/// Data đọc từ <c>seed-data/work-purpose-modifiers.json</c>. Idempotent theo (work_purpose, element).
+/// Delta (có thể âm) nhân với hệ số scale.
 /// </summary>
 public class WorkPurposeModifierSeeder : IDataSeeder
 {
     private readonly AppDbContext _context;
+    private readonly SeedDataLoader _loader;
     private readonly ILogger<WorkPurposeModifierSeeder> _logger;
 
-    public WorkPurposeModifierSeeder(AppDbContext context, ILogger<WorkPurposeModifierSeeder> logger)
+    public WorkPurposeModifierSeeder(AppDbContext context, SeedDataLoader loader, ILogger<WorkPurposeModifierSeeder> logger)
     {
         _context = context;
+        _loader = loader;
         _logger = logger;
     }
 
     public int Order => 4;
     public string Name => "Work purpose element modifiers (intent)";
 
-    // (purpose, element, delta) — delta có thể âm.
-    private static readonly (WorkPurpose Purpose, FengShuiElement Element, decimal Delta)[] Rows =
+    public sealed class Row
     {
-        // Office: cần cấu trúc + tập trung.
-        (WorkPurpose.Office, FengShuiElement.Kim, 0.05m),
-        (WorkPurpose.Office, FengShuiElement.Tho, 0.05m),
-        // Study: trí tuệ (Thủy) + minh mẫn (Kim).
-        (WorkPurpose.Study, FengShuiElement.Thuy, 0.10m),
-        (WorkPurpose.Study, FengShuiElement.Kim, 0.05m),
-        // Reading: tĩnh (Thủy) + sinh khí nhẹ (Mộc).
-        (WorkPurpose.Reading, FengShuiElement.Thuy, 0.10m),
-        (WorkPurpose.Reading, FengShuiElement.Moc, 0.05m),
-        // Creative: sinh trưởng (Mộc) + linh hoạt (Thủy).
-        (WorkPurpose.Creative, FengShuiElement.Moc, 0.10m),
-        (WorkPurpose.Creative, FengShuiElement.Thuy, 0.05m),
-        // Gaming: năng lượng (Hỏa) + phản xạ (Kim), giảm tĩnh.
-        (WorkPurpose.Gaming, FengShuiElement.Hoa, 0.05m),
-        (WorkPurpose.Gaming, FengShuiElement.Kim, 0.05m),
-        (WorkPurpose.Gaming, FengShuiElement.Thuy, -0.05m),
-        // Mixed: cân bằng nhẹ về Thổ.
-        (WorkPurpose.Mixed, FengShuiElement.Tho, 0.05m),
-
-        // Cooking: nhiệt (Hỏa, bếp núc) + no đủ (Thổ).
-        (WorkPurpose.Cooking, FengShuiElement.Hoa, 0.10m),
-        (WorkPurpose.Cooking, FengShuiElement.Tho, 0.05m),
-        // Dining: sum vầy no đủ (Thổ) + ấm áp (Hỏa).
-        (WorkPurpose.Dining, FengShuiElement.Tho, 0.10m),
-        (WorkPurpose.Dining, FengShuiElement.Hoa, 0.05m),
-        // Relaxation: linh hoạt thư thái (Thủy) + tươi mới (Mộc), giảm nhiệt (Hỏa).
-        (WorkPurpose.Relaxation, FengShuiElement.Thuy, 0.10m),
-        (WorkPurpose.Relaxation, FengShuiElement.Moc, 0.05m),
-        (WorkPurpose.Relaxation, FengShuiElement.Hoa, -0.05m),
-        // Sleep: tĩnh tâm (Thủy) + phục hồi (Mộc), giảm mạnh nhiệt (Hỏa) để không kích thích.
-        (WorkPurpose.Sleep, FengShuiElement.Thuy, 0.10m),
-        (WorkPurpose.Sleep, FengShuiElement.Moc, 0.05m),
-        (WorkPurpose.Sleep, FengShuiElement.Hoa, -0.10m),
-        // Childcare: sinh trưởng an toàn (Mộc), giảm sắc bén (Kim).
-        (WorkPurpose.Childcare, FengShuiElement.Moc, 0.10m),
-        (WorkPurpose.Childcare, FengShuiElement.Kim, -0.05m),
-        // Exercise: năng lượng vận động (Hỏa) + kỷ luật dẻo dai (Kim).
-        (WorkPurpose.Exercise, FengShuiElement.Hoa, 0.10m),
-        (WorkPurpose.Exercise, FengShuiElement.Kim, 0.05m),
-    };
+        public WorkPurpose Purpose { get; set; }
+        public FengShuiElement Element { get; set; }
+        public decimal Delta { get; set; }
+    }
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        var file = _loader.Load<WeightedSeedFile<Row>>("work-purpose-modifiers.json");
+        var scale = _loader.EffectiveScale(file.WeightScale);
+
         var set = _context.Set<WorkPurposeElementModifier>();
         var existing = (await set.Select(x => new { x.WorkPurpose, x.Element }).ToListAsync(ct))
             .Select(x => (x.WorkPurpose, x.Element)).ToHashSet();
 
         int added = 0;
-        foreach (var (purpose, element, delta) in Rows)
+        foreach (var row in file.Rows)
         {
-            if (existing.Contains((purpose, element))) continue;
+            if (existing.Contains((row.Purpose, row.Element))) continue;
             await set.AddAsync(new WorkPurposeElementModifier
             {
-                WorkPurpose = purpose,
-                Element = element,
-                Delta = delta,
+                WorkPurpose = row.Purpose,
+                Element = row.Element,
+                Delta = row.Delta * scale,
             }, ct);
             added++;
         }
         if (added > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed work_purpose_element_modifiers: thêm {Added} row.", added);
+        _logger.LogInformation("Seed work_purpose_element_modifiers: thêm {Added} row (scale {Scale}).", added, scale);
     }
 }

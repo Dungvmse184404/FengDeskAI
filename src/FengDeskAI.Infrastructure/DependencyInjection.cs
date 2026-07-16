@@ -257,6 +257,7 @@ public static class DependencyInjection
         services.AddSettings<ExternalServices.Speech.SpeechSettings>(configuration);
         services.AddHttpClient<ISpeechToTextService, ExternalServices.Speech.WhisperSpeechToTextService>();
 
+        services.AddScoped<SeedDataLoader>();
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, ScoringParamSeeder>();
         services.AddScoped<IDataSeeder, ElementInputMapSeeder>();

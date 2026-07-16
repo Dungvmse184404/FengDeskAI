@@ -1,0 +1,14 @@
+{
+  "weightScale": 1.0,
+  "rows": [
+    { "code": "SELF_SHARE", "value": 0.60, "description": "Tỉ trọng bản mệnh trong personalVector." },
+    { "code": "SUPPORT_SHARE", "value": 0.30, "description": "Tỉ trọng hành sinh ra mệnh (mẹ)." },
+    { "code": "CHILD_SHARE", "value": 0.10, "description": "Tỉ trọng hành mệnh sinh ra (con)." },
+    { "code": "MATERIAL_SHARE", "value": 0.60, "description": "Tỉ trọng chất liệu trong productVector." },
+    { "code": "COLOR_SHARE", "value": 0.40, "description": "Tỉ trọng màu/hình khối trong productVector." },
+    { "code": "USER_CONFLICT_PENALTY", "value": 0.30, "description": "Trừ điểm khi hành sản phẩm khắc mệnh (scope Shared/Public)." },
+    { "code": "DIRECTION_PENALTY", "value": 0.15, "description": "Trừ điểm khi mọi hướng hợp vật phẩm đều bị chắn." },
+    { "code": "FALLBACK_PRIMARY", "value": 0.70, "description": "Trọng số hành chính khi backfill từ product_elements." },
+    { "code": "FALLBACK_SECONDARY", "value": 0.30, "description": "Trọng số hành phụ khi backfill từ product_elements." }
+  ]
+}

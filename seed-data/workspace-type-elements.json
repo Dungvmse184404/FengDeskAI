@@ -1,0 +1,29 @@
+{
+  "weightScale": 1.0,
+  "rows": [
+    { "name": "Personal Desk", "ideal": { "tho": 0.25, "kim": 0.20, "thuy": 0.15, "moc": 0.30, "hoa": 0.10 }, "interior": { "tho": 0.35, "kim": 0.20, "thuy": 0.10, "moc": 0.25, "hoa": 0.10 } },
+    { "name": "Home Office", "ideal": { "tho": 0.20, "kim": 0.20, "thuy": 0.20, "moc": 0.30, "hoa": 0.10 }, "interior": { "tho": 0.30, "kim": 0.20, "thuy": 0.10, "moc": 0.30, "hoa": 0.10 } },
+    { "name": "Private Office", "ideal": { "tho": 0.25, "kim": 0.30, "thuy": 0.15, "moc": 0.20, "hoa": 0.10 }, "interior": { "tho": 0.35, "kim": 0.25, "thuy": 0.10, "moc": 0.20, "hoa": 0.10 } },
+    { "name": "Meeting Room", "ideal": { "tho": 0.30, "kim": 0.30, "thuy": 0.10, "moc": 0.20, "hoa": 0.10 }, "interior": { "tho": 0.40, "kim": 0.30, "thuy": 0.05, "moc": 0.15, "hoa": 0.10 } },
+    { "name": "Co-working Booth", "ideal": { "tho": 0.20, "kim": 0.25, "thuy": 0.15, "moc": 0.30, "hoa": 0.10 }, "interior": { "tho": 0.30, "kim": 0.25, "thuy": 0.10, "moc": 0.25, "hoa": 0.10 } },
+    { "name": "Open Workspace", "ideal": { "tho": 0.20, "kim": 0.20, "thuy": 0.20, "moc": 0.30, "hoa": 0.10 }, "interior": { "tho": 0.30, "kim": 0.25, "thuy": 0.10, "moc": 0.25, "hoa": 0.10 } },
+    { "name": "Reception / Lounge", "ideal": { "tho": 0.30, "kim": 0.25, "thuy": 0.10, "moc": 0.15, "hoa": 0.20 }, "interior": { "tho": 0.35, "kim": 0.25, "thuy": 0.10, "moc": 0.10, "hoa": 0.20 } },
+    { "name": "Kitchen", "ideal": { "tho": 0.25, "kim": 0.15, "thuy": 0.10, "moc": 0.15, "hoa": 0.35 }, "interior": { "tho": 0.20, "kim": 0.30, "thuy": 0.10, "moc": 0.10, "hoa": 0.30 } },
+    { "name": "Living Room", "ideal": { "tho": 0.25, "kim": 0.15, "thuy": 0.15, "moc": 0.25, "hoa": 0.20 }, "interior": { "tho": 0.25, "kim": 0.15, "thuy": 0.15, "moc": 0.30, "hoa": 0.15 } },
+    { "name": "Bedroom", "ideal": { "tho": 0.25, "kim": 0.10, "thuy": 0.30, "moc": 0.25, "hoa": 0.10 }, "interior": { "tho": 0.25, "kim": 0.10, "thuy": 0.20, "moc": 0.35, "hoa": 0.10 } },
+    { "name": "Dining Room", "ideal": { "tho": 0.35, "kim": 0.15, "thuy": 0.10, "moc": 0.15, "hoa": 0.25 }, "interior": { "tho": 0.30, "kim": 0.15, "thuy": 0.10, "moc": 0.30, "hoa": 0.15 } },
+    { "name": "Kids Room", "ideal": { "tho": 0.25, "kim": 0.05, "thuy": 0.15, "moc": 0.35, "hoa": 0.20 }, "interior": { "tho": 0.25, "kim": 0.10, "thuy": 0.15, "moc": 0.30, "hoa": 0.20 } },
+    { "name": "Balcony", "ideal": { "tho": 0.20, "kim": 0.10, "thuy": 0.25, "moc": 0.35, "hoa": 0.10 }, "interior": { "tho": 0.20, "kim": 0.10, "thuy": 0.20, "moc": 0.40, "hoa": 0.10 } },
+    { "name": "Home Gym", "ideal": { "tho": 0.20, "kim": 0.25, "thuy": 0.10, "moc": 0.15, "hoa": 0.30 }, "interior": { "tho": 0.15, "kim": 0.35, "thuy": 0.10, "moc": 0.15, "hoa": 0.25 } },
+    { "name": "Altar Room", "ideal": { "tho": 0.40, "kim": 0.15, "thuy": 0.05, "moc": 0.10, "hoa": 0.30 }, "interior": { "tho": 0.25, "kim": 0.10, "thuy": 0.05, "moc": 0.30, "hoa": 0.30 } },
+    { "name": "Bathroom", "ideal": { "tho": 0.15, "kim": 0.20, "thuy": 0.45, "moc": 0.10, "hoa": 0.10 }, "interior": { "tho": 0.20, "kim": 0.30, "thuy": 0.35, "moc": 0.10, "hoa": 0.05 } },
+    { "name": "Study Room", "ideal": { "tho": 0.20, "kim": 0.15, "thuy": 0.30, "moc": 0.30, "hoa": 0.05 }, "interior": { "tho": 0.25, "kim": 0.15, "thuy": 0.20, "moc": 0.35, "hoa": 0.05 } },
+    { "name": "Home Theater", "ideal": { "tho": 0.15, "kim": 0.30, "thuy": 0.10, "moc": 0.15, "hoa": 0.30 }, "interior": { "tho": 0.20, "kim": 0.35, "thuy": 0.10, "moc": 0.10, "hoa": 0.25 } },
+    { "name": "Walk-in Closet", "ideal": { "tho": 0.25, "kim": 0.35, "thuy": 0.10, "moc": 0.15, "hoa": 0.15 }, "interior": { "tho": 0.20, "kim": 0.30, "thuy": 0.10, "moc": 0.25, "hoa": 0.15 } },
+    { "name": "Garage", "ideal": { "tho": 0.25, "kim": 0.45, "thuy": 0.10, "moc": 0.05, "hoa": 0.15 }, "interior": { "tho": 0.30, "kim": 0.40, "thuy": 0.10, "moc": 0.05, "hoa": 0.15 } },
+    { "name": "Rooftop Garden", "ideal": { "tho": 0.15, "kim": 0.05, "thuy": 0.20, "moc": 0.45, "hoa": 0.15 }, "interior": { "tho": 0.20, "kim": 0.05, "thuy": 0.15, "moc": 0.50, "hoa": 0.10 } },
+    { "name": "Guest Room", "ideal": { "tho": 0.30, "kim": 0.20, "thuy": 0.20, "moc": 0.20, "hoa": 0.10 }, "interior": { "tho": 0.30, "kim": 0.20, "thuy": 0.15, "moc": 0.25, "hoa": 0.10 } },
+    { "name": "Meditation Room", "ideal": { "tho": 0.25, "kim": 0.05, "thuy": 0.35, "moc": 0.30, "hoa": 0.05 }, "interior": { "tho": 0.30, "kim": 0.05, "thuy": 0.25, "moc": 0.35, "hoa": 0.05 } },
+    { "name": "Laundry Room", "ideal": { "tho": 0.15, "kim": 0.30, "thuy": 0.40, "moc": 0.10, "hoa": 0.05 }, "interior": { "tho": 0.15, "kim": 0.35, "thuy": 0.35, "moc": 0.10, "hoa": 0.05 } }
+  ]
+}

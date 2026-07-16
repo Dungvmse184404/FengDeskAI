@@ -1,0 +1,31 @@
+{
+  "weightScale": 1.0,
+  "rows": [
+    { "purpose": "Office", "element": "Kim", "delta": 0.05 },
+    { "purpose": "Office", "element": "Tho", "delta": 0.05 },
+    { "purpose": "Study", "element": "Thuy", "delta": 0.10 },
+    { "purpose": "Study", "element": "Kim", "delta": 0.05 },
+    { "purpose": "Reading", "element": "Thuy", "delta": 0.10 },
+    { "purpose": "Reading", "element": "Moc", "delta": 0.05 },
+    { "purpose": "Creative", "element": "Moc", "delta": 0.10 },
+    { "purpose": "Creative", "element": "Thuy", "delta": 0.05 },
+    { "purpose": "Gaming", "element": "Hoa", "delta": 0.05 },
+    { "purpose": "Gaming", "element": "Kim", "delta": 0.05 },
+    { "purpose": "Gaming", "element": "Thuy", "delta": -0.05 },
+    { "purpose": "Mixed", "element": "Tho", "delta": 0.05 },
+    { "purpose": "Cooking", "element": "Hoa", "delta": 0.10 },
+    { "purpose": "Cooking", "element": "Tho", "delta": 0.05 },
+    { "purpose": "Dining", "element": "Tho", "delta": 0.10 },
+    { "purpose": "Dining", "element": "Hoa", "delta": 0.05 },
+    { "purpose": "Relaxation", "element": "Thuy", "delta": 0.10 },
+    { "purpose": "Relaxation", "element": "Moc", "delta": 0.05 },
+    { "purpose": "Relaxation", "element": "Hoa", "delta": -0.05 },
+    { "purpose": "Sleep", "element": "Thuy", "delta": 0.10 },
+    { "purpose": "Sleep", "element": "Moc", "delta": 0.05 },
+    { "purpose": "Sleep", "element": "Hoa", "delta": -0.10 },
+    { "purpose": "Childcare", "element": "Moc", "delta": 0.10 },
+    { "purpose": "Childcare", "element": "Kim", "delta": -0.05 },
+    { "purpose": "Exercise", "element": "Hoa", "delta": 0.10 },
+    { "purpose": "Exercise", "element": "Kim", "delta": 0.05 }
+  ]
+}

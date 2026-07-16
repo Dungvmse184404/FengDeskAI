@@ -37,6 +37,16 @@ public class StoresController : ApiControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, ct));
 
+    /// <summary>Vai trò của user hiện tại với store (owner chính / đồng sở hữu / staff) — FE ẩn/hiện tab theo đây.</summary>
+    [HttpGet("{id:guid}/membership")]
+    public async Task<IActionResult> GetMyMembership(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.GetMyMembershipAsync(id, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>Thống kê dashboard vendor (doanh thu, đơn theo trạng thái…). Chỉ owner/admin — staff bị 403.</summary>
+    [HttpGet("{id:guid}/statistics")]
+    public async Task<IActionResult> GetStatistics(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.GetStatisticsAsync(id, CurrentUserId, IsAdmin, ct));
+
     /// <summary>Tự mở store (self-service). Người tạo trở thành owner chính + được cấp role GardenOwner.</summary>
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateStoreRequest request, CancellationToken ct)

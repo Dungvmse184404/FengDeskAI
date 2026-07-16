@@ -1,0 +1,29 @@
+{
+  "weightScale": 1.0,
+  "rows": [
+    { "name": "Personal Desk", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Bàn làm việc cá nhân." },
+    { "name": "Home Office", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng làm việc tại nhà, một người dùng." },
+    { "name": "Private Office", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng làm việc riêng trong công ty." },
+    { "name": "Meeting Room", "isPublic": true, "personalWeight": 0.5, "scope": "Shared", "description": "Phòng họp dùng chung nhiều người." },
+    { "name": "Co-working Booth", "isPublic": true, "personalWeight": 0.5, "scope": "Shared", "description": "Khoang làm việc chia sẻ." },
+    { "name": "Open Workspace", "isPublic": true, "personalWeight": 0.5, "scope": "Shared", "description": "Khu làm việc mở dùng chung." },
+    { "name": "Reception / Lounge", "isPublic": true, "personalWeight": 0.5, "scope": "Public", "description": "Khu lễ tân / tiếp khách chung." },
+    { "name": "Kitchen", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Bếp — khu vực nấu nướng trong nhà." },
+    { "name": "Living Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng khách — không gian sinh hoạt chung." },
+    { "name": "Bedroom", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng ngủ." },
+    { "name": "Dining Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng ăn." },
+    { "name": "Kids Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng trẻ em." },
+    { "name": "Balcony", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Ban công / sân nhỏ." },
+    { "name": "Home Gym", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Góc tập luyện tại nhà." },
+    { "name": "Altar Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Gian thờ — không gian thờ cúng tổ tiên." },
+    { "name": "Bathroom", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng tắm / nhà vệ sinh." },
+    { "name": "Study Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng học — dành cho học sinh, sinh viên." },
+    { "name": "Home Theater", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng giải trí / rạp phim mini tại nhà." },
+    { "name": "Walk-in Closet", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng thay đồ." },
+    { "name": "Garage", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Nhà để xe." },
+    { "name": "Rooftop Garden", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Sân thượng / vườn trên mái." },
+    { "name": "Guest Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng dành cho khách." },
+    { "name": "Meditation Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng thiền / yoga." },
+    { "name": "Laundry Room", "isPublic": false, "personalWeight": 1.0, "scope": "Private", "description": "Phòng giặt đồ." }
+  ]
+}

@@ -1,4 +1,3 @@
-using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
@@ -6,46 +5,53 @@ using Microsoft.Extensions.Logging;
 
 namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
-/// <summary>Seed 9 tham số engine chấm điểm v3 (PHẦN F). Idempotent theo code.</summary>
+/// <summary>
+/// Seed 9 tham số engine chấm điểm v3 (PHẦN F). Data đọc từ <c>seed-data/scoring-params.json</c>.
+/// Idempotent theo code. LƯU Ý: các cặp *Share cần giữ tổng = 1.0 — chỉ chỉnh scale khi hiểu rõ engine.
+/// </summary>
 public class ScoringParamSeeder : IDataSeeder
 {
     private readonly AppDbContext _context;
+    private readonly SeedDataLoader _loader;
     private readonly ILogger<ScoringParamSeeder> _logger;
 
-    public ScoringParamSeeder(AppDbContext context, ILogger<ScoringParamSeeder> logger)
+    public ScoringParamSeeder(AppDbContext context, SeedDataLoader loader, ILogger<ScoringParamSeeder> logger)
     {
         _context = context;
+        _loader = loader;
         _logger = logger;
     }
 
     public int Order => 2;
     public string Name => "Scoring params (engine v3)";
 
-    private static readonly (string Code, decimal Value, string Desc)[] Params =
+    public sealed class Row
     {
-        (ScoringParamCodes.SelfShare, 0.60m, "Tỉ trọng bản mệnh trong personalVector."),
-        (ScoringParamCodes.SupportShare, 0.30m, "Tỉ trọng hành sinh ra mệnh (mẹ)."),
-        (ScoringParamCodes.ChildShare, 0.10m, "Tỉ trọng hành mệnh sinh ra (con)."),
-        (ScoringParamCodes.MaterialShare, 0.60m, "Tỉ trọng chất liệu trong productVector."),
-        (ScoringParamCodes.ColorShare, 0.40m, "Tỉ trọng màu/hình khối trong productVector."),
-        (ScoringParamCodes.UserConflictPenalty, 0.30m, "Trừ điểm khi hành sản phẩm khắc mệnh (scope Shared/Public)."),
-        (ScoringParamCodes.DirectionPenalty, 0.15m, "Trừ điểm khi mọi hướng hợp vật phẩm đều bị chắn."),
-        (ScoringParamCodes.FallbackPrimary, 0.70m, "Trọng số hành chính khi backfill từ product_elements."),
-        (ScoringParamCodes.FallbackSecondary, 0.30m, "Trọng số hành phụ khi backfill từ product_elements."),
-    };
+        public string Code { get; set; } = "";
+        public decimal Value { get; set; }
+        public string Description { get; set; } = "";
+    }
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        var file = _loader.Load<WeightedSeedFile<Row>>("scoring-params.json");
+        var scale = _loader.EffectiveScale(file.WeightScale);
+
         var set = _context.Set<ScoringParam>();
         var existing = await set.Select(x => x.Code).ToListAsync(ct);
         int added = 0;
-        foreach (var (code, value, desc) in Params)
+        foreach (var row in file.Rows)
         {
-            if (existing.Contains(code)) continue;
-            await set.AddAsync(new ScoringParam { Code = code, Value = value, Description = desc }, ct);
+            if (existing.Contains(row.Code)) continue;
+            await set.AddAsync(new ScoringParam
+            {
+                Code = row.Code,
+                Value = row.Value * scale,
+                Description = row.Description,
+            }, ct);
             added++;
         }
         if (added > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed scoring_params: thêm {Added} row.", added);
+        _logger.LogInformation("Seed scoring_params: thêm {Added} row (scale {Scale}).", added, scale);
     }
 }

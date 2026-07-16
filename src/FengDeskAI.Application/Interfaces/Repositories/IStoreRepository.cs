@@ -14,6 +14,10 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     // ===== Owner (quan hệ nhiều-nhiều garden_store_owners) =====
     /// <summary>True nếu user là owner của store.</summary>
     Task<bool> IsOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default);
+    /// <summary>True nếu user là garden staff với assignment Accepted của store.</summary>
+    Task<bool> IsAcceptedStaffAsync(Guid storeId, Guid userId, CancellationToken ct = default);
+    /// <summary>Thống kê dashboard vendor: doanh thu, đơn theo trạng thái, sản phẩm, nhân viên.</summary>
+    Task<StoreStatisticsResponse> GetStatisticsAsync(Guid storeId, CancellationToken ct = default);
     /// <summary>Các store mà user đồng sở hữu (kèm Address/Owners) — cho kênh người bán.</summary>
     Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default);
     /// <summary>Store mà user là owner HOẶC garden staff đã Accepted — nguồn sự thật cho /stores/mine + quyền vào seller.</summary>

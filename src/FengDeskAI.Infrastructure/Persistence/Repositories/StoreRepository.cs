@@ -38,6 +38,66 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
         => _context.Set<GardenStoreOwner>()
             .AnyAsync(o => o.GardenStoreId == storeId && o.OwnerUserId == userId, ct);
 
+    public Task<bool> IsAcceptedStaffAsync(Guid storeId, Guid userId, CancellationToken ct = default)
+        => _context.Set<GardenStaffAssignment>()
+            .AnyAsync(a => a.GardenStoreId == storeId && a.StaffId == userId && a.Status == InvitationStatus.Accepted, ct);
+
+    public async Task<StoreStatisticsResponse> GetStatisticsAsync(Guid storeId, CancellationToken ct = default)
+    {
+        var deliveries = _context.Set<Domain.Entities.Sales.Delivery>()
+            .AsNoTracking()
+            .Where(d => d.GardenStoreId == storeId);
+
+        // Đếm theo trạng thái (1 GROUP BY).
+        var byStatus = await deliveries
+            .GroupBy(d => d.Status)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var delivered = deliveries.Where(d => d.Status == Domain.Enums.Sales.DeliveryStatus.Delivered);
+        var totalRevenue = await delivered.SumAsync(d => (decimal?)d.Subtotal, ct) ?? 0m;
+        var totalShippingFee = await delivered.SumAsync(d => (decimal?)d.ShippingFee, ct) ?? 0m;
+
+        // Doanh thu 6 tháng gần nhất — lấy row gọn về rồi group C# (coalesce DeliveredAt/CreatedAt khó translate).
+        var now = DateTime.UtcNow;
+        var monthStart = new DateTime(now.Year, now.Month, 1, 0, 0, 0, DateTimeKind.Utc).AddMonths(-5);
+        var deliveredRows = await delivered
+            .Select(d => new { d.DeliveredAt, d.CreatedAt, d.Subtotal })
+            .ToListAsync(ct);
+        var revenueByMonth = deliveredRows
+            .Select(d => new { At = d.DeliveredAt ?? d.CreatedAt, d.Subtotal })
+            .Where(d => d.At >= monthStart)
+            .GroupBy(d => new { d.At.Year, d.At.Month })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g => new MonthlyRevenuePoint
+            {
+                Year = g.Key.Year,
+                Month = g.Key.Month,
+                Revenue = g.Sum(x => x.Subtotal),
+                DeliveredCount = g.Count(),
+            })
+            .ToList();
+
+        var productCount = await _context.Set<Domain.Entities.Catalog.Product>()
+            .AsNoTracking()
+            .CountAsync(p => p.GardenStoreId == storeId, ct);
+
+        var staffCount = await _context.Set<GardenStaffAssignment>()
+            .AsNoTracking()
+            .CountAsync(a => a.GardenStoreId == storeId && a.Status == InvitationStatus.Accepted, ct);
+
+        return new StoreStatisticsResponse
+        {
+            TotalRevenue = totalRevenue,
+            TotalShippingFee = totalShippingFee,
+            TotalDeliveries = byStatus.Sum(x => x.Count),
+            DeliveriesByStatus = byStatus.ToDictionary(x => x.Key.ToString(), x => x.Count),
+            ProductCount = productCount,
+            StaffCount = staffCount,
+            RevenueByMonth = revenueByMonth,
+        };
+    }
+
     public Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default)
         => _set.AsNoTracking()
             .Where(s => s.Owners.Any(o => o.OwnerUserId == ownerUserId))

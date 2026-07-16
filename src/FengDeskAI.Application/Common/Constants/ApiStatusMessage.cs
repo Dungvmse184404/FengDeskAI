@@ -208,6 +208,9 @@ public static class ApiStatusMessages
         public const string OwnerRemoved = "Đã gỡ chủ sở hữu.";
         public const string OwnerNotInStore = "Người dùng không phải chủ sở hữu cửa hàng này.";
         public const string CannotRemoveLastPrimary = "Không thể gỡ chủ sở hữu chính cuối cùng của cửa hàng.";
+
+        // ===== Thống kê =====
+        public const string StatisticsForbidden = "Chỉ chủ cửa hàng mới xem được thống kê.";
     }
 
     public static class StoreAddress

@@ -45,4 +45,10 @@ public interface IStoreService
     Task<IServiceResult<List<InvitationResponse>>> GetMyInvitationsAsync(Guid userId, CancellationToken ct = default);
     Task<IServiceResult<StaffAssignmentResponse>> AcceptInvitationAsync(Guid assignmentId, Guid userId, CancellationToken ct = default);
     Task<IServiceResult> RejectInvitationAsync(Guid assignmentId, Guid userId, CancellationToken ct = default);
+
+    // ===== Membership + thống kê =====
+    /// <summary>Vai trò của user hiện tại đối với store (owner/staff) — FE dùng để ẩn/hiện tab.</summary>
+    Task<IServiceResult<StoreMembershipResponse>> GetMyMembershipAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default);
+    /// <summary>Thống kê dashboard vendor. Chỉ owner/admin — staff bị 403.</summary>
+    Task<IServiceResult<StoreStatisticsResponse>> GetStatisticsAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
 }

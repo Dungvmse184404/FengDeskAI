@@ -1,0 +1,30 @@
+{
+  "styles": [
+    { "code": "Modern", "name": "Hiện đại", "sort": 1 },
+    { "code": "Classic", "name": "Cổ điển", "sort": 2 },
+    { "code": "Minimal", "name": "Tối giản", "sort": 3 },
+    { "code": "Industrial", "name": "Công nghiệp", "sort": 4 },
+    { "code": "Scandinavian", "name": "Bắc Âu", "sort": 5 },
+    { "code": "Bohemian", "name": "Bohemian", "sort": 6 },
+    { "code": "Vintage", "name": "Vintage", "sort": 7 },
+    { "code": "Rustic", "name": "Mộc mạc", "sort": 8 },
+    { "code": "Luxury", "name": "Sang trọng", "sort": 9 },
+    { "code": "Japandi", "name": "Japandi", "sort": 10 },
+    { "code": "Traditional", "name": "Truyền thống", "sort": 11 },
+    { "code": "Other", "name": "Khác", "sort": 99 }
+  ],
+  "vibes": [
+    { "code": "Focus", "name": "Tập trung", "sort": 1 },
+    { "code": "Relax", "name": "Thư giãn", "sort": 2 },
+    { "code": "Creative", "name": "Sáng tạo", "sort": 3 },
+    { "code": "Calm", "name": "Tĩnh tại", "sort": 4 },
+    { "code": "Energize", "name": "Năng lượng", "sort": 5 }
+  ],
+  "elements": [
+    { "code": "Kim", "name": "Kim (Metal)", "sort": 1 },
+    { "code": "Moc", "name": "Mộc (Wood)", "sort": 2 },
+    { "code": "Thuy", "name": "Thủy (Water)", "sort": 3 },
+    { "code": "Hoa", "name": "Hỏa (Fire)", "sort": 4 },
+    { "code": "Tho", "name": "Thổ (Earth)", "sort": 5 }
+  ]
+}

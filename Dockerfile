@@ -34,6 +34,8 @@ ENV ASPNETCORE_ENVIRONMENT=Production \
 USER $APP_UID
 
 COPY --from=build /app/publish .
+# Seed data JSON (đọc lúc chạy seeder) — nằm ngoài code app, xem seed-data/README.md.
+COPY --from=build /src/seed-data ./seed-data
 
 EXPOSE 8080
 ENTRYPOINT ["dotnet", "FengDeskAI.WebAPI.dll"]

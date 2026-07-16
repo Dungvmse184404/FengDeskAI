@@ -10,58 +10,48 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
 /// <summary>
 /// Seed vector Ideal + Interior cho từng loại không gian hệ thống (khớp theo Name).
-/// Chạy sau <see cref="WorkspaceTypeSeeder"/>. Idempotent theo (type, source, element).
+/// Data đọc từ <c>seed-data/workspace-type-elements.json</c>. Chạy sau <see cref="WorkspaceTypeSeeder"/>.
+/// Idempotent theo (type, source, element). Weight nhân với hệ số scale.
 /// </summary>
 public class WorkspaceTypeElementSeeder : IDataSeeder
 {
     private readonly AppDbContext _context;
+    private readonly SeedDataLoader _loader;
     private readonly ILogger<WorkspaceTypeElementSeeder> _logger;
 
-    public WorkspaceTypeElementSeeder(AppDbContext context, ILogger<WorkspaceTypeElementSeeder> logger)
+    public WorkspaceTypeElementSeeder(AppDbContext context, SeedDataLoader loader, ILogger<WorkspaceTypeElementSeeder> logger)
     {
         _context = context;
+        _loader = loader;
         _logger = logger;
     }
 
     public int Order => 6; // sau WorkspaceTypeSeeder (Order = 5)
     public string Name => "Workspace type elements (ideal + interior vectors)";
 
-    // Vector = (Tho, Kim, Thuy, Moc, Hoa), Σ = 1.0.
-    private static readonly Dictionary<string, ((decimal Tho, decimal Kim, decimal Thuy, decimal Moc, decimal Hoa) Ideal,
-                                               (decimal Tho, decimal Kim, decimal Thuy, decimal Moc, decimal Hoa) Interior)> ByName = new()
+    /// <summary>Vector 5 hành, tổng nên = 1.0 (trước khi scale).</summary>
+    public sealed class Vector
     {
-        ["Personal Desk"]      = ((0.25m, 0.20m, 0.15m, 0.30m, 0.10m), (0.35m, 0.20m, 0.10m, 0.25m, 0.10m)),
-        ["Home Office"]        = ((0.20m, 0.20m, 0.20m, 0.30m, 0.10m), (0.30m, 0.20m, 0.10m, 0.30m, 0.10m)),
-        ["Private Office"]     = ((0.25m, 0.30m, 0.15m, 0.20m, 0.10m), (0.35m, 0.25m, 0.10m, 0.20m, 0.10m)),
-        ["Meeting Room"]       = ((0.30m, 0.30m, 0.10m, 0.20m, 0.10m), (0.40m, 0.30m, 0.05m, 0.15m, 0.10m)),
-        ["Co-working Booth"]   = ((0.20m, 0.25m, 0.15m, 0.30m, 0.10m), (0.30m, 0.25m, 0.10m, 0.25m, 0.10m)),
-        ["Open Workspace"]     = ((0.20m, 0.20m, 0.20m, 0.30m, 0.10m), (0.30m, 0.25m, 0.10m, 0.25m, 0.10m)),
-        ["Reception / Lounge"] = ((0.30m, 0.25m, 0.10m, 0.15m, 0.20m), (0.35m, 0.25m, 0.10m, 0.10m, 0.20m)),
+        public decimal Tho { get; set; }
+        public decimal Kim { get; set; }
+        public decimal Thuy { get; set; }
+        public decimal Moc { get; set; }
+        public decimal Hoa { get; set; }
+    }
 
-        // Không gian sinh hoạt tại nhà — Ideal theo công năng, Interior theo vật liệu/décor điển hình.
-        ["Kitchen"]      = ((0.25m, 0.15m, 0.10m, 0.15m, 0.35m), (0.20m, 0.30m, 0.10m, 0.10m, 0.30m)),
-        ["Living Room"]  = ((0.25m, 0.15m, 0.15m, 0.25m, 0.20m), (0.25m, 0.15m, 0.15m, 0.30m, 0.15m)),
-        ["Bedroom"]      = ((0.25m, 0.10m, 0.30m, 0.25m, 0.10m), (0.25m, 0.10m, 0.20m, 0.35m, 0.10m)),
-        ["Dining Room"]  = ((0.35m, 0.15m, 0.10m, 0.15m, 0.25m), (0.30m, 0.15m, 0.10m, 0.30m, 0.15m)),
-        ["Kids Room"]    = ((0.25m, 0.05m, 0.15m, 0.35m, 0.20m), (0.25m, 0.10m, 0.15m, 0.30m, 0.20m)),
-        ["Balcony"]      = ((0.20m, 0.10m, 0.25m, 0.35m, 0.10m), (0.20m, 0.10m, 0.20m, 0.40m, 0.10m)),
-        ["Home Gym"]     = ((0.20m, 0.25m, 0.10m, 0.15m, 0.30m), (0.15m, 0.35m, 0.10m, 0.15m, 0.25m)),
-
-        // Mở rộng thêm — không gian đặc trưng nhà ở Việt Nam + phòng chức năng còn thiếu.
-        ["Altar Room"]      = ((0.40m, 0.15m, 0.05m, 0.10m, 0.30m), (0.25m, 0.10m, 0.05m, 0.30m, 0.30m)),
-        ["Bathroom"]        = ((0.15m, 0.20m, 0.45m, 0.10m, 0.10m), (0.20m, 0.30m, 0.35m, 0.10m, 0.05m)),
-        ["Study Room"]      = ((0.20m, 0.15m, 0.30m, 0.30m, 0.05m), (0.25m, 0.15m, 0.20m, 0.35m, 0.05m)),
-        ["Home Theater"]    = ((0.15m, 0.30m, 0.10m, 0.15m, 0.30m), (0.20m, 0.35m, 0.10m, 0.10m, 0.25m)),
-        ["Walk-in Closet"]  = ((0.25m, 0.35m, 0.10m, 0.15m, 0.15m), (0.20m, 0.30m, 0.10m, 0.25m, 0.15m)),
-        ["Garage"]          = ((0.25m, 0.45m, 0.10m, 0.05m, 0.15m), (0.30m, 0.40m, 0.10m, 0.05m, 0.15m)),
-        ["Rooftop Garden"]  = ((0.15m, 0.05m, 0.20m, 0.45m, 0.15m), (0.20m, 0.05m, 0.15m, 0.50m, 0.10m)),
-        ["Guest Room"]      = ((0.30m, 0.20m, 0.20m, 0.20m, 0.10m), (0.30m, 0.20m, 0.15m, 0.25m, 0.10m)),
-        ["Meditation Room"] = ((0.25m, 0.05m, 0.35m, 0.30m, 0.05m), (0.30m, 0.05m, 0.25m, 0.35m, 0.05m)),
-        ["Laundry Room"]    = ((0.15m, 0.30m, 0.40m, 0.10m, 0.05m), (0.15m, 0.35m, 0.35m, 0.10m, 0.05m)),
-    };
+    public sealed class Row
+    {
+        public string Name { get; set; } = "";
+        public Vector Ideal { get; set; } = new();
+        public Vector Interior { get; set; } = new();
+    }
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        var file = _loader.Load<WeightedSeedFile<Row>>("workspace-type-elements.json");
+        var scale = _loader.EffectiveScale(file.WeightScale);
+        var byName = file.Rows.ToDictionary(r => r.Name, StringComparer.OrdinalIgnoreCase);
+
         var types = await _context.Set<WorkspaceType>()
             .Where(t => t.IsSystemSeeded)
             .Select(t => new { t.Id, t.Name })
@@ -74,21 +64,20 @@ public class WorkspaceTypeElementSeeder : IDataSeeder
         int added = 0;
         foreach (var type in types)
         {
-            if (!ByName.TryGetValue(type.Name, out var cfg)) continue;
+            if (!byName.TryGetValue(type.Name, out var cfg)) continue;
 
-            added += await AddSourceAsync(set, existing, type.Id, WorkspaceElementSources.Ideal, cfg.Ideal, ct);
-            added += await AddSourceAsync(set, existing, type.Id, WorkspaceElementSources.Interior, cfg.Interior, ct);
+            added += await AddSourceAsync(set, existing, type.Id, WorkspaceElementSources.Ideal, cfg.Ideal, scale, ct);
+            added += await AddSourceAsync(set, existing, type.Id, WorkspaceElementSources.Interior, cfg.Interior, scale, ct);
         }
 
         if (added > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed workspace_type_elements: thêm {Added} row.", added);
+        _logger.LogInformation("Seed workspace_type_elements: thêm {Added} row (scale {Scale}).", added, scale);
     }
 
     private static async Task<int> AddSourceAsync(
         DbSet<WorkspaceTypeElement> set,
         HashSet<(Guid, string, FengShuiElement)> existing,
-        Guid typeId, string source,
-        (decimal Tho, decimal Kim, decimal Thuy, decimal Moc, decimal Hoa) v,
+        Guid typeId, string source, Vector v, decimal scale,
         CancellationToken ct)
     {
         var rows = new (FengShuiElement Element, decimal Weight)[]
@@ -110,7 +99,7 @@ public class WorkspaceTypeElementSeeder : IDataSeeder
                 WorkspaceTypeId = typeId,
                 Source = source,
                 Element = element,
-                Weight = weight,
+                Weight = weight * scale,
             }, ct);
             added++;
         }
