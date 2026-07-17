@@ -126,7 +126,9 @@ public static class FengShuiCalculator
         if (dateOfBirth is null)
             return null;
 
-        int year = dateOfBirth.Value.Year;
+        // Năm ÂM lịch (không phải năm dương thô) — người sinh tháng 1–2 trước Tết thuộc năm âm TRƯỚC.
+        var (_, _, year, _) = LunarCalendarConverter.Solar2Lunar(
+            dateOfBirth.Value.Day, dateOfBirth.Value.Month, dateOfBirth.Value.Year);
         var element = GetNapAmElement(year); // mệnh Nạp Âm: chỉ cần năm sinh
 
         // Kua + hướng tốt cần giới tính Nam/Nữ.

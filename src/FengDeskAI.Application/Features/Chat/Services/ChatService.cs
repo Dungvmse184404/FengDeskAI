@@ -64,15 +64,25 @@ public class ChatService : IChatService
     public async Task<IServiceResult> DeleteChatboxAsync(Guid userId, Guid chatboxId, CancellationToken ct = default)
     {
         var participant = await _uow.Chatboxes.GetParticipantAsync(chatboxId, userId, ct);
-        if (participant is null || participant.Role != ParticipantRole.Owner)
-            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Chỉ chủ phòng mới được xóa cuộc trò chuyện.");
+        if (participant is null)
+            return ServiceResult.Failure(ApiStatusCodes.Forbidden, "Bạn không thuộc phòng này.");
+
+        // Người được mời / join (không phải Owner): KHÔNG xóa phòng — chỉ RỜI phòng
+        // (gỡ quan hệ participant). Phòng + lịch sử giữ nguyên cho các thành viên còn lại;
+        // với phòng hỗ trợ, staff rời phòng → phòng quay lại hàng đợi (queue tính theo participant).
+        if (participant.Role != ParticipantRole.Owner)
+        {
+            _uow.Chatboxes.RemoveParticipant(participant);
+            await _uow.SaveChangesAsync(ct);
+            return ServiceResult.Success("Đã rời cuộc trò chuyện.");
+        }
 
         var chatbox = await _uow.Chatboxes.GetByIdAsync(chatboxId, ct);
         if (chatbox is null)
             return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phòng.");
 
-        // Soft-delete (IsDeleted=true) cho mọi phòng. Phân biệt ở lúc đọc: phòng còn tin nhắn → hiện mờ (đóng);
-        // phòng rỗng → biến mất khỏi danh sách + hàng đợi (coi như xóa hẳn).
+        // Owner xóa: soft-delete (IsDeleted=true) cho mọi phòng. Phân biệt ở lúc đọc: phòng còn tin nhắn
+        // → hiện mờ (đóng) ở màn quản trị; phòng rỗng → biến mất khỏi danh sách + hàng đợi (coi như xóa hẳn).
         _uow.Chatboxes.Remove(chatbox);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success("Đã xóa cuộc trò chuyện.");

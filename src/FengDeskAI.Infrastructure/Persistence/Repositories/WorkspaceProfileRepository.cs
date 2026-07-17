@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -24,4 +25,79 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
     public Task ClearDefaultsForUserAsync(Guid userId, CancellationToken ct = default)
         => _set.Where(w => w.UserId == userId && w.IsDefault)
                .ExecuteUpdateAsync(s => s.SetProperty(w => w.IsDefault, false), ct);
+
+    // ===== Placement sản phẩm đã mua vào workspace =====
+
+    public Task<List<WorkspaceProductPlacement>> GetPlacementsAsync(Guid workspaceProfileId, CancellationToken ct = default)
+        => _context.Set<WorkspaceProductPlacement>()
+            .AsNoTracking()
+            .Where(p => p.WorkspaceProfileId == workspaceProfileId)
+            .Include(p => p.OrderItem).ThenInclude(i => i.Delivery)
+            .Include(p => p.Product).ThenInclude(pr => pr.Elements)
+            .Include(p => p.Product).ThenInclude(pr => pr.Images)
+            .OrderBy(p => p.PlacedAt)
+            .ToListAsync(ct);
+
+    public Task<WorkspaceProductPlacement?> GetPlacementByOrderItemAsync(Guid orderItemId, Guid userId, CancellationToken ct = default)
+        => _context.Set<WorkspaceProductPlacement>()
+            .FirstOrDefaultAsync(p => p.OrderItemId == orderItemId && p.UserId == userId, ct);
+
+    public async Task AddPlacementAsync(WorkspaceProductPlacement placement, CancellationToken ct = default)
+        => await _context.Set<WorkspaceProductPlacement>().AddAsync(placement, ct);
+
+    public void RemovePlacement(WorkspaceProductPlacement placement)
+        => _context.Set<WorkspaceProductPlacement>().Remove(placement);
+
+    public async Task<List<PurchasedItemResponse>> GetPurchasedItemsAsync(Guid userId, CancellationToken ct = default)
+    {
+        // Đủ điều kiện đặt phòng: đơn của user, delivery không bị hủy/hoàn/giao thất bại.
+        // Chưa Delivered vẫn cho đặt — sẽ chỉ tính vào vector PREVIEW.
+        var excluded = new[]
+        {
+            Domain.Enums.Sales.DeliveryStatus.Cancelled,
+            Domain.Enums.Sales.DeliveryStatus.Returned,
+            Domain.Enums.Sales.DeliveryStatus.DeliveryFailed,
+        };
+
+        var items = await _context.Set<Domain.Entities.Sales.OrderItem>()
+            .AsNoTracking()
+            .Where(i => i.Order.CustomerId == userId
+                        && i.Delivery != null
+                        && !excluded.Contains(i.Delivery!.Status))
+            .Select(i => new
+            {
+                i.Id,
+                i.ProductName,
+                i.Quantity,
+                Status = i.Delivery!.Status,
+                ProductId = i.ProductItem.ProductId,
+                Image = i.ProductItem.Product.Images
+                    .OrderBy(img => img.SortOrder)
+                    .Select(img => img.Url)
+                    .FirstOrDefault(),
+            })
+            .OrderByDescending(i => i.Id)
+            .ToListAsync(ct);
+
+        var itemIds = items.Select(i => i.Id).ToList();
+        var placements = await _context.Set<WorkspaceProductPlacement>()
+            .AsNoTracking()
+            .Where(p => itemIds.Contains(p.OrderItemId))
+            .Select(p => new { p.OrderItemId, p.WorkspaceProfileId, WorkspaceName = p.WorkspaceProfile.Name })
+            .ToListAsync(ct);
+        var placedBy = placements.ToDictionary(p => p.OrderItemId);
+
+        return items.Select(i => new PurchasedItemResponse
+        {
+            OrderItemId = i.Id,
+            ProductId = i.ProductId,
+            ProductName = i.ProductName,
+            ProductImage = i.Image,
+            Quantity = i.Quantity,
+            DeliveryStatus = i.Status.ToString(),
+            IsDelivered = i.Status == Domain.Enums.Sales.DeliveryStatus.Delivered,
+            PlacedWorkspaceProfileId = placedBy.TryGetValue(i.Id, out var p) ? p.WorkspaceProfileId : null,
+            PlacedWorkspaceName = placedBy.TryGetValue(i.Id, out var p2) ? p2.WorkspaceName : null,
+        }).ToList();
+    }
 }

@@ -29,6 +29,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
             .IsRequired();
 
         builder.Property(u => u.DateOfBirth).HasColumnName("date_of_birth");
+        builder.Property(u => u.BirthTime).HasColumnName("birth_time");
         builder.Property(u => u.Gender).HasColumnName("gender").HasConversion<int>();
         builder.Property(u => u.Phone).HasColumnName("phone").HasMaxLength(20);
         builder.HasIndex(u => u.Phone).IsUnique().HasFilter("phone IS NOT NULL");

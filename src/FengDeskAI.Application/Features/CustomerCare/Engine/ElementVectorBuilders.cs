@@ -59,14 +59,62 @@ public static class WorkspaceVectorBuilder
         IReadOnlyCollection<WorkspaceProfileInput> inputs,
         ElementInputResolver resolver,
         IEnumerable<WorkspaceTypeElement> interiorFallback)
-    {
-        if (inputs.Count > 0)
-            return ElementVector.FromContributions(
-                resolver.ResolveMany(inputs.Select(i => (i.InputKind, i.InputCode))));
+        => BuildCurrentWithProducts(inputs, resolver, interiorFallback,
+            Array.Empty<(ElementVector, decimal)>());
 
-        return ElementVector.FromContributions(interiorFallback
-            .Where(e => string.Equals(e.Source, WorkspaceElementSources.Interior, StringComparison.OrdinalIgnoreCase))
-            .Select(e => new KeyValuePair<FengShuiElement, decimal>(e.Element, e.Weight)));
+    /// <summary>
+    /// Số "phiếu" quy ước cho vector Interior fallback khi phòng KHÔNG khai input nào —
+    /// coi nội thất mặc định như phòng trung bình 5 món đồ, để 1 sản phẩm đặt vào không chiếm 50%.
+    /// </summary>
+    public const decimal InteriorFallbackVotes = 5m;
+
+    /// <summary>
+    /// Hiện trạng phòng + SẢN PHẨM ĐÃ MUA đặt vào (tính lúc đọc, không lưu):
+    /// mỗi input user khai = 1 phiếu; mỗi sản phẩm = vector chuẩn hóa × voteWeight
+    /// (mặc định 1.0, scale theo DecorItem code trong element_input_map).
+    /// Phòng không khai input → Interior fallback được scale thành <see cref="InteriorFallbackVotes"/> phiếu.
+    /// </summary>
+    public static ElementVector BuildCurrentWithProducts(
+        IReadOnlyCollection<WorkspaceProfileInput> inputs,
+        ElementInputResolver resolver,
+        IEnumerable<WorkspaceTypeElement> interiorFallback,
+        IReadOnlyCollection<(ElementVector Vector, decimal VoteWeight)> productContributions)
+    {
+        // Vector nền cộng THÔ (không chuẩn hóa vội) — giữ nguyên tổng "phiếu" để sản phẩm
+        // cộng vào đúng tỉ lệ. Lưu ý FromContributions tự Normalize nên KHÔNG dùng ở đây.
+        ElementVector baseVector;
+        if (inputs.Count > 0)
+        {
+            // Mỗi input ≈ 1 phiếu (mỗi code trong element_input_map có Σ weight ≈ 1;
+            // nếu admin giảm weight của code thì phiếu của input đó tự giảm theo — chủ đích).
+            baseVector = RawSum(resolver.ResolveMany(inputs.Select(i => (i.InputKind, i.InputCode))));
+        }
+        else
+        {
+            // Interior fallback (Σ=1) scale thành N phiếu quy ước.
+            baseVector = RawSum(interiorFallback
+                    .Where(e => string.Equals(e.Source, WorkspaceElementSources.Interior, StringComparison.OrdinalIgnoreCase))
+                    .Select(e => new KeyValuePair<FengShuiElement, decimal>(e.Element, e.Weight)))
+                .Normalize()
+                .Scale(InteriorFallbackVotes);
+        }
+
+        foreach (var (vector, voteWeight) in productContributions)
+        {
+            if (voteWeight <= 0m) continue;
+            baseVector = baseVector.Add(vector.Normalize().Scale(voteWeight));
+        }
+
+        return baseVector.Normalize();
+    }
+
+    /// <summary>Cộng dồn contributions KHÔNG chuẩn hóa (khác <see cref="ElementVector.FromContributions"/>).</summary>
+    private static ElementVector RawSum(IEnumerable<KeyValuePair<FengShuiElement, decimal>> contributions)
+    {
+        var v = ElementVector.Zero;
+        foreach (var c in contributions)
+            v = v.Add(ElementVector.Single(c.Key).Scale(c.Value));
+        return v;
     }
 }
 
@@ -96,6 +144,17 @@ public static class ProductVectorProvider
         // Tầng 1
         if (isOverridden && overriddenVector is { } ov)
             return ov.Normalize();
+
+        // Tầng 1.5 — sản phẩm được gắn "loại vật trang trí" (DecorItem, vd SaltLamp): dùng THẲNG
+        // contributions của code đó trong element_input_map → đồng bộ tuyệt đối với tag hiện trạng
+        // workspace cùng tên (chỉnh weight 1 chỗ trong seed-data/element-input-map.json là cả hai đổi).
+        var decorInputs = inputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
+        if (decorInputs.Count > 0)
+        {
+            var decorVector = ElementVector.FromContributions(
+                resolver.ResolveMany(decorInputs.Select(i => (i.InputKind, i.InputCode))));
+            if (decorVector.L1() > 0m) return decorVector.Normalize();
+        }
 
         // Tầng 2
         if (inputs.Count > 0)

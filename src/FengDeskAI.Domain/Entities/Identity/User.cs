@@ -10,6 +10,10 @@ public class User : BaseEntity
     public string PasswordHash { get; set; } = null!;
     public string FullName { get; set; } = null!;
     public DateTime? DateOfBirth { get; set; }
+
+    /// <summary>Giờ sinh (nullable) — nhập 1 lần để AI tính đủ Tứ Trụ/Bát Tự, không bắt buộc.</summary>
+    public TimeOnly? BirthTime { get; set; }
+
     public Gender Gender { get; set; }
     public string? Phone { get; set; }
     public UserRole Role { get; set; } = UserRole.Customer;

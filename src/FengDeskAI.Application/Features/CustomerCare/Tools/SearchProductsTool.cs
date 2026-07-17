@@ -24,6 +24,8 @@ public sealed class SearchProductsTool : IAiTool
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
         ["query"] = new("string", "Search keyword (name or description; e.g. 'Hỏa', 'để bàn', 'kim loại').", Required: true),
+        ["element"] = new("string", "Optional STRICT feng shui element filter (matches the product's primary or secondary element). " +
+            "Use codes from compute_destiny_chart's favorableElementCodes.", Enum: new[] { "Kim", "Moc", "Thuy", "Hoa", "Tho" }),
         ["limit"] = new("integer", $"Maximum number of results (default {MaxLimit})."),
     };
 
@@ -33,8 +35,13 @@ public sealed class SearchProductsTool : IAiTool
         if (string.IsNullOrWhiteSpace(query))
             return ToolArgs.Error("Missing 'query' parameter.");
 
+        // Filter hành tường minh (deterministic) — bổ trợ cho keyword search vốn chỉ match tên hành trong text.
+        Domain.Enums.Workspace.FengShuiElement? element = null;
+        if (Enum.TryParse<Domain.Enums.Workspace.FengShuiElement>(ToolArgs.GetString(arguments, "element"), true, out var parsed))
+            element = parsed;
+
         var limit = Math.Clamp(ToolArgs.GetInt(arguments, "limit") ?? MaxLimit, 1, MaxLimit);
-        var result = await _products.SearchAsync(new ProductQueryParams { Search = query, Page = 1, PageSize = limit }, ct);
+        var result = await _products.SearchAsync(new ProductQueryParams { Search = query, Element = element, Page = 1, PageSize = limit }, ct);
         if (!result.IsSuccess || result.Data is null)
             return ToolArgs.Error(result.Message ?? "Search failed.");
 

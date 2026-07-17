@@ -53,4 +53,19 @@ public class AuthController : ApiControllerBase
     [Authorize]
     public async Task<IActionResult> Me(CancellationToken ct)
         => ToActionResult(await _authService.GetMeAsync(CurrentUserId, ct));
+
+    /// <summary>Cập nhật giờ sinh (HH:mm, null để xóa) — cần cho Tứ Trụ/Bát Tự đầy đủ.</summary>
+    [HttpPut("me/birth-time")]
+    [Authorize]
+    public async Task<IActionResult> UpdateBirthTime([FromBody] UpdateBirthTimeRequest request, CancellationToken ct)
+    {
+        TimeOnly? time = null;
+        if (!string.IsNullOrWhiteSpace(request.BirthTime))
+        {
+            if (!TimeOnly.TryParse(request.BirthTime, out var parsed))
+                return BadRequest(new { message = "Giờ sinh phải theo định dạng HH:mm." });
+            time = parsed;
+        }
+        return ToActionResult(await _authService.UpdateBirthTimeAsync(CurrentUserId, time, ct));
+    }
 }

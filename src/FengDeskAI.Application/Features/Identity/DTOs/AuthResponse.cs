@@ -27,6 +27,9 @@ public class UserSummary
     /// <summary>Ngày sinh (để tính mệnh Nạp Âm theo năm). Null nếu user chưa khai.</summary>
     public DateTime? DateOfBirth { get; set; }
 
+    /// <summary>Giờ sinh (HH:mm) — cần cho Tứ Trụ/Bát Tự đầy đủ. Null nếu chưa khai.</summary>
+    public TimeOnly? BirthTime { get; set; }
+
     /// <summary>0=Unspecified, 1=Male, 2=Female, 3=Other (cần cho Kua/hướng).</summary>
     public Gender Gender { get; set; }
 

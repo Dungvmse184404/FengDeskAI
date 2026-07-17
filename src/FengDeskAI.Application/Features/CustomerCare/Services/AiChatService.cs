@@ -487,6 +487,7 @@ public sealed class AiChatService : IAiChatService
             ["list_my_addresses"] = "Đang lấy danh sách địa chỉ của bạn",
             ["prepare_order"] = "Đang chuẩn bị đơn hàng của bạn",
             ["confirm_order"] = "Đang xác nhận và tạo đơn hàng",
+            ["compute_destiny_chart"] = "Đang lập lá số mệnh phong thủy",
         };
 
     private static string? ToolFriendlyNote(string toolName)
@@ -641,8 +642,8 @@ public sealed class AiChatService : IAiChatService
             "- **RESPONSE LANGUAGE:** Dynamically reply in the exact language the user is currently using (default to natural, energetic, friendly Vietnamese using \"bạn\"). Skip all greetings and small talk; go straight to the point.\n\n" +
 
             "## FUNCTION CALLING PROTOCOL\n" +
-            "- **STRICT EXECUTION:** When the user asks about themselves, their profile, workspaces, or product suitability, you **MUST IMMEDIATELY trigger the appropriate tool call**.\n" +
-            "- **NO TEXT BEFORE TOOL:** When triggering a tool, you **MUST NOT output any introductory text or announcements** (e.g., \"Đang chạy tool...\") in the final response. The tool call structure must be the very first output emitted outside the thinking block.\n" +
+            //"- **STRICT EXECUTION:** When the user asks about themselves, their profile, workspaces, or product suitability, you **MUST IMMEDIATELY trigger the appropriate tool call**.\n" +
+            //"- **NO TEXT BEFORE TOOL:** When triggering a tool, you **MUST NOT output any introductory text or announcements** (e.g., \"Đang chạy tool...\") in the final response. The tool call structure must be the very first output emitted outside the thinking block.\n" +
             "- **NEVER END WITH A PROMISE:** Never finish your turn by saying you are \"about to\" fetch/check something. Either EMIT the tool call in this very turn, or give the complete final answer.\n" +
             "- **EMPTY DATA FALLBACK:** If tools return empty data or errors, you **MUST STILL PROVIDE A CLEAR TEXT RESPONSE EXPLAINING THE SPECIFIC REASON** to the user. You are fully allowed to express skepticism or ask for clarification if the input contradicts feng shui principles.\n\n" +
 
@@ -656,6 +657,17 @@ public sealed class AiChatService : IAiChatService
             "- **PRODUCT ADVICE MUST SHOW A CLEAR CHAIN OF REASONING**: (1) Customer's mệnh/element and workspace needs; (2) Product's element and attributes; (3) Relationship (generating/overcoming/neutral) and alignment with workspace style/purpose; (4) Clear conclusion. Proactively suggest alternatives if it does not fit.\n" +
             "- Ground all feng shui claims in tool data. Never invent rules.\n" +
             "- **ALWAYS hyperlink products** using the exact format: `[Product name](/products/{id})` based on the exact product ID from the tool result.\n\n" +
+
+            "## DESTINY READING (XEM MỆNH) PROTOCOL\n" +
+            "- When the user asks about mệnh/cung mệnh/hướng tốt/tứ trụ/bát tự — for THEMSELVES: first call `get_my_profile` " +
+            "to get their dateOfBirth + gender + birthTime, then call `compute_destiny_chart` with those values. " +
+            "For ANOTHER PERSON (friend, spouse, child...): call `compute_destiny_chart` directly with the birth info they gave.\n" +
+            "- Present the reading using the tool's Vietnamese data: nạp âm name + meaning, cung mệnh with its Đông/Tây Tứ Trạch group, " +
+            "and the favorable directions WITH their cung names (Sinh Khí/Diên Niên/Thiên Y/Phục Vị) and meanings. Warn about Tuyệt Mệnh direction when relevant.\n" +
+            "- If `missing` is non-empty, still answer fully with what was computed, THEN ask for the missing info (e.g. birth time) to unlock the deeper Tứ Trụ reading.\n" +
+            "- To recommend products from a reading, use `favorableElementCodes` from the baTu result (or the destiny element) " +
+            "as the `element` filter of `search_products`/`recommend_products`.\n" +
+            "- NEVER compute mệnh/cung/tứ trụ from your own knowledge — always use the tool. End readings with a one-line note that feng shui info is for reference.\n\n" +
 
             "## ORDERING PROTOCOL\n" +
             "- To place an order for the user, first call `prepare_order` (uses their DEFAULT saved address unless told otherwise). " +

@@ -143,6 +143,23 @@ public class WorkspaceProfilesController : ApiControllerBase
     public async Task<IActionResult> GetElementAnalysis(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetElementAnalysisAsync(id, CurrentUserId, ct));
 
+    // ===== Đặt sản phẩm đã mua vào workspace (radar tính lúc đọc) =====
+
+    /// <summary>Sản phẩm đã mua đủ điều kiện đặt phòng (kèm trạng thái giao + đang đặt ở đâu).</summary>
+    [HttpGet("placements/purchasable")]
+    public async Task<IActionResult> GetPurchasedItems(CancellationToken ct)
+        => ToActionResult(await _service.GetPurchasedItemsAsync(CurrentUserId, ct));
+
+    /// <summary>Đặt (hoặc chuyển từ phòng khác) 1 order item vào workspace này.</summary>
+    [HttpPut("{id:guid}/placements")]
+    public async Task<IActionResult> PlaceProduct(Guid id, [FromBody] PlaceProductRequest request, CancellationToken ct)
+        => ToActionResult(await _service.PlaceProductAsync(id, CurrentUserId, request.OrderItemId, ct));
+
+    /// <summary>Gỡ 1 order item khỏi workspace này.</summary>
+    [HttpDelete("{id:guid}/placements/{orderItemId:guid}")]
+    public async Task<IActionResult> RemovePlacement(Guid id, Guid orderItemId, CancellationToken ct)
+        => ToActionResult(await _service.RemovePlacementAsync(id, CurrentUserId, orderItemId, ct));
+
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateWorkspaceProfileRequest request, CancellationToken ct)
         => ToActionResult(await _service.CreateAsync(CurrentUserId, request, ct));

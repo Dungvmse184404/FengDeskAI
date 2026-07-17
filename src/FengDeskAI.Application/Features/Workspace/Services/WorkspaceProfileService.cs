@@ -49,40 +49,119 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         if (profile is null)
             return ServiceResult<WorkspaceElementAnalysisResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
 
-        var (analysis, modifiers) = await AnalyzeAsync(profile, ct);
+        var ctx = await LoadAnalysisContextAsync(profile, ct);
+
+        // ── Sản phẩm đã mua đặt trong phòng: build vector từng món (tính lúc đọc, không lưu).
+        // Delivered → vào Current thật; chưa giao → chỉ vào vector PREVIEW.
+        var placements = await _uow.WorkspaceProfiles.GetPlacementsAsync(profile.Id, ct);
+        var placed = new List<PlacedProductResponse>();
+        var deliveredContribs = new List<(ElementVector Vector, decimal VoteWeight)>();
+        var previewContribs = new List<(ElementVector Vector, decimal VoteWeight)>();
+
+        if (placements.Count > 0)
+        {
+            var productIds = placements.Select(p => p.ProductId).Distinct().ToList();
+            var inputsByProduct = (await _uow.ScoringConfig.GetProductElementInputsAsync(productIds, ct))
+                .GroupBy(i => i.ProductId)
+                .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+            var prms = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+
+            foreach (var pl in placements)
+            {
+                var p = pl.Product;
+                ElementVector? overridden = p is { ElementTho: { } t, ElementKim: { } k, ElementThuy: { } w, ElementMoc: { } m, ElementHoa: { } h }
+                    ? new ElementVector(t, k, w, m, h)
+                    : null;
+                var inputs = inputsByProduct.TryGetValue(p.Id, out var list)
+                    ? list
+                    : Array.Empty<ProductElementInput>();
+
+                var vector = ProductVectorProvider.Build(
+                    p.IsVectorOverridden, overridden, inputs, ctx.Resolver,
+                    p.Elements.Select(e => (e.Element, e.IsPrimary)), prms);
+                if (vector.L1() <= 0m) continue; // sản phẩm chưa có data ngũ hành → bỏ qua
+
+                // Phiếu = Σ weight các DecorItem code của sản phẩm trong element_input_map
+                // (đồng bộ với tag hiện trạng cùng tên); không gắn DecorItem → 1 phiếu mặc định.
+                var decorCodes = inputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
+                var voteWeight = decorCodes.Count > 0
+                    ? decorCodes.Sum(c => ctx.Resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
+                    : 1.0m;
+                if (voteWeight <= 0m) voteWeight = 0m; // admin cố tình cho code weight 0 → sản phẩm không ảnh hưởng
+
+                var isDelivered = pl.OrderItem.Delivery?.Status == Domain.Enums.Sales.DeliveryStatus.Delivered;
+                var contrib = (vector, voteWeight);
+                previewContribs.Add(contrib);
+                if (isDelivered) deliveredContribs.Add(contrib);
+
+                placed.Add(new PlacedProductResponse
+                {
+                    PlacementId = pl.Id,
+                    OrderItemId = pl.OrderItemId,
+                    ProductId = pl.ProductId,
+                    ProductName = pl.OrderItem.ProductName,
+                    ProductImage = p.Images.OrderBy(img => img.SortOrder).Select(img => img.Url).FirstOrDefault(),
+                    DeliveryStatus = pl.OrderItem.Delivery?.Status.ToString() ?? "Unknown",
+                    IsDelivered = isDelivered,
+                    VoteWeight = Math.Round(voteWeight, 2),
+                });
+            }
+        }
+
+        // ── 3 vector: ideal/adjusted như cũ; current = hiện trạng + sản phẩm ĐÃ GIAO; preview = + cả đang giao.
+        var ideal = WorkspaceVectorBuilder.BuildIdeal(ctx.TypeElements);
+        var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, ctx.Modifiers);
+        var current = WorkspaceVectorBuilder.BuildCurrentWithProducts(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, deliveredContribs);
+        var previewCurrent = WorkspaceVectorBuilder.BuildCurrentWithProducts(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, previewContribs);
+        var gap = adjustedIdeal.Subtract(current);
+        var previewGap = adjustedIdeal.Subtract(previewCurrent);
+        var hasPreview = previewContribs.Count > deliveredContribs.Count;
 
         // Sắp giảm dần theo Gap: thiếu nhất (gap dương lớn) → thừa nhất (gap âm).
-        var rows = analysis.Ideal.Enumerate().Select(x => new ElementAnalysisRow
+        var rows = ideal.Enumerate().Select(x => new ElementAnalysisRow
         {
             Element = x.Element.ToString(),
             Ideal = Math.Round(x.Value, 3),
-            AdjustedIdeal = Math.Round(analysis.AdjustedIdeal[x.Element], 3),
-            Current = Math.Round(analysis.Current[x.Element], 3),
-            Gap = Math.Round(analysis.Gap[x.Element], 3),
+            AdjustedIdeal = Math.Round(adjustedIdeal[x.Element], 3),
+            Current = Math.Round(current[x.Element], 3),
+            Gap = Math.Round(gap[x.Element], 3),
+            PreviewCurrent = Math.Round(previewCurrent[x.Element], 3),
+            PreviewGap = Math.Round(previewGap[x.Element], 3),
         })
         .OrderByDescending(r => r.Gap)
         .ToList();
 
         // compat% = 1 − (Σ|gap_e| / 2), tự chuẩn hóa vì 2 vector đều Σ=1 → sumAbsGap ∈ [0, 2].
-        var compatibilityPercent = (int)Math.Round(100m * (1m - analysis.Gap.L1() / 2m), MidpointRounding.AwayFromZero);
+        var compatibilityPercent = (int)Math.Round(100m * (1m - gap.L1() / 2m), MidpointRounding.AwayFromZero);
+        var previewCompatibilityPercent = (int)Math.Round(100m * (1m - previewGap.L1() / 2m), MidpointRounding.AwayFromZero);
 
         var user = await _uow.Users.GetByIdAsync(userId, ct);
-        var insights = SpaceInsightBuilder.Build(rows, profile.WorkPurpose, modifiers, user?.DateOfBirth?.Year);
+        var insights = SpaceInsightBuilder.Build(rows, profile.WorkPurpose, ctx.Modifiers, user?.DateOfBirth?.Year);
 
         var response = new WorkspaceElementAnalysisResponse
         {
             WorkspaceProfileId = profile.Id,
-            DominantNeed = analysis.Gap.Dominant().ToString(),
+            DominantNeed = gap.Dominant().ToString(),
             Elements = rows,
             CompatibilityPercent = compatibilityPercent,
             Insights = insights,
+            HasPreview = hasPreview,
+            PreviewCompatibilityPercent = previewCompatibilityPercent,
+            PlacedProducts = placed,
         };
 
         return ServiceResult<WorkspaceElementAnalysisResponse>.Success(response);
     }
 
     /// <summary>Nạp dữ liệu cấu hình rồi dựng 4 vector ngũ hành cho workspace (dùng chung công thức với engine).</summary>
-    private async Task<(WorkspaceElementAnalysis Analysis, List<WorkPurposeElementModifier> Modifiers)> AnalyzeAsync(
+    /// <summary>Dữ liệu cấu hình cần cho phân tích vector phòng — nạp 1 lần, dùng cho cả current + preview.</summary>
+    private sealed record AnalysisContext(
+        List<WorkspaceTypeElement> TypeElements,
+        ElementInputResolver Resolver,
+        List<WorkPurposeElementModifier> Modifiers,
+        List<WorkspaceProfileInput> ProfileInputs);
+
+    private async Task<AnalysisContext> LoadAnalysisContextAsync(
         Domain.Entities.Workspace.WorkspaceProfile profile, CancellationToken ct)
     {
         var typeElements = new List<WorkspaceTypeElement>();
@@ -96,8 +175,63 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
 
-        var analysis = WorkspaceElementAnalyzer.Analyze(typeElements, modifiers, profileInputs, resolver);
-        return (analysis, modifiers);
+        return new AnalysisContext(typeElements, resolver, modifiers, profileInputs);
+    }
+
+    // ===== Đặt sản phẩm đã mua vào workspace =====
+
+    public async Task<IServiceResult<List<PurchasedItemResponse>>> GetPurchasedItemsAsync(Guid userId, CancellationToken ct = default)
+        => ServiceResult<List<PurchasedItemResponse>>.Success(
+            await _uow.WorkspaceProfiles.GetPurchasedItemsAsync(userId, ct));
+
+    public async Task<IServiceResult> PlaceProductAsync(Guid workspaceProfileId, Guid userId, Guid orderItemId, CancellationToken ct = default)
+    {
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(workspaceProfileId, userId, ct);
+        if (profile is null)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
+
+        // Xác thực order item thuộc user + đủ điều kiện (đi qua cùng query với màn danh sách).
+        var purchased = await _uow.WorkspaceProfiles.GetPurchasedItemsAsync(userId, ct);
+        var item = purchased.FirstOrDefault(i => i.OrderItemId == orderItemId);
+        if (item is null)
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, "Sản phẩm không thuộc lịch sử mua hợp lệ của bạn.");
+
+        var existing = await _uow.WorkspaceProfiles.GetPlacementByOrderItemAsync(orderItemId, userId, ct);
+        if (existing is not null)
+        {
+            if (existing.WorkspaceProfileId == workspaceProfileId)
+                return ServiceResult.Success("Sản phẩm đã nằm trong không gian này.");
+            // CHUYỂN phòng: giữ nguyên record, đổi FK — radar cả 2 phòng đổi theo ở lần đọc sau.
+            existing.WorkspaceProfileId = workspaceProfileId;
+            existing.PlacedAt = DateTime.UtcNow;
+        }
+        else
+        {
+            await _uow.WorkspaceProfiles.AddPlacementAsync(new Domain.Entities.Workspace.WorkspaceProductPlacement
+            {
+                UserId = userId,
+                WorkspaceProfileId = workspaceProfileId,
+                OrderItemId = orderItemId,
+                ProductId = item.ProductId,
+                PlacedAt = DateTime.UtcNow,
+            }, ct);
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult.Success(item.IsDelivered
+            ? "Đã đặt sản phẩm vào không gian."
+            : "Đã đặt sản phẩm vào không gian (hàng đang giao — radar hiển thị dạng xem trước).");
+    }
+
+    public async Task<IServiceResult> RemovePlacementAsync(Guid workspaceProfileId, Guid userId, Guid orderItemId, CancellationToken ct = default)
+    {
+        var placement = await _uow.WorkspaceProfiles.GetPlacementByOrderItemAsync(orderItemId, userId, ct);
+        if (placement is null || placement.WorkspaceProfileId != workspaceProfileId)
+            return ServiceResult.Failure(ApiStatusCodes.NotFound, "Sản phẩm không nằm trong không gian này.");
+
+        _uow.WorkspaceProfiles.RemovePlacement(placement);
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult.Success("Đã gỡ sản phẩm khỏi không gian.");
     }
 
     public async Task<IServiceResult<WorkspaceProfileResponse>> GetDefaultAsync(Guid userId, CancellationToken ct = default)

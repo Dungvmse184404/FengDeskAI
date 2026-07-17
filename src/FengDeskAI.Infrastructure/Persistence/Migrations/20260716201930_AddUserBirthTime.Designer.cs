@@ -3,6 +3,7 @@ using System;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -11,9 +12,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FengDeskAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260716201930_AddUserBirthTime")]
+    partial class AddUserBirthTime
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3498,68 +3501,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.ToTable("stores_address", (string)null);
                 });
 
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Workspace.WorkspaceProductPlacement", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid?>("CreatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("created_by");
-
-                    b.Property<bool>("IsDeleted")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false)
-                        .HasColumnName("is_deleted");
-
-                    b.Property<Guid>("OrderItemId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("order_item_id");
-
-                    b.Property<DateTime>("PlacedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("placed_at");
-
-                    b.Property<Guid>("ProductId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("product_id");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("updated_at");
-
-                    b.Property<Guid?>("UpdatedBy")
-                        .HasColumnType("uuid")
-                        .HasColumnName("updated_by");
-
-                    b.Property<Guid>("UserId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("user_id");
-
-                    b.Property<Guid>("WorkspaceProfileId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("workspace_profile_id");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("OrderItemId")
-                        .IsUnique()
-                        .HasFilter("is_deleted = FALSE");
-
-                    b.HasIndex("ProductId");
-
-                    b.HasIndex("WorkspaceProfileId", "UserId");
-
-                    b.ToTable("workspace_product_placements", (string)null);
-                });
-
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Workspace.WorkspaceProfile", b =>
                 {
                     b.Property<Guid>("Id")
@@ -4424,33 +4365,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Store");
 
                     b.Navigation("Ward");
-                });
-
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Workspace.WorkspaceProductPlacement", b =>
-                {
-                    b.HasOne("FengDeskAI.Domain.Entities.Sales.OrderItem", "OrderItem")
-                        .WithMany()
-                        .HasForeignKey("OrderItemId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
-                        .WithMany()
-                        .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("FengDeskAI.Domain.Entities.Workspace.WorkspaceProfile", "WorkspaceProfile")
-                        .WithMany()
-                        .HasForeignKey("WorkspaceProfileId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("OrderItem");
-
-                    b.Navigation("Product");
-
-                    b.Navigation("WorkspaceProfile");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Workspace.WorkspaceProfile", b =>

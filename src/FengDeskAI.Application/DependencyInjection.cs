@@ -112,6 +112,8 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, GetChatPartnerInfoTool>();
         services.AddScoped<IAiTool, ListMyAddressesTool>();
         services.AddScoped<IAiTool, GetShopInfoTool>();
+        // Xem mệnh cho người bất kỳ (stateless, không đụng DB) — nạp âm + Bát Trạch + Tứ Trụ.
+        services.AddScoped<IAiTool, ComputeDestinyChartTool>();
         // Tool có tác dụng phụ (tạo đơn) — chỉ enable ở phòng riêng, xem AiChatService.PrivateRoomOnlyTools.
         services.AddScoped<IAiTool, PrepareOrderTool>();
         services.AddScoped<IAiTool, ConfirmOrderTool>();

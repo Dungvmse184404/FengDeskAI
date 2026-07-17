@@ -96,6 +96,17 @@ public class AuthService : IAuthService
         return ServiceResult<UserSummary>.Success(_mapper.Map<UserSummary>(user));
     }
 
+    public async Task<IServiceResult<UserSummary>> UpdateBirthTimeAsync(Guid userId, TimeOnly? birthTime, CancellationToken ct = default)
+    {
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        if (user is null)
+            return ServiceResult<UserSummary>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Auth.UserNotFound);
+
+        user.BirthTime = birthTime;
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<UserSummary>.Success(_mapper.Map<UserSummary>(user), "Đã cập nhật giờ sinh.");
+    }
+
     private async Task<AuthResponse> IssueTokensAsync(User user, CancellationToken ct, RefreshToken? replacedFromToken = null)
     {
         var (access, accessExp) = _tokenService.GenerateAccessToken(user);

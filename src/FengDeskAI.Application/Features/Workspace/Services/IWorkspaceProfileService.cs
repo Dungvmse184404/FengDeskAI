@@ -19,4 +19,15 @@ public interface IWorkspaceProfileService
 
     /// <summary>Từ vựng màu/vật liệu/hình khối hợp lệ — cho FE dựng tag picker "hiện trạng phòng hiện tại".</summary>
     Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(CancellationToken ct = default);
+
+    // ===== Đặt sản phẩm đã mua vào workspace (radar tính lúc đọc, chỉ lưu mapping) =====
+
+    /// <summary>Sản phẩm user đã mua đủ điều kiện đặt phòng + đang đặt ở đâu.</summary>
+    Task<IServiceResult<List<PurchasedItemResponse>>> GetPurchasedItemsAsync(Guid userId, CancellationToken ct = default);
+
+    /// <summary>Đặt (hoặc CHUYỂN từ phòng khác) 1 order item đã mua vào workspace.</summary>
+    Task<IServiceResult> PlaceProductAsync(Guid workspaceProfileId, Guid userId, Guid orderItemId, CancellationToken ct = default);
+
+    /// <summary>Gỡ 1 order item khỏi workspace.</summary>
+    Task<IServiceResult> RemovePlacementAsync(Guid workspaceProfileId, Guid userId, Guid orderItemId, CancellationToken ct = default);
 }

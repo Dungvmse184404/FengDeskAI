@@ -12,9 +12,11 @@ public sealed class GetMyProfileTool : IAiTool
     public GetMyProfileTool(IAuthService auth) => _auth = auth;
 
     public string Name => "get_my_profile";
-    public string Description => "Get the current user's account information (name, email, phone, role, date of birth, gender) " +
+    public string Description => "Get the current user's account information (name, email, phone, role, date of birth, birthTime, gender) " +
         "PLUS their pre-computed feng shui profile under 'fengShui' (element/mệnh, kuaNumber, kuaGroup, favorableDirections). " +
-        "Always use these provided feng shui values directly — never calculate mệnh/cung/directions yourself.";
+        "Always use these provided feng shui values directly — never calculate mệnh/cung/directions yourself. " +
+        "For a DEEPER reading of the current user (Bát Trạch directions with cung names, Tứ Trụ/Bát Tự four pillars), " +
+        "pass their dateOfBirth + gender + birthTime (if present) to the compute_destiny_chart tool.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>();
 

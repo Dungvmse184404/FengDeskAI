@@ -1,3 +1,5 @@
+using FengDeskAI.Application.Features.Workspace.DTOs;
+
 namespace FengDeskAI.Application.Features.CustomerCare.DTOs;
 
 /// <summary>
@@ -19,6 +21,17 @@ public sealed record WorkspaceElementAnalysisResponse
 
     /// <summary>3 nhận định (status/detail/action) sinh ở BE theo case A/B/C.</summary>
     public SpaceInsights Insights { get; init; } = null!;
+
+    // ===== Sản phẩm đã mua đặt vào phòng (tính lúc đọc, không lưu vector) =====
+
+    /// <summary>true khi có sản phẩm CHƯA GIAO đặt trong phòng → FE vẽ thêm lớp radar preview (nét đứt).</summary>
+    public bool HasPreview { get; init; }
+
+    /// <summary>% tương thích của vector preview (gồm cả hàng đang giao). = CompatibilityPercent khi không có preview.</summary>
+    public int PreviewCompatibilityPercent { get; init; }
+
+    /// <summary>Danh sách sản phẩm đang đặt trong phòng (cả đã giao + đang giao).</summary>
+    public List<PlacedProductResponse> PlacedProducts { get; init; } = new();
 }
 
 public sealed record ElementAnalysisRow
@@ -31,6 +44,12 @@ public sealed record ElementAnalysisRow
 
     /// <summary>AdjustedIdeal − Current: + thiếu, − thừa.</summary>
     public decimal Gap { get; init; }
+
+    /// <summary>Current NẾU tính cả sản phẩm chưa giao tới (= Current khi không có preview).</summary>
+    public decimal PreviewCurrent { get; init; }
+
+    /// <summary>AdjustedIdeal − PreviewCurrent.</summary>
+    public decimal PreviewGap { get; init; }
 }
 
 /// <summary>Case: "Imbalanced" (A) | "Balanced" (B) | "Toxic" (C).</summary>
