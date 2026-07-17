@@ -135,6 +135,9 @@ builder.Services.AddHostedService<Model3DPollingWorker>();
 builder.Services.AddSettings<ReturnSlaOptions>(builder.Configuration);
 builder.Services.AddHostedService<ReturnSlaWorker>();
 
+// Worker tự đồng bộ dữ liệu hành chính VN + mã GHN nếu DB chưa đủ 63 tỉnh (chạy 1 lần lúc khởi động).
+builder.Services.AddHostedService<GeoAutoSyncWorker>();
+
 builder.Services.AddAuthorization(options =>
 {
     // Thứ tự quyền: Customer < Staff < Manager < Admin. "...OrAbove" gồm role đó + mọi role cao hơn.

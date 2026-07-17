@@ -4,14 +4,14 @@ Các seeder trong `src/FengDeskAI.Infrastructure/Persistence/Seeding/` đọc da
 
 ## Files
 
-| File | Bảng | Có weight? |
-|---|---|---|
-| `styles-vibes.json` | `styles`, `vibes`, `elements` | Không |
-| `scoring-params.json` | `scoring_params` | Có (`value`) ⚠ các cặp *Share phải giữ tổng = 1.0 |
-| `element-input-map.json` | `element_input_map` | Có (`weight`) |
-| `work-purpose-modifiers.json` | `work_purpose_element_modifiers` | Có (`delta`, có thể âm) |
-| `workspace-types.json` | `workspace_types` | Có (`personalWeight`) |
-| `workspace-type-elements.json` | `workspace_type_elements` | Có (vector 5 hành, tổng = 1.0) |
+| File                           | Bảng                             | Có weight?                                      |
+| ------------------------------ | -------------------------------- | ----------------------------------------------- |
+| `styles-vibes.json`            | `styles`, `vibes`, `elements`    | Không                                           |
+| `scoring-params.json`          | `scoring_params`                 | Có (`value`) các cặp *Share phải giữ tổng = 1.0 |
+| `element-input-map.json`       | `element_input_map`              | Có (`weight`)                                   |
+| `work-purpose-modifiers.json`  | `work_purpose_element_modifiers` | Có (`delta`, có thể âm)                         |
+| `workspace-types.json`         | `workspace_types`                | Có (`personalWeight`)                           |
+| `workspace-type-elements.json` | `workspace_type_elements`        | Có (vector 5 hành, tổng = 1.0)                  |
 
 Không tách ra file: `FengShuiRuleSeeder` (25 luật tính từ `FengShuiCalculator`, không có bảng hard-code), `GeographySeeder`/`GeoSyncService` (đồng bộ từ GHN), 3 demo seeder (`CatalogDemo`, `ProductFengShuiDemo`, `ProductElementInputDemo` — data demo, sẽ bỏ ở production).
 
