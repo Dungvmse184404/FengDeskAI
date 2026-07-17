@@ -50,9 +50,17 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
 
     public async Task<List<PurchasedItemResponse>> GetPurchasedItemsAsync(Guid userId, CancellationToken ct = default)
     {
-        // Đủ điều kiện đặt phòng: đơn của user, delivery không bị hủy/hoàn/giao thất bại.
-        // Chưa Delivered vẫn cho đặt — sẽ chỉ tính vào vector PREVIEW.
-        var excluded = new[]
+        // LẤY THEO ORDER (không bắt buộc đã có delivery): COD / đơn mới chưa tạo vận đơn vẫn
+        // xem trước được tác động lên radar. Chỉ nhận đơn đã Paid (online) hoặc đã vào
+        // Processing/Completed (COD store đã xác nhận / đang giao / đã xong).
+        // Nếu ĐÃ có delivery thì loại delivery bị hủy/hoàn/giao thất bại.
+        var okOrderStatuses = new[]
+        {
+            Domain.Enums.Sales.OrderStatus.Paid,
+            Domain.Enums.Sales.OrderStatus.Processing,
+            Domain.Enums.Sales.OrderStatus.Completed,
+        };
+        var excludedDelivery = new[]
         {
             Domain.Enums.Sales.DeliveryStatus.Cancelled,
             Domain.Enums.Sales.DeliveryStatus.Returned,
@@ -62,14 +70,14 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
         var items = await _context.Set<Domain.Entities.Sales.OrderItem>()
             .AsNoTracking()
             .Where(i => i.Order.CustomerId == userId
-                        && i.Delivery != null
-                        && !excluded.Contains(i.Delivery!.Status))
+                        && okOrderStatuses.Contains(i.Order.Status)
+                        && (i.Delivery == null || !excludedDelivery.Contains(i.Delivery!.Status)))
             .Select(i => new
             {
                 i.Id,
                 i.ProductName,
                 i.Quantity,
-                Status = i.Delivery!.Status,
+                Status = i.Delivery != null ? (Domain.Enums.Sales.DeliveryStatus?)i.Delivery!.Status : null,
                 ProductId = i.ProductItem.ProductId,
                 Image = i.ProductItem.Product.Images
                     .OrderBy(img => img.SortOrder)
@@ -94,7 +102,7 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
             ProductName = i.ProductName,
             ProductImage = i.Image,
             Quantity = i.Quantity,
-            DeliveryStatus = i.Status.ToString(),
+            DeliveryStatus = (i.Status ?? Domain.Enums.Sales.DeliveryStatus.Pending).ToString(),
             IsDelivered = i.Status == Domain.Enums.Sales.DeliveryStatus.Delivered,
             PlacedWorkspaceProfileId = placedBy.TryGetValue(i.Id, out var p) ? p.WorkspaceProfileId : null,
             PlacedWorkspaceName = placedBy.TryGetValue(i.Id, out var p2) ? p2.WorkspaceName : null,

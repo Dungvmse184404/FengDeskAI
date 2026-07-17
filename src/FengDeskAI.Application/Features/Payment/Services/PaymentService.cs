@@ -213,8 +213,10 @@ public class PaymentService : IPaymentService
     /// </summary>
     public async Task<IServiceResult<PaymentStatusResponse>> SimulatePaidAsync(Guid orderId, Guid userId, CancellationToken ct = default)
     {
-        var order = await _uow.Orders.GetByIdAsync(orderId, ct);
-        //var order = await _uow.Orders.GetForPaymentAsync(orderId, userId, ct);
+        // BẮT BUỘC dùng GetForPaymentAsync: cần Include(Items.ProductItem.Product) + Deliveries
+        // để CreateAndLinkDeliveriesAsync tạo được delivery. GetByIdAsync (không include) khiến
+        // order.Items rỗng → không tạo delivery → sản phẩm không hiện trong workspace.
+        var order = await _uow.Orders.GetForPaymentAsync(orderId, userId, ct);
         if (order is null)
             return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Payment.OrderNotFound);
         if (order.Status is not (OrderStatus.Pending or OrderStatus.Expired))

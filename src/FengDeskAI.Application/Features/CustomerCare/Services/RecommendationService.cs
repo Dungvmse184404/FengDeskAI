@@ -243,6 +243,23 @@ public sealed class RecommendationService : IRecommendationService
 
         var scored = _scorer.ScoreSingle(context, facts);
 
+        // Preview ĐÚNG ENGINE: dựng lại Current như khi THÊM đúng sản phẩm này vào phòng — cùng cơ chế
+        // "phiếu" (voteWeight) mà workspace dùng cho previewCurrent, nên radar khớp thang với card workspace
+        // (không phóng đại kiểu cộng thẳng 2 vector đã normalize). voteWeight = Σ weight DecorItem code, mặc định 1.
+        var productElementInputs = productInputs.TryGetValue(productId, out var pin)
+            ? pin
+            : (IReadOnlyCollection<ProductElementInput>)Array.Empty<ProductElementInput>();
+        var decorCodes = productElementInputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
+        var voteWeight = decorCodes.Count > 0
+            ? decorCodes.Sum(c => wctx.Resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
+            : 1.0m;
+        if (voteWeight < 0m) voteWeight = 0m;
+
+        var previewCurrent = WorkspaceVectorBuilder.BuildCurrentWithProducts(
+            wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements,
+            new[] { (facts.Vector, voteWeight) });
+        var previewGapVec = wctx.Analysis.AdjustedIdeal.Subtract(previewCurrent);
+
         var response = new ProductFitResponse
         {
             ProductId = productId,
@@ -258,6 +275,8 @@ public sealed class RecommendationService : IRecommendationService
                 AdjustedIdeal = Math.Round(wctx.Analysis.AdjustedIdeal[x.Element], 3),
                 Current = Math.Round(wctx.Analysis.Current[x.Element], 3),
                 Gap = Math.Round(wctx.Analysis.Gap[x.Element], 3),
+                PreviewCurrent = Math.Round(previewCurrent[x.Element], 3),
+                PreviewGap = Math.Round(previewGapVec[x.Element], 3),
             }).ToList(),
             ProductVector = facts.Vector.Enumerate().Select(x => new ProductElementRow
             {
@@ -272,7 +291,8 @@ public sealed class RecommendationService : IRecommendationService
     // ─────────────────────────── helpers ───────────────────────────
 
     private sealed record WorkspaceScoringContext(
-        WorkspaceType? WsType, WorkspaceScope Scope, ElementInputResolver Resolver, WorkspaceElementAnalysis Analysis);
+        WorkspaceType? WsType, WorkspaceScope Scope, ElementInputResolver Resolver, WorkspaceElementAnalysis Analysis,
+        IReadOnlyList<WorkspaceProfileInput> ProfileInputs, IReadOnlyList<WorkspaceTypeElement> TypeElements);
 
     /// <summary>Nạp data phòng + dựng 4 vector ngũ hành — dùng chung bởi GenerateAsync và GetProductFitAsync.</summary>
     private async Task<WorkspaceScoringContext> BuildWorkspaceContextAsync(WorkspaceProfile profile, CancellationToken ct)
@@ -295,7 +315,7 @@ public sealed class RecommendationService : IRecommendationService
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
         var analysis = WorkspaceElementAnalyzer.Analyze(typeElements, modifiers, profileInputs, resolver);
 
-        return new WorkspaceScoringContext(wsType, scope, resolver, analysis);
+        return new WorkspaceScoringContext(wsType, scope, resolver, analysis, profileInputs, typeElements);
     }
 
     /// <summary>MatchFacts + placementHint (gộp để không đổi schema RecommendationItem).</summary>

@@ -148,6 +148,50 @@ public class OrderService : IOrderService
         return ServiceResult<OrderDetailResponse>.Success(_mapper.Map<OrderDetailResponse>(order));
     }
 
+    /// <summary>
+    /// [DEV] Nếu order (của user) chưa có delivery nào thì gom Items theo store thành delivery (Pending)
+    /// rồi lưu — KHÔNG gọi nhà vận chuyển. Dùng để test luồng "đã giao" khi store chưa tạo đơn gửi.
+    /// Trả số delivery vừa tạo (0 nếu đã có sẵn).
+    /// </summary>
+    public async Task<IServiceResult<int>> EnsureDeliveriesAsync(Guid orderId, Guid userId, CancellationToken ct = default)
+    {
+        var order = await _uow.Orders.GetForPaymentAsync(orderId, userId, ct); // kèm Items.ProductItem.Product + Deliveries
+        if (order is null)
+            return ServiceResult<int>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
+        if (order.Deliveries.Count > 0)
+            return ServiceResult<int>.Success(0);
+        if (order.Items.Count == 0)
+            return ServiceResult<int>.Failure(ApiStatusCodes.BadRequest, "Đơn không có sản phẩm để tạo giao hàng.");
+
+        var created = await _uow.ExecuteInTransactionAsync(async _ =>
+        {
+            // Gom theo store → delivery Pending. Add tường minh + LƯU NGAY để INSERT deliveries
+            // trước khi order_items tham chiếu (tránh vi phạm FK + EF phát nhầm UPDATE 0 rows).
+            var byStore = new Dictionary<Guid, Delivery>();
+            foreach (var storeId in order.Items.Select(i => i.ProductItem.Product.GardenStoreId).Distinct())
+                byStore[storeId] = new Delivery
+                {
+                    OrderId = order.Id,
+                    GardenStoreId = storeId,
+                    Status = DeliveryStatus.Pending,
+                    ShippingFee = 0m,
+                };
+            await _uow.Orders.AddDeliveriesAsync(byStore.Values, ct);
+            await _uow.SaveChangesAsync(ct);
+
+            foreach (var item in order.Items)
+            {
+                var delivery = byStore[item.ProductItem.Product.GardenStoreId];
+                item.DeliveryId = delivery.Id;
+                delivery.Subtotal += item.UnitPrice * item.Quantity;
+            }
+            await _uow.SaveChangesAsync(ct);
+            return byStore.Count;
+        }, ct);
+
+        return ServiceResult<int>.Success(created);
+    }
+
     public async Task<IServiceResult<OrderDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default)
     {
         var order = await _uow.Orders.GetWithGraphAsync(id, userId, ct);
