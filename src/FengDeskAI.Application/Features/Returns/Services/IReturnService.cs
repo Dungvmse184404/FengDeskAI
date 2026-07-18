@@ -14,7 +14,8 @@ namespace FengDeskAI.Application.Features.Returns.Services;
 public interface IReturnService
 {
     // ----- Customer -----
-    Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
+    /// <summary>Tạo ticket RMA. Ảnh bằng chứng truyền qua <c>request.ImageUrls</c> (upload trước bằng POST /api/uploads) — bắt buộc ≥1.</summary>
+    Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, CancellationToken ct = default);
     Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetMineAsync(Guid userId, PageRequest page, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, RmaActor actor, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);

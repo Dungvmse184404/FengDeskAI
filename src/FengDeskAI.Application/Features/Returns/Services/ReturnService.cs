@@ -42,14 +42,12 @@ public class ReturnService : IReturnService
 
     // ===================== Customer =====================
 
-    public async Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
+    public async Task<IServiceResult<ReturnDetailResponse>> CreateAsync(Guid userId, CreateReturnRequest request, CancellationToken ct = default)
     {
-        var fileError = ValidateImageFiles(files);
-        if (fileError is not null) return fileError;
-
         // Bắt buộc có ảnh bằng chứng khi tạo ticket (guard rule).
+        // FE upload ảnh trước qua POST /api/uploads để lấy URL rồi truyền vào ImageUrls.
         var hasUrlEvidence = request.ImageUrls is not null && request.ImageUrls.Any(u => !string.IsNullOrWhiteSpace(u));
-        if ((files is null || files.Count == 0) && !hasUrlEvidence)
+        if (!hasUrlEvidence)
             return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.EvidenceRequired);
 
         var delivery = await _uow.Returns.GetDeliveryForReturnAsync(request.DeliveryId, ct);
@@ -172,9 +170,6 @@ public class ReturnService : IReturnService
                 rr.Id, ReferenceType.Return, ct);
             return null;
         }, ct);
-
-        if (files is { Count: > 0 })
-            await UploadImagesToReturnAsync(rr.Id, files, rr.Images.Count, ct);
 
         return await LoadDetailAsync(rr.Id, ct);
     }

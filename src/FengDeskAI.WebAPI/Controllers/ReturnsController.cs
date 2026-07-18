@@ -1,8 +1,4 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
-using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
-using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
 using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.WebAPI.Authorization;
@@ -25,32 +21,17 @@ public class ReturnsController : ApiControllerBase
 {
     private readonly IReturnService _service;
 
-    // camelCase + enum-as-string cho JSON trong field "data" (khớp cấu hình JSON toàn app).
-    private static readonly JsonSerializerOptions JsonOpts = new(JsonSerializerDefaults.Web)
-    {
-        Converters = { new JsonStringEnumConverter() }
-    };
-
     public ReturnsController(IReturnService service) => _service = service;
 
     // ================= Customer =================
 
     /// <summary>
-    /// Tạo ticket RMA KÈM ảnh bằng chứng (multipart/form-data):
-    /// field <c>data</c> = JSON của <see cref="CreateReturnRequest"/>; field <c>files</c> = ảnh (bắt buộc ít nhất 1).
+    /// Tạo ticket RMA (JSON thuần). Ảnh bằng chứng: FE upload trước qua <c>POST /api/uploads</c>
+    /// để lấy URL, rồi truyền vào <c>imageUrls</c> — BẮT BUỘC có ít nhất 1 (guard rule).
     /// </summary>
     [HttpPost]
-    public async Task<IActionResult> Create([FromForm] string data, [FromForm] List<IFormFile>? files, CancellationToken ct)
-    {
-        CreateReturnRequest? request;
-        try { request = JsonSerializer.Deserialize<CreateReturnRequest>(data, JsonOpts); }
-        catch (JsonException) { request = null; }
-        if (request is null)
-            return ToActionResult(ServiceResult<ReturnDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.PayloadInvalid));
-
-        var uploads = await ReadFilesAsync(files, ct);
-        return ToActionResult(await _service.CreateAsync(CurrentUserId, request, uploads, ct));
-    }
+    public async Task<IActionResult> Create([FromBody] CreateReturnRequest request, CancellationToken ct)
+        => ToActionResult(await _service.CreateAsync(CurrentUserId, request, ct));
 
     [HttpGet("mine")]
     public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
