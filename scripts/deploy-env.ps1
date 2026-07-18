@@ -7,7 +7,7 @@
 # ĐẨY 2 FILE (cả hai đều bị .gitignore → git KHÔNG mang lên VPS):
 #   - .env.vps                                -> VPS:/opt/fengdeskai/backend/.env  (secret runtime, env_file)
 #   - src\FengDeskAI.WebAPI\appsettings.json  -> VPS:.../src/FengDeskAI.WebAPI/appsettings.json
-#                                                (appsettings COPY vào image lúc build → phải rebuild)
+#                                                (mount vào container qua volume → chỉ cần recreate, không rebuild)
 #
 # LƯU Ý: code/app khác deploy qua `git push main` (deploy.yml tự pull + rebuild).
 #        Riêng .env và appsettings.json bị gitignore nên DÙNG script này để đồng bộ.
@@ -32,8 +32,8 @@ scp $envFile "${VpsUser}@${VpsHost}:$RemoteDir/.env"
 Write-Host "→ Copy appsettings.json  -> $VpsUser@${VpsHost}:$RemoteDir/$AppsettingsRel"
 scp $appFile "${VpsUser}@${VpsHost}:$RemoteDir/$AppsettingsRel"
 
-Write-Host "→ Rebuild + restart API tren VPS (appsettings moi can build lai image)"
-ssh "${VpsUser}@${VpsHost}" "cd $RemoteDir && docker compose up -d --build"
+Write-Host "→ Recreate API tren VPS (khong can rebuild — appsettings mount volume)"
+ssh "${VpsUser}@${VpsHost}" "cd $RemoteDir && docker compose up -d --force-recreate api"
 
-Write-Host "✓ Xong — .env + appsettings da cap nhat, image rebuild + API restart."
+Write-Host "✓ Xong — .env + appsettings da cap nhat, API restart (khong rebuild)."
 Write-Host "  Kiem tra: curl https://api.fengdesk.io.vn/api/workspace/speech-config"

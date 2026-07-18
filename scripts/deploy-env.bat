@@ -6,7 +6,7 @@ REM
 REM DAY 2 FILE (ca hai deu bi .gitignore -> git KHONG mang len VPS):
 REM   - .env.vps                                -> VPS:/opt/fengdeskai/backend/.env (secret runtime)
 REM   - src\FengDeskAI.WebAPI\appsettings.json  -> VPS:.../src/FengDeskAI.WebAPI/appsettings.json
-REM                                                (appsettings COPY vao image luc build -> phai rebuild)
+REM                                                (mount vao container qua volume -> chi can recreate, khong rebuild)
 REM
 REM LUU Y: code/app khac deploy qua `git push main` (deploy.yml tu pull + rebuild).
 REM        Rieng .env va appsettings.json bi gitignore nen DUNG file nay de dong bo.
@@ -42,12 +42,12 @@ scp "src\FengDeskAI.WebAPI\appsettings.json" %VPS_USER%@%VPS_HOST%:%REMOTE_DIR%/
 if errorlevel 1 goto fail
 
 echo.
-echo === Rebuild + restart API tren VPS ===
-ssh %VPS_USER%@%VPS_HOST% "cd %REMOTE_DIR% && docker compose up -d --build"
+echo === Recreate API tren VPS (khong rebuild) ===
+ssh %VPS_USER%@%VPS_HOST% "cd %REMOTE_DIR% && docker compose up -d --force-recreate api"
 if errorlevel 1 goto fail
 
 echo.
-echo [OK] Da cap nhat .env + appsettings, rebuild + restart API.
+echo [OK] Da cap nhat .env + appsettings, API restart (khong rebuild).
 echo Kiem tra: curl https://api.fengdesk.io.vn/api/workspace/speech-config
 pause
 exit /b 0

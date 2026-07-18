@@ -19,11 +19,14 @@ services:
     container_name: fengdeskai-api
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     env_file:
       - .env
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+    # Mount appsettings từ host → sửa appsettings chỉ cần restart, KHÔNG cần rebuild image.
+    volumes:
+      - ./src/FengDeskAI.WebAPI/appsettings.json:/app/appsettings.json:ro
     # Cho container gọi được Ollama chạy trên MÁY HOST (localhost trong container = chính nó, không phải host).
     # Trong .env đặt: Ai__Relay__Providers__0__BaseUrl=http://host.docker.internal:11434
     # (Docker Desktop Win/Mac tự có host.docker.internal; dòng dưới để Linux cũng dùng được.)
@@ -41,6 +44,8 @@ services:
       - .env
     environment:
       ASPNETCORE_ENVIRONMENT: Production
+    volumes:
+      - ./src/FengDeskAI.WebAPI/appsettings.json:/app/appsettings.json:ro
     command: ["dotnet", "FengDeskAI.WebAPI.dll", "seed"]
     restart: "no"
     profiles:

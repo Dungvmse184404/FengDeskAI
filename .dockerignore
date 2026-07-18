@@ -32,3 +32,7 @@ README.md
 Dockerfile
 .dockerignore
 docker-compose*.yml
+
+# Secret runtime — KHÔNG được lọt vào build context/image
+.env
+.env.*
