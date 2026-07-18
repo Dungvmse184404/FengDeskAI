@@ -58,7 +58,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
         // Ép tạo delivery (Pending, không gọi nhà vận chuyển) rồi reload để có delivery id.
         if (order.Data.Deliveries.Count == 0)
         {
-            var ensured = await _orders.EnsureDeliveriesAsync(orderId, CurrentUserId, ct);
+            var ensured = await _orders.EnsureDeliveriesAsync(orderId, ct);
             if (!ensured.IsSuccess)
                 return BadRequest(new { error = ensured.Message ?? "Không tạo được delivery cho order." });
 

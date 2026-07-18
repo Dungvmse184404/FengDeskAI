@@ -153,9 +153,9 @@ public class OrderService : IOrderService
     /// rồi lưu — KHÔNG gọi nhà vận chuyển. Dùng để test luồng "đã giao" khi store chưa tạo đơn gửi.
     /// Trả số delivery vừa tạo (0 nếu đã có sẵn).
     /// </summary>
-    public async Task<IServiceResult<int>> EnsureDeliveriesAsync(Guid orderId, Guid userId, CancellationToken ct = default)
+    public async Task<IServiceResult<int>> EnsureDeliveriesAsync(Guid orderId, CancellationToken ct = default)
     {
-        var order = await _uow.Orders.GetForPaymentAsync(orderId, userId, ct); // kèm Items.ProductItem.Product + Deliveries
+        var order = await _uow.Orders.GetForDeliveryCreationAsync(orderId, ct); // kèm Items.ProductItem.Product + Deliveries, không lọc chủ sở hữu
         if (order is null)
             return ServiceResult<int>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
         if (order.Deliveries.Count > 0)

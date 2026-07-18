@@ -56,6 +56,6 @@ public class PaymentsController : ApiControllerBase
     {
         if (!_env.IsDevelopment())
             return NotFound();
-        return ToActionResult(await _payment.SimulatePaidAsync(orderId, CurrentUserId, ct));
+        return ToActionResult(await _payment.SimulatePaidAsync(orderId, ct));
     }
 }

@@ -26,6 +26,11 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
                .Include(o => o.Deliveries)
                .FirstOrDefaultAsync(o => o.Id == id && o.CustomerId == customerId, ct);
 
+    public Task<Order?> GetForDeliveryCreationAsync(Guid id, CancellationToken ct = default)
+        => _set.Include(o => o.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product)
+               .Include(o => o.Deliveries)
+               .FirstOrDefaultAsync(o => o.Id == id, ct);
+
     public async Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking().Where(o => o.CustomerId == customerId);

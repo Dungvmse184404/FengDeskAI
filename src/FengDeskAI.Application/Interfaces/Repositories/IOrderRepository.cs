@@ -17,6 +17,9 @@ public interface IOrderRepository : IGenericRepository<Order>
     /// <summary>Order của user kèm Items→ProductItem→Product + Deliveries (tracked) — để xử lý thanh toán.</summary>
     Task<Order?> GetForPaymentAsync(Guid id, Guid customerId, CancellationToken ct = default);
 
+    /// <summary>Order kèm Items→ProductItem→Product + Deliveries (tracked), KHÔNG lọc chủ sở hữu — dùng để tạo delivery (dev/admin).</summary>
+    Task<Order?> GetForDeliveryCreationAsync(Guid id, CancellationToken ct = default);
+
     Task<(List<Order> Items, int Total)> GetByCustomerAsync(Guid customerId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>Tất cả đơn (mọi customer), paged, mới nhất trước — màn admin.</summary>

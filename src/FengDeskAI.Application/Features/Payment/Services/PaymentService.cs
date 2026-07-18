@@ -211,12 +211,13 @@ public class PaymentService : IPaymentService
     /// <summary>
     /// [DEV] Giả lập thanh toán thành công cho đơn (bỏ qua PayOS) để test luồng sau thanh toán.
     /// </summary>
-    public async Task<IServiceResult<PaymentStatusResponse>> SimulatePaidAsync(Guid orderId, Guid userId, CancellationToken ct = default)
+    public async Task<IServiceResult<PaymentStatusResponse>> SimulatePaidAsync(Guid orderId, CancellationToken ct = default)
     {
-        // BẮT BUỘC dùng GetForPaymentAsync: cần Include(Items.ProductItem.Product) + Deliveries
-        // để CreateAndLinkDeliveriesAsync tạo được delivery. GetByIdAsync (không include) khiến
-        // order.Items rỗng → không tạo delivery → sản phẩm không hiện trong workspace.
-        var order = await _uow.Orders.GetForPaymentAsync(orderId, userId, ct);
+        // Cần Include(Items.ProductItem.Product) + Deliveries để CreateAndLinkDeliveriesAsync tạo được
+        // delivery (GetByIdAsync không include → order.Items rỗng → không tạo delivery → sản phẩm không hiện
+        // trong workspace). KHÔNG lọc theo customer: đây là endpoint DEV, không nên ép đúng 1 tài khoản —
+        // userId cũ chỉ dùng cho bộ lọc này, không dùng ở đâu khác (notification lấy order.CustomerId).
+        var order = await _uow.Orders.GetForDeliveryCreationAsync(orderId, ct);
         if (order is null)
             return ServiceResult<PaymentStatusResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Payment.OrderNotFound);
         if (order.Status is not (OrderStatus.Pending or OrderStatus.Expired))
