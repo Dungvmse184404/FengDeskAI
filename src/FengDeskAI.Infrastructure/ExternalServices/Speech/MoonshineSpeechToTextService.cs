@@ -7,37 +7,39 @@ using Microsoft.Extensions.Options;
 namespace FengDeskAI.Infrastructure.ExternalServices.Speech;
 
 /// <summary>
-/// Gọi Whisper qua endpoint chuẩn OpenAI <c>POST /audio/transcriptions</c> (multipart).
-/// KHÔNG truyền tham số "language" → model tự nhận diện, xử lý được câu nói trộn Việt–Anh.
+/// Gọi Moonshine (microservice riêng ở moonshine-stt/, cùng hình dạng response với Whisper —
+/// <c>POST /v1/audio/transcriptions</c> multipart → {"text": "..."}).
+///
+/// KHÁC Whisper: Moonshine train riêng 1 model / ngôn ngữ, KHÔNG tự nhận diện câu nói trộn Việt-Anh.
+/// BẮT BUỘC truyền "language" ("vi"/"en") để chọn đúng model — thiếu thì mặc định "vi".
 /// </summary>
-public sealed class WhisperSpeechToTextService : ISpeechToTextService
+public sealed class MoonshineSpeechToTextService : ISpeechToTextService
 {
     private readonly HttpClient _http;
     private readonly SpeechSettings _settings;
-    private readonly ILogger<WhisperSpeechToTextService> _logger;
+    private readonly ILogger<MoonshineSpeechToTextService> _logger;
 
-    public WhisperSpeechToTextService(HttpClient http, IOptions<SpeechSettings> settings, ILogger<WhisperSpeechToTextService> logger)
+    public MoonshineSpeechToTextService(HttpClient http, IOptions<SpeechSettings> settings, ILogger<MoonshineSpeechToTextService> logger)
     {
         _http = http;
         _settings = settings.Value;
         _logger = logger;
 
-        _http.BaseAddress = new Uri(_settings.BaseUrl.TrimEnd('/') + "/");
-        _http.Timeout = TimeSpan.FromSeconds(60);
-        if (!string.IsNullOrEmpty(_settings.ApiKey))
-            _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
+        _http.BaseAddress = new Uri(_settings.MoonshineBaseUrl.TrimEnd('/') + "/");
+        _http.Timeout = TimeSpan.FromSeconds(30); // model nhỏ hơn Whisper nhiều — kỳ vọng nhanh hơn
     }
 
-    // language: bỏ qua có chủ đích — Whisper tự nhận diện ngôn ngữ, kể cả câu nói trộn Việt-Anh
-    // (xem comment ở đầu file: không gửi tham số "language" trong form-data).
     public async Task<string> TranscribeAsync(Stream audio, string fileName, string? language = null, CancellationToken ct = default)
     {
+        var model = string.Equals(language, "en", StringComparison.OrdinalIgnoreCase)
+            ? _settings.MoonshineModelEn
+            : _settings.MoonshineModelVi; // mặc định "vi" nếu FE không gửi/gửi giá trị lạ
+
         using var form = new MultipartFormDataContent();
         var fileContent = new StreamContent(audio);
         fileContent.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
         form.Add(fileContent, "file", fileName);
-        form.Add(new StringContent(_settings.Model), "model");
-        // response_format=json → { "text": "..." }; KHÔNG gửi "language" để model tự nhận diện vi/en/mixed.
+        form.Add(new StringContent(model), "model");
         form.Add(new StringContent("json"), "response_format");
 
         using var response = await _http.PostAsync("audio/transcriptions", form, ct);
@@ -45,7 +47,7 @@ public sealed class WhisperSpeechToTextService : ISpeechToTextService
 
         if (!response.IsSuccessStatusCode)
         {
-            _logger.LogError("[Speech] Whisper trả {Status}: {Body}", (int)response.StatusCode, body);
+            _logger.LogError("[Speech] Moonshine trả {Status}: {Body}", (int)response.StatusCode, body);
             throw new InvalidOperationException($"Dịch vụ nhận diện giọng nói trả lỗi {(int)response.StatusCode}.");
         }
 

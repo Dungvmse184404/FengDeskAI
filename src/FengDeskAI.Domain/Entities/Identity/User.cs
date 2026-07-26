@@ -7,7 +7,9 @@ namespace FengDeskAI.Domain.Entities.Identity;
 public class User : BaseEntity
 {
     public string Email { get; set; } = null!;
-    public string PasswordHash { get; set; } = null!;
+
+    /// <summary>Null khi user chỉ đăng nhập qua Google (chưa từng đặt mật khẩu).</summary>
+    public string? PasswordHash { get; set; }
     public string FullName { get; set; } = null!;
     public DateTime? DateOfBirth { get; set; }
 
@@ -19,6 +21,12 @@ public class User : BaseEntity
     public UserRole Role { get; set; } = UserRole.Customer;
     public decimal Balance { get; set; }
     public bool IsActive { get; set; } = true;
+
+    /// <summary>Cách user đăng ký lần đầu (Local hoặc Google). Chỉ mang tính thông tin — không chặn login khi đã link.</summary>
+    public AuthProvider AuthProvider { get; set; } = AuthProvider.Local;
+
+    /// <summary>"sub" claim từ Google ID token. Null nếu chưa từng link Google.</summary>
+    public string? GoogleId { get; set; }
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<WorkspaceProfile> WorkspaceProfiles { get; set; } = new List<WorkspaceProfile>();

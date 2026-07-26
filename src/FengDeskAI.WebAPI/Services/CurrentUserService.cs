@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Security.Claims;
 using FengDeskAI.Application.Interfaces.Security;
 
@@ -25,7 +26,21 @@ public class CurrentUserService : ICurrentUserService
 
     public string? Name => _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Name);
 
-    public string? Role => _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.Role);
+    // Một user có thể mang NHIỀU role (UserRole là [Flags]). Token ghi mỗi flag một claim ClaimTypes.Role,
+    // và Customer nằm đầu enum → nếu lấy claim đầu sẽ luôn ra "Customer" cho cả staff/manager.
+    // Vì vậy chọn role CAO NHẤT theo thứ tự ưu tiên để suy đúng ParticipantType/sender_type.
+    private static readonly string[] RolePriority = { "Admin", "Manager", "Staff", "GardenOwner", "Customer" };
+
+    public string? Role
+    {
+        get
+        {
+            var roles = _accessor.HttpContext?.User
+                .FindAll(ClaimTypes.Role).Select(c => c.Value).ToHashSet();
+            if (roles is null || roles.Count == 0) return null;
+            return RolePriority.FirstOrDefault(roles.Contains);
+        }
+    }
 
     public bool IsAuthenticated => _accessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
 }

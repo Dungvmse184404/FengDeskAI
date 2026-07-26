@@ -1,0 +1,42 @@
+# =====================================================================
+# STT self-host — Moonshine (moonshine-stt/, package useful-moonshine-onnx của Useful Sensors).
+# Chạy SONG SONG với Whisper (docker-compose.whisper.yml) — đổi qua lại bằng biến Speech__Provider
+# trong .env của API, KHÔNG cần rebuild BE:
+#   Speech__Provider=Moonshine   -> dùng service này
+#   Speech__Provider=Whisper     -> dùng lại speaches/faster-whisper như cũ (mặc định)
+#
+# Khác Whisper: Moonshine KHÔNG tự nhận diện đa ngôn ngữ trong 1 câu — mỗi ngôn ngữ 1 model riêng
+# (moonshine/tiny-vi cho tiếng Việt, moonshine/tiny cho tiếng Anh). FE gửi kèm field "language"
+# (theo nút chuyển VI/EN có sẵn) để BE chọn đúng model.
+#
+# Chạy:
+#   docker compose -f docker-compose.moonshine.yml up -d --build
+#
+# Sau đó trỏ BE tới nó — trong .env của API:
+#   Speech__Provider=Moonshine
+#   Speech__MoonshineBaseUrl=http://host.docker.internal:8001/v1
+#   Speech__MoonshineModelVi=moonshine/tiny-vi
+#   Speech__MoonshineModelEn=moonshine/tiny
+#
+# Nhẹ hơn Whisper nhiều (model ~27-62M tham số) — chạy tốt trên CPU, không cần GPU.
+# =====================================================================
+
+services:
+  moonshine:
+    build:
+      context: ./moonshine-stt
+    container_name: fengdeskai-moonshine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8001"   # chỉ mở nội bộ — BE gọi qua host.docker.internal, KHÔNG lộ ra internet
+    volumes:
+      - moonshine-models:/root/.cache/huggingface   # cache model, không tải lại mỗi lần khởi động
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s   # lần đầu cần thời gian tải + warmup 2 model
+
+volumes:
+  moonshine-models:

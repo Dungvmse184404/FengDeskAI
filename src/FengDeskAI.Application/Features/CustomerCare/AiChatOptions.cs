@@ -68,8 +68,17 @@ public sealed class AiChatOptions
     public bool EnableTools { get; set; } = true;
 
     /// <summary>Số vòng gọi tool tối đa cho 1 lượt chat (chặn lặp vô hạn).</summary>
-    public int MaxToolIterations { get; set; } = 5;
+    public int MaxToolIterations { get; set; } = 6;
 
     /// <summary>Lọc tool được phép (theo Name). Rỗng → cho phép tất cả tool đã đăng ký.</summary>
     public List<string> EnabledTools { get; set; } = new();
+
+    // ── Stall check (chống "hứa suông") ─────────────────────────────────────────
+    /// <summary>
+    /// Model NHỎ/NHANH riêng để xác nhận model chính có đang "hứa hẹn" gọi tool mà không emit tool_calls
+    /// (vd "để mình kiểm tra nhé..."). Chỉ được gọi khi keyword heuristic (<c>LooksLikeToolStall</c>) đã
+    /// nghi ngờ trước — dùng làm bộ xác nhận thứ 2, không thay thế heuristic hoàn toàn.
+    /// Bỏ trống/null → tắt tính năng, giữ hành vi cũ (chỉ tin keyword heuristic).
+    /// </summary>
+    public string? StallCheckModel { get; set; }
 }

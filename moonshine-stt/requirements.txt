@@ -1,0 +1,7 @@
+fastapi==0.115.0
+uvicorn[standard]==0.30.6
+python-multipart==0.0.9
+librosa==0.10.2.post1
+numpy<2.0
+# Package chính thức của Useful Sensors — chạy Moonshine qua ONNX Runtime (nhẹ, không cần GPU).
+useful-moonshine-onnx @ git+https://git@github.com/usefulsensors/moonshine.git#subdirectory=moonshine-onnx
