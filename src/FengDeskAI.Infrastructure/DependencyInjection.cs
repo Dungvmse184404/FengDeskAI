@@ -266,6 +266,7 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, WorkspaceTypeElementSeeder>();
         services.AddScoped<IDataSeeder, FengShuiRuleSeeder>();
         services.AddScoped<IDataSeeder, GeographySeeder>();
+        services.AddScoped<IDataSeeder, AdminUserSeeder>();
         services.AddScoped<IDataSeeder, CatalogDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductFengShuiDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductElementInputDemoSeeder>();

@@ -22,14 +22,17 @@ public class TagsController : ApiControllerBase
         => ToActionResult(await _service.GetAllAsync(ct));
 
     [HttpPost]
+    [Authorize(Policy = AuthorizationPolicies.GardenOwnerOrAbove)]
     public async Task<IActionResult> Create([FromBody] CreateTagRequest request, CancellationToken ct)
         => ToActionResult(await _service.CreateAsync(request, ct));
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.GardenOwnerOrAbove)]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTagRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateAsync(id, request, ct));
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.GardenOwnerOrAbove)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         => ToActionResult(await _service.DeleteAsync(id, ct));
 }
