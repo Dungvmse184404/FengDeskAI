@@ -16,6 +16,10 @@ public static class ApiStatusMessages
         public const string LoginSuccess = "Đăng nhập thành công.";
         public const string RefreshSuccess = "Làm mới token thành công.";
         public const string LoggedOut = "Đã đăng xuất.";
+
+        public const string GoogleTokenInvalid = "Không xác thực được tài khoản Google. Vui lòng thử lại.";
+        public const string GoogleEmailNotVerified = "Email Google chưa được xác thực.";
+        public const string GoogleLoginSuccess = "Đăng nhập bằng Google thành công.";
     }
 
     public static class Registration

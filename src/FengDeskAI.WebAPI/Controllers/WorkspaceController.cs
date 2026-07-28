@@ -67,14 +67,15 @@ public class WorkspaceProfilesController : ApiControllerBase
         => ToActionResult(ServiceResult<object>.Success(new { enabled = _speechSettings.Enabled }));
 
     /// <summary>
-    /// Giọng nói → text bằng Whisper (multipart, field "file" — webm/ogg/mp3/wav). Tự nhận diện
-    /// tiếng Việt / Anh / nói trộn, không cần chọn ngôn ngữ. FE dùng Web Speech browser làm preview
-    /// live + fallback khi endpoint này lỗi (giữ flow cũ khi AI down).
+    /// Giọng nói → text (multipart, field "file" — webm/ogg/mp3/wav). Provider Whisper (mặc định) tự
+    /// nhận diện tiếng Việt/Anh/nói trộn, không cần "language"; provider Moonshine BẮT BUỘC "language"
+    /// ("vi"/"en", theo nút chuyển ngôn ngữ ở FE) để chọn đúng model. FE dùng Web Speech browser làm
+    /// preview live + fallback khi endpoint này lỗi (giữ flow cũ khi AI down).
     /// </summary>
     [HttpPost("transcriptions")]
     [Authorize(Policy = AuthorizationPolicies.CustomerOnly)]
     [EnableRateLimiting("workspace-intake")]
-    public async Task<IActionResult> Transcribe(IFormFile file, CancellationToken ct = default)
+    public async Task<IActionResult> Transcribe(IFormFile file, [FromForm] string? language, CancellationToken ct = default)
     {
         if (!_speechSettings.Enabled)
             return ToActionResult(ServiceResult<string>.Failure(
@@ -89,7 +90,7 @@ public class WorkspaceProfilesController : ApiControllerBase
         try
         {
             await using var stream = file.OpenReadStream();
-            var text = await _speechToText.TranscribeAsync(stream, file.FileName, ct);
+            var text = await _speechToText.TranscribeAsync(stream, file.FileName, language, ct);
             return ToActionResult(ServiceResult<string>.Success(text));
         }
         catch (Exception ex) when (ex is not OperationCanceledException)

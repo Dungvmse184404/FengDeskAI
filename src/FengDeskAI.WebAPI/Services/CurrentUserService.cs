@@ -6,6 +6,15 @@ namespace FengDeskAI.WebAPI.Services;
 
 public class CurrentUserService : ICurrentUserService
 {
+    private static readonly string[] RolePriority =
+    {
+        Authorization.Roles.Admin,
+        Authorization.Roles.Manager,
+        Authorization.Roles.Staff,
+        Authorization.Roles.GardenOwner,
+        Authorization.Roles.Customer,
+    };
+
     private readonly IHttpContextAccessor _accessor;
 
     public CurrentUserService(IHttpContextAccessor accessor)
@@ -17,8 +26,8 @@ public class CurrentUserService : ICurrentUserService
     {
         get
         {
-            var sub = _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
-            return Guid.TryParse(sub, out var id) ? id : null;
+            var value = _accessor.HttpContext?.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            return Guid.TryParse(value, out var userId) ? userId : null;
         }
     }
 
@@ -31,7 +40,9 @@ public class CurrentUserService : ICurrentUserService
         get
         {
             var claims = _accessor.HttpContext?.User.FindAll(ClaimTypes.Role);
-            return claims is null ? Array.Empty<string>() : claims.Select(c => c.Value).Distinct().ToArray();
+            return claims is null
+                ? Array.Empty<string>()
+                : claims.Select(claim => claim.Value).Distinct().ToArray();
         }
     }
 
@@ -39,22 +50,13 @@ public class CurrentUserService : ICurrentUserService
     {
         get
         {
-            var roles = Roles;
-            if (roles.Count == 0)
-                return null;
-
-            if (roles.Contains(FengDeskAI.WebAPI.Authorization.Roles.Admin))
-                return FengDeskAI.WebAPI.Authorization.Roles.Admin;
-            if (roles.Contains(FengDeskAI.WebAPI.Authorization.Roles.Manager))
-                return FengDeskAI.WebAPI.Authorization.Roles.Manager;
-            if (roles.Contains(FengDeskAI.WebAPI.Authorization.Roles.Staff))
-                return FengDeskAI.WebAPI.Authorization.Roles.Staff;
-            if (roles.Contains(FengDeskAI.WebAPI.Authorization.Roles.GardenOwner))
-                return FengDeskAI.WebAPI.Authorization.Roles.GardenOwner;
-
-            return roles[0];
+            var roles = Roles.ToHashSet(StringComparer.Ordinal);
+            return roles.Count == 0
+                ? null
+                : RolePriority.FirstOrDefault(roles.Contains);
         }
     }
 
-    public bool IsAuthenticated => _accessor.HttpContext?.User?.Identity?.IsAuthenticated ?? false;
+    public bool IsAuthenticated =>
+        _accessor.HttpContext?.User.Identity?.IsAuthenticated ?? false;
 }

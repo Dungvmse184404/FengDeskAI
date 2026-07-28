@@ -38,6 +38,12 @@ public class AuthController : ApiControllerBase
     public async Task<IActionResult> Login([FromBody] LoginRequest request, CancellationToken ct)
         => ToActionResult(await _authService.LoginAsync(request, ct));
 
+    /// <summary>Đăng nhập/đăng ký bằng Google — nhận ID token (credential) từ Google Identity Services ở FE.</summary>
+    [HttpPost("google")]
+    [AllowAnonymous]
+    public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request, CancellationToken ct)
+        => ToActionResult(await _authService.LoginWithGoogleAsync(request, ct));
+
     [HttpPost("refresh")]
     [AllowAnonymous]
     public async Task<IActionResult> Refresh([FromBody] RefreshTokenRequest request, CancellationToken ct)

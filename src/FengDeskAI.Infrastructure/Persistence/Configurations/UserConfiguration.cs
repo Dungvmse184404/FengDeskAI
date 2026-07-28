@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 
@@ -20,8 +21,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.HasIndex(u => u.Email).IsUnique();
 
         builder.Property(u => u.PasswordHash)
-            .HasColumnName("password_hash")
-            .IsRequired();
+            .HasColumnName("password_hash");
 
         builder.Property(u => u.FullName)
             .HasColumnName("full_name")
@@ -38,6 +38,10 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Balance).HasColumnName("balance").HasPrecision(12, 3);
         builder.Property(u => u.IsActive).HasColumnName("is_active").HasDefaultValue(true);
         builder.Property(u => u.TokenVersion).HasColumnName("token_version").HasDefaultValue(0);
+
+        builder.Property(u => u.AuthProvider).HasColumnName("auth_provider").HasConversion<int>().HasDefaultValue(AuthProvider.Local);
+        builder.Property(u => u.GoogleId).HasColumnName("google_id").HasMaxLength(255);
+        builder.HasIndex(u => u.GoogleId).IsUnique().HasFilter("google_id IS NOT NULL");
 
         builder.Property(u => u.CreatedAt).HasColumnName("created_at");
         builder.Property(u => u.UpdatedAt).HasColumnName("updated_at");

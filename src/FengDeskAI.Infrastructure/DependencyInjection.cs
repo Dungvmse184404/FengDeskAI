@@ -180,6 +180,10 @@ public static class DependencyInjection
         services.AddScoped<IPasswordService, PasswordService>();
         services.AddScoped<ITokenService, TokenService>();
 
+        // Google Sign-In: verify ID token (JWT) offline bằng Google.Apis.Auth — không cần gọi HTTP ra ngoài.
+        services.AddSettings<GoogleAuthSettings>(configuration);
+        services.AddScoped<IGoogleTokenValidator, GoogleTokenValidator>();
+
         services.AddDistributedMemoryCache();
         services.AddMemoryCache();
 
@@ -272,10 +276,16 @@ public static class DependencyInjection
         services.AddSettings<MeshySettings>(configuration);
         services.AddHttpClient<IModel3DGenerator, MeshyModel3DGenerator>();
 
-        // STT (Whisper): giọng nói → text cho workspace intake. Provider đổi qua config Speech:BaseUrl
-        // (Groq cloud hoặc faster-whisper self-host — cùng chuẩn OpenAI /audio/transcriptions).
+        // STT: giọng nói → text cho workspace intake. Provider chọn qua Speech:Provider:
+        // - "Whisper" (mặc định): 1 model đa ngôn ngữ tự nhận diện, kể cả nói trộn Việt-Anh.
+        // - "Moonshine": nhẹ/nhanh hơn nhiều nhưng mỗi ngôn ngữ 1 model riêng (moonshine-stt/),
+        //   không tự nhận diện nói trộn — cần FE gửi kèm "language".
         services.AddSettings<ExternalServices.Speech.SpeechSettings>(configuration);
-        services.AddHttpClient<ISpeechToTextService, ExternalServices.Speech.WhisperSpeechToTextService>();
+        var speechSettings = configuration.GetSettings<ExternalServices.Speech.SpeechSettings>();
+        if (string.Equals(speechSettings.Provider, "Moonshine", StringComparison.OrdinalIgnoreCase))
+            services.AddHttpClient<ISpeechToTextService, ExternalServices.Speech.MoonshineSpeechToTextService>();
+        else
+            services.AddHttpClient<ISpeechToTextService, ExternalServices.Speech.WhisperSpeechToTextService>();
 
         services.AddScoped<SeedDataLoader>();
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
