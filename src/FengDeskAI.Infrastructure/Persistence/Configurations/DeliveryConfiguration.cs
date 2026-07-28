@@ -15,6 +15,7 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.Property(d => d.Id).HasColumnName("id");
         builder.Property(d => d.OrderId).HasColumnName("order_id").IsRequired();
         builder.Property(d => d.GardenStoreId).HasColumnName("garden_store_id").IsRequired();
+        builder.Property(d => d.AssignedStaffId).HasColumnName("assigned_staff_id");
 
         builder.Property(d => d.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(50);
         builder.Property(d => d.TrackingCode).HasColumnName("tracking_code").HasMaxLength(100);
@@ -36,11 +37,17 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.Property(d => d.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
 
         builder.HasIndex(d => d.GardenStoreId);
+        builder.HasIndex(d => d.AssignedStaffId);
 
         builder.HasOne(d => d.Store)
             .WithMany()
             .HasForeignKey(d => d.GardenStoreId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne(d => d.AssignedStaff)
+            .WithMany()
+            .HasForeignKey(d => d.AssignedStaffId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasQueryFilter(d => !d.IsDeleted);
     }

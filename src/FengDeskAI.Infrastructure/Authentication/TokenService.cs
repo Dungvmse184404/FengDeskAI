@@ -31,6 +31,7 @@ public class TokenService : ITokenService
             new(ClaimTypes.NameIdentifier, user.Id.ToString()),
             new(ClaimTypes.Name, user.FullName),
             new("role_mask", ((int)user.Role).ToString()),
+            new("token_version", user.TokenVersion.ToString()),
         };
 
         foreach (UserRole role in Enum.GetValues<UserRole>())

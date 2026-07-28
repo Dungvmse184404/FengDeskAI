@@ -20,6 +20,8 @@ public interface IOrderService
 
     Task<IServiceResult<PagedResult<StoreDeliveryResponse>>> GetStoreDeliveriesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);
     Task<IServiceResult<DeliveryResponse>> UpdateDeliveryStatusAsync(Guid deliveryId, Guid userId, bool isAdmin, UpdateDeliveryStatusRequest request, CancellationToken ct = default);
+    Task<IServiceResult<DeliveryResponse>> AssignDeliveryStaffAsync(
+        Guid deliveryId, Guid userId, bool isAdmin, AssignDeliveryStaffRequest request, CancellationToken ct = default);
 
     /// <summary>Garden owner bấm "Tạo đơn ship": delivery phải đang Confirmed; gọi nhà vận chuyển, gán tracking, chuyển sang Preparing.</summary>
     Task<IServiceResult<DeliveryResponse>> CreateDeliveryShipmentAsync(Guid deliveryId, Guid userId, bool isAdmin, CancellationToken ct = default);

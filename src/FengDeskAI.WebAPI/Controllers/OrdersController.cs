@@ -58,16 +58,25 @@ public class OrdersController : ApiControllerBase
         => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, IsAdmin, page, ct));
 
     [HttpPatch("deliveries/{deliveryId:guid}/status")]
+    [ResourceAuthorize(ResourceOperation.UpdateDelivery, "deliveryId")]
     public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, [FromBody] UpdateDeliveryStatusRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateDeliveryStatusAsync(deliveryId, CurrentUserId, IsAdmin, request, ct));
 
+    [HttpPut("deliveries/{deliveryId:guid}/assignee")]
+    [ResourceAuthorize(ResourceOperation.AssignDelivery, "deliveryId")]
+    public async Task<IActionResult> AssignDeliveryStaff(
+        Guid deliveryId, [FromBody] AssignDeliveryStaffRequest request, CancellationToken ct)
+        => ToActionResult(await _service.AssignDeliveryStaffAsync(deliveryId, CurrentUserId, IsAdmin, request, ct));
+
     /// <summary>Garden owner tạo vận đơn (gọi GHN/AhaMove) cho delivery đã ở trạng thái Confirmed.</summary>
     [HttpPost("deliveries/{deliveryId:guid}/shipment")]
+    [ResourceAuthorize(ResourceOperation.UpdateDelivery, "deliveryId")]
     public async Task<IActionResult> CreateShipment(Guid deliveryId, CancellationToken ct)
         => ToActionResult(await _service.CreateDeliveryShipmentAsync(deliveryId, CurrentUserId, IsAdmin, ct));
 
     /// <summary>Garden owner/staff: chi tiết đơn giao (sản phẩm + địa chỉ nhận) để đóng gói. Chỉ trả hàng thuộc đúng store này.</summary>
     [HttpGet("deliveries/{deliveryId:guid}/detail")]
+    [ResourceAuthorize(ResourceOperation.ViewDelivery, "deliveryId")]
     public async Task<IActionResult> GetDeliveryDetail(Guid deliveryId, CancellationToken ct)
         => ToActionResult(await _service.GetDeliveryDetailAsync(deliveryId, CurrentUserId, IsAdmin, ct));
 }

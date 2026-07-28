@@ -93,9 +93,12 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
             .Include(d => d.Order).ThenInclude(o => o.Deliveries)
             .FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
 
-    public async Task<(List<Delivery> Items, int Total)> GetDeliveriesForStoreAsync(Guid storeId, int skip, int take, CancellationToken ct = default)
+    public async Task<(List<Delivery> Items, int Total)> GetDeliveriesForStoreAsync(
+        Guid storeId, Guid? assignedStaffId, int skip, int take, CancellationToken ct = default)
     {
         var query = _context.Set<Delivery>().AsNoTracking().Where(d => d.GardenStoreId == storeId);
+        if (assignedStaffId.HasValue)
+            query = query.Where(d => d.AssignedStaffId == assignedStaffId.Value);
         var total = await query.CountAsync(ct);
         var items = await query
             .Include(d => d.Order)

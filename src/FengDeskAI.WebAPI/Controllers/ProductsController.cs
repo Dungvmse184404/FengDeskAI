@@ -45,24 +45,29 @@ public class ProductsController : ApiControllerBase
         => ToActionResult(await _service.CreateAsync(CurrentUserId, IsAdmin, request, ct));
 
     [HttpPut("{id:guid}")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     [HttpDelete("{id:guid}")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
         => ToActionResult(await _service.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
 
     // ----- Product items (SKU) -----
 
     [HttpPost("{id:guid}/items")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> AddItem(Guid id, [FromBody] CreateProductItemRequest request, CancellationToken ct)
         => ToActionResult(await _service.AddItemAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     [HttpPut("{id:guid}/items/{itemId:guid}")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> UpdateItem(Guid id, Guid itemId, [FromBody] UpdateProductItemRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpdateItemAsync(id, itemId, CurrentUserId, IsAdmin, request, ct));
 
     [HttpDelete("{id:guid}/items/{itemId:guid}")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> DeleteItem(Guid id, Guid itemId, CancellationToken ct)
         => ToActionResult(await _service.DeleteItemAsync(id, itemId, CurrentUserId, IsAdmin, ct));
 
@@ -70,6 +75,7 @@ public class ProductsController : ApiControllerBase
 
     /// <summary>Tải ảnh sản phẩm (multipart/form-data, field "file"). Lưu vào storage rồi gắn URL vào sản phẩm.</summary>
     [HttpPost("{id:guid}/images")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> UploadImage(Guid id, IFormFile file, [FromForm] int sortOrder = 0, CancellationToken ct = default)
     {
         if (file is null || file.Length == 0)
@@ -83,10 +89,12 @@ public class ProductsController : ApiControllerBase
 
     /// <summary>Gắn ảnh sản phẩm bằng URL có sẵn (không upload tệp). Lưu link vào sản phẩm.</summary>
     [HttpPost("{id:guid}/images/link")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> AddImageByUrl(Guid id, [FromBody] CreateProductImageRequest request, CancellationToken ct)
         => ToActionResult(await _service.AddImageAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
         => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, IsAdmin, ct));
 
@@ -100,22 +108,26 @@ public class ProductsController : ApiControllerBase
 
     /// <summary>Yêu cầu sinh model 3D từ một ảnh sản phẩm (xử lý nền). Trả về 202 + trạng thái Processing.</summary>
     [HttpPost("{id:guid}/model-3d")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> GenerateModel3D(Guid id, [FromBody] GenerateModel3DRequest request, CancellationToken ct)
         => ToActionResult(await _model3DService.GenerateAsync(id, CurrentUserId, IsAdmin, request ?? new GenerateModel3DRequest(), ct));
 
     [HttpDelete("{id:guid}/model-3d")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> DeleteModel3D(Guid id, CancellationToken ct)
         => ToActionResult(await _model3DService.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
 
     // ----- Category links -----
 
     [HttpPut("{id:guid}/categories")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetCategories(Guid id, [FromBody] SetCategoriesRequest request, CancellationToken ct)
         => ToActionResult(await _service.SetCategoriesAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     // ----- Thuộc tính phong thủy (ứng viên gợi ý) -----
 
     [HttpPut("{id:guid}/feng-shui")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetFengShui(Guid id, [FromBody] SetProductFengShuiRequest request, CancellationToken ct)
         => ToActionResult(await _service.SetFengShuiAsync(id, CurrentUserId, IsAdmin, request, ct));
 
@@ -123,21 +135,25 @@ public class ProductsController : ApiControllerBase
 
     /// <summary>Trạng thái vector + input ngũ hành hiện tại của sản phẩm.</summary>
     [HttpGet("{id:guid}/vector")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> GetVector(Guid id, CancellationToken ct)
         => ToActionResult(await _vectorService.GetAsync(id, CurrentUserId, IsAdmin, ct));
 
     /// <summary>Khai chất liệu / màu / hình khối → auto-calc vector (tầng 2). Rỗng = xóa input.</summary>
     [HttpPut("{id:guid}/element-inputs")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetElementInputs(Guid id, [FromBody] SetProductElementInputsRequest request, CancellationToken ct)
         => ToActionResult(await _vectorService.SetElementInputsAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     /// <summary>Ghi đè vector ngũ hành thủ công (tầng 1). Yêu cầu Σ ≈ 1.</summary>
     [HttpPut("{id:guid}/vector-override")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetVectorOverride(Guid id, [FromBody] SetProductVectorOverrideRequest request, CancellationToken ct)
         => ToActionResult(await _vectorService.SetVectorOverrideAsync(id, CurrentUserId, IsAdmin, request, ct));
 
     /// <summary>Bỏ ghi đè, tính lại vector từ input (hoặc về backfill tầng 3).</summary>
     [HttpDelete("{id:guid}/vector-override")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> ClearVectorOverride(Guid id, CancellationToken ct)
         => ToActionResult(await _vectorService.ClearVectorOverrideAsync(id, CurrentUserId, IsAdmin, ct));
 }

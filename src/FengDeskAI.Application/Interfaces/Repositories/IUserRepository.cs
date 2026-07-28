@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
 
@@ -14,4 +15,7 @@ public interface IUserRepository : IGenericRepository<User>
     /// <paramref name="normalizedQuery"/> đã được lowercase + bỏ dấu + đ→d phía Application để khớp với SQL.
     /// </summary>
     Task<List<User>> SearchAsync(Guid searcherId, string normalizedQuery, int limit, CancellationToken ct = default);
+    Task<(List<User> Items, int Total)> GetAdminPageAsync(
+        int skip, int take, string? query, UserRole? role, bool? isActive, CancellationToken ct = default);
+    Task<int> CountActiveAdminsAsync(CancellationToken ct = default);
 }

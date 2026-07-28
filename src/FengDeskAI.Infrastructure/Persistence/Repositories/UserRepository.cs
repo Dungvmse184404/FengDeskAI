@@ -1,5 +1,6 @@
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Enums;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 
@@ -36,4 +37,29 @@ public class UserRepository : GenericRepository<User>, IUserRepository
             .Take(limit)
             .ToListAsync(ct);
     }
+
+    public async Task<(List<User> Items, int Total)> GetAdminPageAsync(
+        int skip, int take, string? query, UserRole? role, bool? isActive, CancellationToken ct = default)
+    {
+        var source = _set.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(query))
+        {
+            var pattern = $"%{query.Trim().ToLower()}%";
+            source = source.Where(u =>
+                EF.Functions.Like(u.Email.ToLower(), pattern)
+                || EF.Functions.Like(u.FullName.ToLower(), pattern)
+                || (u.Phone != null && EF.Functions.Like(u.Phone, pattern)));
+        }
+        if (role is { } roleFilter)
+            source = source.Where(u => (u.Role & roleFilter) == roleFilter);
+        if (isActive.HasValue)
+            source = source.Where(u => u.IsActive == isActive.Value);
+
+        var total = await source.CountAsync(ct);
+        var items = await source.OrderByDescending(u => u.CreatedAt).Skip(skip).Take(take).ToListAsync(ct);
+        return (items, total);
+    }
+
+    public Task<int> CountActiveAdminsAsync(CancellationToken ct = default)
+        => _set.CountAsync(u => u.IsActive && (u.Role & UserRole.Admin) == UserRole.Admin, ct);
 }

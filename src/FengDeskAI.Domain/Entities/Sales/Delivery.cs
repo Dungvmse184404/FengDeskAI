@@ -1,6 +1,7 @@
 using FengDeskAI.Domain.Common;
 using FengDeskAI.Domain.Entities.Shipping;
 using FengDeskAI.Domain.Entities.Vendor;
+using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Enums.Sales;
 
 namespace FengDeskAI.Domain.Entities.Sales;
@@ -13,6 +14,7 @@ public class Delivery : BaseEntity
 {
     public Guid OrderId { get; set; }
     public Guid GardenStoreId { get; set; }
+    public Guid? AssignedStaffId { get; set; }
 
     public DeliveryStatus Status { get; set; } = DeliveryStatus.Pending;
 
@@ -35,6 +37,7 @@ public class Delivery : BaseEntity
 
     public Order Order { get; set; } = null!;
     public GardenStore Store { get; set; } = null!;
+    public User? AssignedStaff { get; set; }
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
     public ICollection<DeliveryProgressLog> ProgressLogs { get; set; } = new List<DeliveryProgressLog>();
 }

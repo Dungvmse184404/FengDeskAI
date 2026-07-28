@@ -9,6 +9,8 @@ using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Enums;
 using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Vendor;
+using FengDeskAI.Domain.Entities.Identity;
+using System.Text.Json;
 
 namespace FengDeskAI.Application.Features.Vendor.Services;
 
@@ -267,6 +269,8 @@ public class StoreService : IStoreService
             InvitedAt = DateTime.UtcNow,
         };
         await _uow.Stores.AddAssignmentAsync(assignment, ct);
+        await AddAuditAsync(actorUserId, "InviteGardenStaff", "Store", id,
+            null, new { assignment.StaffId, assignment.Status }, null, ct);
         var actor = await _uow.Users.GetByIdAsync(actorUserId, ct);
         await _uow.SaveChangesAsync(ct);
 
@@ -314,6 +318,8 @@ public class StoreService : IStoreService
 
         assignment.Status = InvitationStatus.Revoked;
         assignment.UnassignedAt = DateTime.UtcNow;
+        await AddAuditAsync(actorUserId, "RevokeGardenStaff", "Store", id,
+            new { assignment.StaffId, Status = InvitationStatus.Accepted }, new { assignment.StaffId, assignment.Status }, null, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success(ApiStatusMessages.Staff.Unassigned);
     }
@@ -450,6 +456,8 @@ public class StoreService : IStoreService
         };
         await _uow.Stores.AddOwnerAsync(owner, ct);
         await GrantGardenOwnerRoleAsync(request.OwnerUserId, ct);
+        await AddAuditAsync(actorUserId, "AddStoreOwner", "Store", id,
+            null, new { request.OwnerUserId, owner.IsPrimary }, null, ct);
         await _uow.SaveChangesAsync(ct);
 
         return ServiceResult<StoreOwnerResponse>.Success(
@@ -472,6 +480,8 @@ public class StoreService : IStoreService
             return ServiceResult.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.CannotRemoveLastPrimary);
 
         owner.IsDeleted = true; // tracked → soft-delete
+        await AddAuditAsync(actorUserId, "RemoveStoreOwner", "Store", id,
+            new { OwnerUserId = ownerUserId, owner.IsPrimary }, null, null, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success(ApiStatusMessages.Store.OwnerRemoved);
     }
@@ -519,7 +529,22 @@ public class StoreService : IStoreService
         if (user is not null && !user.Role.Has(UserRole.GardenOwner))
         {
             user.Role = user.Role.Add(UserRole.GardenOwner);
+            user.TokenVersion++;
+            await _uow.RefreshTokens.RevokeAllActiveForUserAsync(user.Id, ct);
             _uow.Users.Update(user);
         }
     }
+
+    private Task AddAuditAsync(Guid actorId, string action, string resourceType, Guid resourceId,
+        object? oldValue, object? newValue, string? reason, CancellationToken ct)
+        => _uow.AuthorizationAudits.AddAsync(new AuthorizationAuditLog
+        {
+            ActorUserId = actorId,
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            OldValueJson = oldValue is null ? null : JsonSerializer.Serialize(oldValue),
+            NewValueJson = newValue is null ? null : JsonSerializer.Serialize(newValue),
+            Reason = reason,
+        }, ct);
 }

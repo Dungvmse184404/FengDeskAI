@@ -13,6 +13,7 @@ public class UnitOfWork : IUnitOfWork
         AppDbContext context,
         ILogger<UnitOfWork> logger,
         IUserRepository users,
+        IAuthorizationAuditRepository authorizationAudits,
         IRefreshTokenRepository refreshTokens,
         IWorkspaceProfileRepository workspaceProfiles,
         IWorkspaceTypeRepository workspaceTypes,
@@ -40,6 +41,7 @@ public class UnitOfWork : IUnitOfWork
         _context = context;
         _logger = logger;
         Users = users;
+        AuthorizationAudits = authorizationAudits;
         RefreshTokens = refreshTokens;
         WorkspaceProfiles = workspaceProfiles;
         WorkspaceTypes = workspaceTypes;
@@ -66,6 +68,7 @@ public class UnitOfWork : IUnitOfWork
     }
 
     public IUserRepository Users { get; }
+    public IAuthorizationAuditRepository AuthorizationAudits { get; }
     public IRefreshTokenRepository RefreshTokens { get; }
     public IWorkspaceProfileRepository WorkspaceProfiles { get; }
     public IWorkspaceTypeRepository WorkspaceTypes { get; }

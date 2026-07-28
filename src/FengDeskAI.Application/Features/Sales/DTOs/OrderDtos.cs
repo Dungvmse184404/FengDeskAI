@@ -61,6 +61,7 @@ public class DeliveryResponse
 {
     public Guid Id { get; set; }
     public Guid GardenStoreId { get; set; }
+    public Guid? AssignedStaffId { get; set; }
     public string? StoreName { get; set; }
     public DeliveryStatus Status { get; set; }
     public decimal ShippingFee { get; set; }
@@ -115,11 +116,17 @@ public class StoreDeliveryResponse
 {
     public Guid Id { get; set; }
     public Guid OrderId { get; set; }
+    public Guid? AssignedStaffId { get; set; }
     public DeliveryStatus Status { get; set; }
     public decimal ShippingFee { get; set; }
     public decimal Subtotal { get; set; }
     public string? TrackingCode { get; set; }
     public DateTime CreatedAt { get; set; }
+}
+
+public sealed class AssignDeliveryStaffRequest
+{
+    public Guid StaffId { get; set; }
 }
 
 public class UpdateDeliveryStatusRequest

@@ -19,6 +19,11 @@ public class User : BaseEntity
     public UserRole Role { get; set; } = UserRole.Customer;
     public decimal Balance { get; set; }
     public bool IsActive { get; set; } = true;
+    /// <summary>
+    /// Tăng mỗi khi tài khoản bị khóa, đổi role hoặc thu hồi toàn bộ phiên.
+    /// Access token chỉ hợp lệ khi claim token_version khớp giá trị hiện tại.
+    /// </summary>
+    public int TokenVersion { get; set; }
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<WorkspaceProfile> WorkspaceProfiles { get; set; } = new List<WorkspaceProfile>();

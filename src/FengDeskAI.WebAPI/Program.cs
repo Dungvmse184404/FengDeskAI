@@ -16,6 +16,7 @@ using FengDeskAI.WebAPI.Hubs;
 using FengDeskAI.WebAPI.Services;
 using FengDeskAI.WebAPI.Workers;
 using Microsoft.OpenApi.Models;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -95,6 +96,7 @@ builder.Services.AddCors(options =>
 });
 
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<IAuthorizationHandler, ResourceAccessHandler>();
 builder.Services.AddScoped<FengDeskAI.Application.Interfaces.External.IChatRealtimeNotifier, FengDeskAI.WebAPI.Hubs.ChatRealtimeNotifier>();
 builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiActivityNotifier, FengDeskAI.WebAPI.Hubs.AiActivityNotifier>();
 

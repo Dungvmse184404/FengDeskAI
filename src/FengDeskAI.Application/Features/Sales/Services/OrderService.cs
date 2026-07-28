@@ -15,6 +15,8 @@ using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
 using FengDeskAI.Domain.Entities.Announcement;
+using FengDeskAI.Domain.Entities.Identity;
+using System.Text.Json;
 
 namespace FengDeskAI.Application.Features.Sales.Services;
 
@@ -210,10 +212,14 @@ public class OrderService : IOrderService
 
     public async Task<IServiceResult<PagedResult<StoreDeliveryResponse>>> GetStoreDeliveriesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default)
     {
-        if (!isAdmin && !await _uow.Stores.CanManageAsync(storeId, userId, ct))
+        var isOwner = await _uow.Stores.IsOwnerAsync(storeId, userId, ct);
+        var isStoreStaff = await _uow.Stores.IsAcceptedStaffAsync(storeId, userId, ct);
+        if (!isAdmin && !isOwner && !isStoreStaff)
             return ServiceResult<PagedResult<StoreDeliveryResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
-        var (deliveries, total) = await _uow.Orders.GetDeliveriesForStoreAsync(storeId, page.Skip, page.PageSize, ct);
+        var staffScope = !isAdmin && !isOwner ? userId : (Guid?)null;
+        var (deliveries, total) = await _uow.Orders.GetDeliveriesForStoreAsync(
+            storeId, staffScope, page.Skip, page.PageSize, ct);
         var items = _mapper.Map<List<StoreDeliveryResponse>>(deliveries);
         return ServiceResult<PagedResult<StoreDeliveryResponse>>.Success(
             new PagedResult<StoreDeliveryResponse>(items, page.Page, page.PageSize, total));
@@ -224,7 +230,10 @@ public class OrderService : IOrderService
         var delivery = await _uow.Orders.GetDeliveryWithOrderAsync(deliveryId, ct);
         if (delivery is null)
             return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
-        if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
+        var isOwner = await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct);
+        var isAssignedStaff = delivery.AssignedStaffId == userId
+            && await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
+        if (!isAdmin && !isOwner && !isAssignedStaff)
             return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.UpdateDeliveryForbidden);
         if (!OrderWorkflow.IsValidDeliveryTransition(delivery.Status, request.Status))
             return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Order.DeliveryStatusTransitionFormat, delivery.Status, request.Status));
@@ -288,6 +297,31 @@ public class OrderService : IOrderService
         }, ct);
 
         return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
+    }
+
+    public async Task<IServiceResult<DeliveryResponse>> AssignDeliveryStaffAsync(
+        Guid deliveryId, Guid userId, bool isAdmin, AssignDeliveryStaffRequest request, CancellationToken ct = default)
+    {
+        var delivery = await _uow.Orders.GetDeliveryWithOrderAsync(deliveryId, ct);
+        if (delivery is null)
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
+        if (!isAdmin && !await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct))
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.UpdateDeliveryForbidden);
+        if (!await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, request.StaffId, ct))
+            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, "Nhân viên chưa có assignment Accepted tại cửa hàng.");
+
+        delivery.AssignedStaffId = request.StaffId;
+        delivery.AssignedAt = DateTime.UtcNow;
+        await _uow.AuthorizationAudits.AddAsync(new AuthorizationAuditLog
+        {
+            ActorUserId = userId,
+            Action = "AssignDeliveryStaff",
+            ResourceType = "Delivery",
+            ResourceId = delivery.Id,
+            NewValueJson = JsonSerializer.Serialize(new { delivery.GardenStoreId, delivery.AssignedStaffId }),
+        }, ct);
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), "Đã phân công nhân viên giao hàng.");
     }
 
     /// <summary>
@@ -510,7 +544,10 @@ public class OrderService : IOrderService
         var delivery = await _uow.Orders.GetDeliveryDetailAsync(deliveryId, ct);
         if (delivery is null)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
-        if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
+        var isOwner = await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct);
+        var isAssignedStaff = delivery.AssignedStaffId == userId
+            && await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
+        if (!isAdmin && !isOwner && !isAssignedStaff)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
         var order = delivery.Order;

@@ -37,6 +37,7 @@ public class UserConfiguration : IEntityTypeConfiguration<User>
         builder.Property(u => u.Role).HasColumnName("role").HasConversion<int>();
         builder.Property(u => u.Balance).HasColumnName("balance").HasPrecision(12, 3);
         builder.Property(u => u.IsActive).HasColumnName("is_active").HasDefaultValue(true);
+        builder.Property(u => u.TokenVersion).HasColumnName("token_version").HasDefaultValue(0);
 
         builder.Property(u => u.CreatedAt).HasColumnName("created_at");
         builder.Property(u => u.UpdatedAt).HasColumnName("updated_at");

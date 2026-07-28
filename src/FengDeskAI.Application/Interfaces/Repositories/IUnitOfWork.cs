@@ -3,6 +3,7 @@ namespace FengDeskAI.Application.Interfaces.Repositories;
 public interface IUnitOfWork
 {
     IUserRepository Users { get; }
+    IAuthorizationAuditRepository AuthorizationAudits { get; }
     IRefreshTokenRepository RefreshTokens { get; }
     IWorkspaceProfileRepository WorkspaceProfiles { get; }
     IWorkspaceTypeRepository WorkspaceTypes { get; }

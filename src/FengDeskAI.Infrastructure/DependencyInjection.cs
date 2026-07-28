@@ -25,6 +25,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
+using System.Security.Claims;
 
 namespace FengDeskAI.Infrastructure;
 
@@ -106,14 +107,32 @@ public static class DependencyInjection
                         ctx.Error ?? "(none)", ctx.ErrorDescription ?? "(none)");
                     return Task.CompletedTask;
                 },
-                OnTokenValidated = ctx =>
+                OnTokenValidated = async ctx =>
                 {
                     var logger = ctx.HttpContext.RequestServices
                         .GetRequiredService<ILoggerFactory>()
                         .CreateLogger("JwtBearer");
+                    var userIdValue = ctx.Principal?.FindFirstValue(ClaimTypes.NameIdentifier);
+                    var versionValue = ctx.Principal?.FindFirstValue("token_version");
+                    if (!Guid.TryParse(userIdValue, out var userId)
+                        || !int.TryParse(versionValue, out var tokenVersion))
+                    {
+                        ctx.Fail("Token thiếu thông tin phiên hợp lệ.");
+                        return;
+                    }
+
+                    var db = ctx.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                    var state = await db.Users.AsNoTracking()
+                        .Where(u => u.Id == userId)
+                        .Select(u => new { u.IsActive, u.TokenVersion })
+                        .SingleOrDefaultAsync(ctx.HttpContext.RequestAborted);
+                    if (state is null || !state.IsActive || state.TokenVersion != tokenVersion)
+                    {
+                        ctx.Fail("Tài khoản đã bị khóa hoặc phiên đã bị thu hồi.");
+                        return;
+                    }
                     logger.LogDebug(
                         "JWT validated OK for {Name}", ctx.Principal?.Identity?.Name ?? "(unknown)");
-                    return Task.CompletedTask;
                 },
             };
         });
@@ -135,6 +154,7 @@ public static class DependencyInjection
         services.AddScoped(typeof(IGenericRepository<>), typeof(GenericRepository<>));
 
         services.AddScoped<IUserRepository, UserRepository>();
+        services.AddScoped<IAuthorizationAuditRepository, AuthorizationAuditRepository>();
         services.AddScoped<IRefreshTokenRepository, RefreshTokenRepository>();
         services.AddScoped<IWorkspaceProfileRepository, WorkspaceProfileRepository>();
         services.AddScoped<IWorkspaceTypeRepository, WorkspaceTypeRepository>();
