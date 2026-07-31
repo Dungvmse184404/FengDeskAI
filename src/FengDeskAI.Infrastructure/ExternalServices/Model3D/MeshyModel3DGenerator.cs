@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -9,7 +10,9 @@ using Microsoft.Extensions.Options;
 namespace FengDeskAI.Infrastructure.ExternalServices.Model3D;
 
 /// <summary>
-/// Gọi Meshy AI image-to-3D (bất đồng bộ): POST tạo job → nhận task id; GET poll trạng thái.
+/// Gọi Meshy AI multi-image-to-3D (bất đồng bộ, 1–4 ảnh): POST tạo job → nhận task id; GET poll
+/// trạng thái. Dùng chung cho cả Initial (1 ảnh) lẫn Regenerate (nhiều ảnh) — xem
+/// docs/adr/refactor-model3d-request-flow.md mục 6.
 /// </summary>
 public sealed class MeshyModel3DGenerator : IModel3DGenerator
 {
@@ -31,19 +34,35 @@ public sealed class MeshyModel3DGenerator : IModel3DGenerator
             _http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _settings.ApiKey);
     }
 
-    public async Task<string> StartImageTo3DAsync(string imageUrl, CancellationToken ct = default)
+    public int InsufficientCreditsBackoffMinutes => _settings.InsufficientCreditsBackoffMinutes;
+
+    public async Task<string> StartImageTo3DAsync(IReadOnlyList<string> imageUrls, CancellationToken ct = default)
     {
+        if (imageUrls is null || imageUrls.Count == 0)
+            throw new ArgumentException("Cần ít nhất 1 ảnh nguồn.", nameof(imageUrls));
+        if (imageUrls.Count > 4)
+            throw new ArgumentException("Meshy multi-image-to-3D chỉ nhận tối đa 4 ảnh.", nameof(imageUrls));
+
         var payload = new MeshyCreateRequest
         {
-            ImageUrl = imageUrl,
+            ImageUrls = imageUrls,
             AiModel = _settings.AiModel,
             Topology = _settings.Topology,
             TargetPolycount = _settings.TargetPolycount,
             ShouldTexture = _settings.ShouldTexture,
         };
 
-        _logger.LogInformation("[Meshy] POST {Path} (image-to-3D).", _settings.ImageTo3DPath);
-        using var resp = await _http.PostAsJsonAsync(_settings.ImageTo3DPath, payload, JsonOptions, ct);
+        _logger.LogInformation("[Meshy] POST {Path} (multi-image-to-3D, {Count} ảnh).", _settings.MultiImageTo3DPath, imageUrls.Count);
+        using var resp = await _http.PostAsJsonAsync(_settings.MultiImageTo3DPath, payload, JsonOptions, ct);
+
+        // 402 Payment Required = hết credit — ném riêng để caller requeue thay vì fail hẳn.
+        // Nguồn: https://docs.meshy.ai/en/api/errors
+        if (resp.StatusCode == HttpStatusCode.PaymentRequired)
+        {
+            _logger.LogWarning("[Meshy] 402 Payment Required — hết credit.");
+            throw new InsufficientCreditsException("Meshy hết credit (402 Payment Required).");
+        }
+
         resp.EnsureSuccessStatusCode();
 
         var body = await resp.Content.ReadFromJsonAsync<MeshyCreateResponse>(JsonOptions, ct);
@@ -54,7 +73,7 @@ public sealed class MeshyModel3DGenerator : IModel3DGenerator
 
     public async Task<Model3DTaskResult> GetTaskAsync(string taskId, CancellationToken ct = default)
     {
-        using var resp = await _http.GetAsync($"{_settings.ImageTo3DPath}/{taskId}", ct);
+        using var resp = await _http.GetAsync($"{_settings.MultiImageTo3DPath}/{taskId}", ct);
         resp.EnsureSuccessStatusCode();
 
         var task = await resp.Content.ReadFromJsonAsync<MeshyTaskResponse>(JsonOptions, ct)
@@ -82,11 +101,11 @@ public sealed class MeshyModel3DGenerator : IModel3DGenerator
         return new MemoryStream(bytes);
     }
 
-    // ----- DTO khớp Meshy OpenAPI v1 -----
+    // ----- DTO khớp Meshy OpenAPI v1 (multi-image-to-3d) -----
 
     private sealed class MeshyCreateRequest
     {
-        [JsonPropertyName("image_url")] public string ImageUrl { get; set; } = null!;
+        [JsonPropertyName("image_urls")] public IReadOnlyList<string> ImageUrls { get; set; } = null!;
         [JsonPropertyName("ai_model")] public string AiModel { get; set; } = null!;
         [JsonPropertyName("topology")] public string Topology { get; set; } = null!;
         [JsonPropertyName("target_polycount")] public int TargetPolycount { get; set; }

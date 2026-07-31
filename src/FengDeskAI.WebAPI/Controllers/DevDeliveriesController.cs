@@ -1,5 +1,6 @@
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
+using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -28,12 +29,81 @@ public sealed class DevDeliveriesController : ApiControllerBase
     };
 
     private readonly IOrderService _orders;
+    private readonly IShippingService _shipping;
     private readonly IWebHostEnvironment _env;
 
-    public DevDeliveriesController(IOrderService orders, IWebHostEnvironment env)
+    public DevDeliveriesController(IOrderService orders, IShippingService shipping, IWebHostEnvironment env)
     {
         _orders = orders;
+        _shipping = shipping;
         _env = env;
+    }
+
+    /// <summary>
+    /// Giả lập nhà vận chuyển báo <b>GIAO THÀNH CÔNG</b>. Đi qua pipeline webhook thật
+    /// (<c>ProcessWebhookAsync</c>): lưu webhook thô, guard transition, set <c>DeliveredAt</c>,
+    /// progress log nguồn Carrier, rollup order → Completed, notification cho khách.
+    /// Tự đi qua bước bắc cầu (<c>Preparing → Shipped → Delivered</c>) nên gọi thẳng là được.
+    /// </summary>
+    [HttpPost("{deliveryId:guid}/shipping/delivered")]
+    public async Task<IActionResult> SimulateDelivered(Guid deliveryId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+        return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Delivered, ct));
+    }
+
+    /// <summary>
+    /// Giả lập nhà vận chuyển báo <b>GIAO THẤT BẠI</b> → delivery sang <c>DeliveryFailed</c>.
+    /// Sau bước này có thể test tiếp <c>POST /api/shipping/deliveries/{id}/redeliver</c> (gọi GHN thật).
+    /// Tự đi qua bước bắc cầu như endpoint <c>delivered</c>.
+    /// </summary>
+    [HttpPost("{deliveryId:guid}/shipping/delivery-failed")]
+    public async Task<IActionResult> SimulateDeliveryFailed(Guid deliveryId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+        return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.DeliveryFailed, ct));
+    }
+
+    /// <summary>
+    /// Giả lập nhà vận chuyển đã lấy hàng và đang giao (<c>Preparing → Shipped</c>) — bước bắc cầu
+    /// để tới được hai trạng thái kết thúc ở trên.
+    /// </summary>
+    [HttpPost("{deliveryId:guid}/shipping/delivering")]
+    public async Task<IActionResult> SimulateDelivering(Guid deliveryId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+        return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Shipped, ct));
+    }
+
+    /// <summary>
+    /// Liệt kê toàn bộ delivery của một order (đơn nhiều store → nhiều delivery) để lấy
+    /// <c>deliveryId</c>. KHÔNG lọc theo chủ đơn nên không phải đổi JWT giữa các đơn test.
+    /// </summary>
+    [HttpGet("orders/{orderId:guid}")]
+    public async Task<IActionResult> GetByOrder(Guid orderId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+        return ToActionResult(await _shipping.GetDeliveriesByOrderAsync(orderId, ct));
+    }
+
+    /// <summary>
+    /// Giả lập <b>GIAO THÀNH CÔNG TOÀN BỘ</b> delivery của một order (đơn nhiều store chuyển hết
+    /// trong một lần gọi). Tự đi qua các bước bắc cầu nên không cần gọi <c>/delivering</c> trước.
+    /// Trả kết quả từng delivery. Order rollup sang <c>Completed</c> khi tất cả đã Delivered.
+    /// </summary>
+    [HttpPost("orders/{orderId:guid}/shipping/delivered")]
+    public async Task<IActionResult> SimulateOrderDelivered(Guid orderId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+        return ToActionResult(await _shipping.SimulateCarrierStatusForOrderAsync(orderId, DeliveryStatus.Delivered, ct));
+    }
+
+    /// <summary>Giả lập <b>GIAO THẤT BẠI</b> cho toàn bộ delivery của một order.</summary>
+    [HttpPost("orders/{orderId:guid}/shipping/delivery-failed")]
+    public async Task<IActionResult> SimulateOrderDeliveryFailed(Guid orderId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+        return ToActionResult(await _shipping.SimulateCarrierStatusForOrderAsync(orderId, DeliveryStatus.DeliveryFailed, ct));
     }
 
     /// <summary>Ép 1 delivery sang Delivered (đi qua các bước chuyển hợp lệ).</summary>

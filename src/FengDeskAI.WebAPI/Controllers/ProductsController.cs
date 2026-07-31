@@ -99,18 +99,46 @@ public class ProductsController : ApiControllerBase
         => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, IsAdmin, ct));
 
     // ----- Model 3D (sinh từ ảnh qua Meshy AI) -----
+    // Flow: POST .../model-3d/requests tạo yêu cầu — product chưa có model → Initial (tự động,
+    // Model3DPollingWorker xử lý); đã có model → Regenerate (vào hàng chờ, chỉ staff sàn xử lý thủ
+    // công qua Model3DRequestsController). Xem docs/adr/refactor-model3d-request-flow.md.
 
-    /// <summary>Trạng thái/kết quả model 3D của sản phẩm.</summary>
+    /// <summary>Trạng thái/kết quả model 3D hiện tại của sản phẩm.</summary>
     [HttpGet("{id:guid}/model-3d")]
     [AllowAnonymous]
     public async Task<IActionResult> GetModel3D(Guid id, CancellationToken ct)
         => ToActionResult(await _model3DService.GetAsync(id, ct));
 
-    /// <summary>Yêu cầu sinh model 3D từ một ảnh sản phẩm (xử lý nền). Trả về 202 + trạng thái Processing.</summary>
-    [HttpPost("{id:guid}/model-3d")]
+    /// <summary>
+    /// Tạo yêu cầu sinh/tạo lại model 3D (multipart/form-data: tick ảnh có sẵn + upload ảnh mới,
+    /// 1–4 ảnh — chỉ áp dụng khi tạo request Initial; Regenerate không cần ảnh ở bước này).
+    /// </summary>
+    [HttpPost("{id:guid}/model-3d/requests")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
-    public async Task<IActionResult> GenerateModel3D(Guid id, [FromBody] GenerateModel3DRequest request, CancellationToken ct)
-        => ToActionResult(await _model3DService.GenerateAsync(id, CurrentUserId, IsAdmin, request ?? new GenerateModel3DRequest(), ct));
+    public async Task<IActionResult> RequestModel3D(Guid id, [FromForm] Model3DRequestFormModel form, CancellationToken ct)
+    {
+        var (request, streams) = form.ToRequest();
+        try
+        {
+            return ToActionResult(await _model3DService.RequestAsync(id, CurrentUserId, IsAdmin, request, ct));
+        }
+        finally
+        {
+            foreach (var s in streams) await s.DisposeAsync();
+        }
+    }
+
+    /// <summary>Lịch sử request tạo model 3D của sản phẩm (trạng thái đã che giấu lỗi hết credit).</summary>
+    [HttpGet("{id:guid}/model-3d/requests")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
+    public async Task<IActionResult> ListModel3DRequests(Guid id, CancellationToken ct)
+        => ToActionResult(await _model3DService.ListRequestsAsync(id, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>Bật/tắt hiển thị model 3D trên trang sản phẩm — không xóa dữ liệu model đã sinh.</summary>
+    [HttpPatch("{id:guid}/model-3d/toggle")]
+    [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
+    public async Task<IActionResult> ToggleModel3D(Guid id, [FromBody] ToggleModel3DVisibilityRequest request, CancellationToken ct)
+        => ToActionResult(await _model3DService.ToggleAsync(id, CurrentUserId, IsAdmin, request.IsEnabled, ct));
 
     [HttpDelete("{id:guid}/model-3d")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]

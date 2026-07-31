@@ -112,14 +112,28 @@ public static class ApiStatusMessages
         public const string StylesNotExist = "Có mã phong cách (style) không tồn tại.";
         public const string VibesNotExist = "Có mã vibe không tồn tại.";
 
-        // Model 3D
+        // Model 3D — kết quả hiện tại (ProductModel3D)
         public const string Model3DSourceImageRequired = "Sản phẩm chưa có ảnh để sinh model 3D.";
         public const string Model3DSourceImageNotFound = "Không tìm thấy ảnh nguồn đã chọn.";
-        public const string Model3DAlreadyProcessing = "Model 3D đang được xử lý, vui lòng đợi hoàn tất.";
         public const string Model3DNotFound = "Sản phẩm chưa có model 3D.";
-        public const string Model3DStarted = "Đã gửi yêu cầu sinh model 3D, đang xử lý nền.";
         public const string Model3DDeleted = "Đã xóa model 3D.";
+        public const string Model3DToggled = "Đã cập nhật hiển thị model 3D.";
+
+        // Model 3D — request/hàng chờ (Model3DRequest). Xem docs/adr/refactor-model3d-request-flow.md.
+        public const string Model3DImageRequired = "Cần chọn ít nhất 1 ảnh (ảnh có sẵn hoặc ảnh mới upload).";
+        public const string Model3DImageLimitExceeded = "Chỉ được chọn tối đa 4 ảnh cho 1 lần sinh model 3D.";
+        public const string Model3DRequestOpenConflict = "Sản phẩm đang có yêu cầu tạo model 3D chưa xử lý xong.";
+        public const string Model3DRequestNotFound = "Không tìm thấy yêu cầu tạo model 3D.";
+        public const string Model3DRequestQueued = "Đã gửi yêu cầu, hệ thống đang tự động tạo model 3D.";
+        public const string Model3DRequestAwaitingStaff = "Đã gửi yêu cầu tạo lại model 3D, đang chờ nhân viên xử lý.";
+        public const string Model3DRequestNotActionableByStaff = "Yêu cầu này không ở trạng thái chờ nhân viên xử lý.";
+        public const string Model3DRequestNoTaskToAccept = "Yêu cầu chưa có kết quả Meshy để chấp nhận — hãy gọi tạo model trước.";
+        public const string Model3DRequestTaskNotSucceeded = "Task Meshy của yêu cầu này chưa hoàn tất (Succeeded).";
+        public const string Model3DRequestAccepted = "Đã chấp nhận model 3D mới cho sản phẩm.";
+        public const string Model3DRequestRejected = "Đã từ chối yêu cầu tạo model 3D.";
         public const string Model3DProviderError = "Dịch vụ sinh 3D gặp lỗi, vui lòng thử lại sau.";
+        /// <summary>Chỉ dùng cho response staff sàn (mục generate/retry) — KHÔNG dùng cho owner/garden staff.</summary>
+        public const string Model3DProviderInsufficientCredits = "Meshy hết credit — vui lòng nạp thêm rồi thử lại.";
     }
 
     public static class Cart
@@ -187,8 +201,51 @@ public static class ApiStatusMessages
         public const string WebhookProcessed = "Đã xử lý webhook và cập nhật trạng thái giao hàng.";
         public const string DeliveryNotFound = "Không tìm thấy delivery.";
         public const string ViewProgressForbidden = "Bạn không có quyền xem tiến trình giao hàng này.";
+        public const string OrderHasNoDelivery = "Đơn hàng chưa có đơn giao nào.";
+        public const string SimulationCompleted = "Đã giả lập trạng thái nhà vận chuyển.";
+        /// <summary>{0} = trạng thái hiện tại, {1} = trạng thái đích.</summary>
+        public const string NoTransitionPathFormat = "Không có đường chuyển hợp lệ từ {0} sang {1}.";
         /// <summary>{0} = trạng thái delivery hiện tại.</summary>
         public const string WebhookInvalidStatusFormat = "Trạng thái webhook không hợp lệ với delivery hiện tại ({0}).";
+    }
+
+    /// <summary>
+    /// Thông tin cửa hàng bắt buộc phải có trước khi tạo vận đơn. Xem
+    /// <c>Features/Shipping/Services/StoreShippingReadiness.cs</c>.
+    /// </summary>
+    public static class StoreShipping
+    {
+        // ===== Tên trường (ngắn — ghép vào message chặn thao tác) =====
+        public const string PickupAddressField = "Địa chỉ lấy hàng";
+        public const string PickupWardField = "Phường/xã điểm lấy hàng";
+        public const string SenderPhoneField = "Số điện thoại người gửi";
+        public const string SenderNameField = "Tên người gửi";
+        public const string ShopIdField = "Mã shop nhà vận chuyển";
+
+        // ===== Mô tả đầy đủ + cách khắc phục =====
+        public const string PickupAddressMissing = "Cửa hàng chưa có địa chỉ lấy hàng. Hãy thêm địa chỉ cửa hàng.";
+        public const string PickupWardGhnCodeMissing = "Phường/xã của địa chỉ lấy hàng chưa có mã vùng của nhà vận chuyển. Hãy chọn lại phường/xã.";
+        public const string PickupPhoneInvalid = "Chưa có số điện thoại người gửi hợp lệ. Nhà vận chuyển chỉ nhận số di động 10 chữ số (hotline 1900/số cố định không dùng được) — hãy nhập số điện thoại người gửi cho địa chỉ cửa hàng.";
+        public const string PickupNameMissing = "Chưa có tên người gửi cho địa chỉ lấy hàng.";
+        public const string CarrierShopIdMissing = "Cửa hàng chưa được cấp mã shop của nhà vận chuyển. Hệ thống tự cấp sau khi địa chỉ lấy hàng và số điện thoại người gửi đầy đủ — nếu đã đủ mà vẫn báo lỗi, hãy liên hệ quản trị viên.";
+
+        // ===== Message tổng hợp ({0} = danh sách trường thiếu) =====
+        public const string OwnerBlockedFormat = "Cửa hàng đang thiếu thông tin giao hàng: {0}. Vui lòng bổ sung trước khi tạo vận đơn.";
+        public const string StaffBlockedFormat = "Cửa hàng đang thiếu thông tin giao hàng: {0}. Vui lòng liên hệ chủ cửa hàng bổ sung trước khi tạo vận đơn.";
+        public const string Ready = "Cửa hàng đã đủ thông tin để tạo vận đơn.";
+
+        public const string CarrierRegistrationFailed = "Nhà vận chuyển từ chối cấp mã shop cho cửa hàng này. Kiểm tra log tích hợp rồi thử đồng bộ lại.";
+        public const string SyncCompleted = "Đã đồng bộ mã shop nhà vận chuyển.";
+
+        public const string ViewReadinessForbidden = "Bạn không có quyền xem thông tin giao hàng của cửa hàng này.";
+        public const string SenderPhoneInvalid = "Số điện thoại người gửi phải là số di động Việt Nam gồm 10 chữ số.";
+
+        // ===== Chặn tại khâu đặt hàng =====
+        public const string RecipientPhoneInvalid = "Số điện thoại người nhận không hợp lệ. Vui lòng dùng số di động Việt Nam gồm 10 chữ số.";
+        public const string RecipientNameRequired = "Địa chỉ giao hàng chưa có tên người nhận.";
+        public const string ShippingAddressNotMapped = "Địa chỉ giao hàng chưa có mã vùng của nhà vận chuyển. Vui lòng chọn lại phường/xã.";
+        /// <summary>{0} = tên cửa hàng, {1} = danh sách trường thiếu.</summary>
+        public const string StoreNotReadyFormat = "Cửa hàng \"{0}\" chưa đủ thông tin giao hàng ({1}) nên tạm thời chưa nhận đơn. Vui lòng bỏ sản phẩm của cửa hàng này khỏi đơn hoặc thử lại sau.";
     }
 
     public static class Store
@@ -196,6 +253,7 @@ public static class ApiStatusMessages
         public const string NotFound = "Không tìm thấy cửa hàng.";
         public const string NameRequired = "Tên cửa hàng không được để trống.";
         public const string HotlineRequired = "Hotline không được để trống.";
+        public const string HotlineInvalid = "Hotline không hợp lệ. Nhập số di động 10 chữ số, số cố định, hoặc tổng đài 1900/1800.";
         public const string OwnerNotFound = "Chủ cửa hàng (owner) không tồn tại.";
         public const string EditForbidden = "Bạn không có quyền sửa cửa hàng này.";
         public const string DeleteForbidden = "Bạn không có quyền xóa cửa hàng này.";

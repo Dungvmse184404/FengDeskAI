@@ -11,6 +11,10 @@ public class StoreAddressResponse
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
     public bool IsActive { get; set; }
+    /// <summary>Tên người gửi gửi cho nhà vận chuyển. Trống → dùng tên cửa hàng.</summary>
+    public string? SenderName { get; set; }
+    /// <summary>SĐT người gửi gửi cho nhà vận chuyển (di động 10 số). Trống → dùng hotline cửa hàng.</summary>
+    public string? SenderPhone { get; set; }
 }
 
 public class StoreResponse
@@ -65,6 +69,13 @@ public class CreateStoreAddressRequest
     public string StreetAddress { get; set; } = null!;
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
+    /// <summary>Tên người gửi cho nhà vận chuyển. Bỏ trống → dùng tên cửa hàng.</summary>
+    public string? SenderName { get; set; }
+    /// <summary>
+    /// SĐT người gửi cho nhà vận chuyển — phải là di động VN 10 số. Bắt buộc khi hotline cửa hàng
+    /// không phải số di động (1900/số cố định) vì GHN từ chối các số đó.
+    /// </summary>
+    public string? SenderPhone { get; set; }
 }
 
 public class UpdateStoreAddressRequest
@@ -73,6 +84,10 @@ public class UpdateStoreAddressRequest
     public string StreetAddress { get; set; } = null!;
     public decimal? Latitude { get; set; }
     public decimal? Longitude { get; set; }
+    /// <summary>Tên người gửi cho nhà vận chuyển. Bỏ trống → dùng tên cửa hàng.</summary>
+    public string? SenderName { get; set; }
+    /// <summary>SĐT người gửi cho nhà vận chuyển — phải là di động VN 10 số. Xem <see cref="CreateStoreAddressRequest.SenderPhone"/>.</summary>
+    public string? SenderPhone { get; set; }
 }
 
 public class AssignStaffRequest

@@ -24,7 +24,7 @@ public class ProductImageResponse
     public int SortOrder { get; set; }
 }
 
-/// <summary>Trạng thái + kết quả model 3D của sản phẩm.</summary>
+/// <summary>Trạng thái + kết quả model 3D hiện tại của sản phẩm ("bản mới nhất đã Succeeded").</summary>
 public class ProductModel3DResponse
 {
     public Guid Id { get; set; }
@@ -40,13 +40,10 @@ public class ProductModel3DResponse
     public string? ModelUrl { get; set; }
     public string? ThumbnailUrl { get; set; }
     public string? ErrorMessage { get; set; }
-    public DateTime UpdatedAt { get; set; }
-}
 
-/// <summary>Yêu cầu sinh model 3D. Bỏ trống <see cref="SourceImageId"/> → dùng ảnh primary (SortOrder nhỏ nhất).</summary>
-public class GenerateModel3DRequest
-{
-    public Guid? SourceImageId { get; set; }
+    /// <summary>Toggle hiển thị của owner/garden staff — false thì FE ẩn hẳn phần 3D (giữ nguyên dữ liệu).</summary>
+    public bool IsEnabled { get; set; }
+    public DateTime UpdatedAt { get; set; }
 }
 
 public class CategoryRefResponse

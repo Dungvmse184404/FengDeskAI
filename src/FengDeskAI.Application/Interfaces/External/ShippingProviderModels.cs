@@ -40,6 +40,17 @@ public record ShipmentItem(
     string Id, string Name, decimal Price, int Quantity,
     int WeightGram = 500, int LengthCm = 10, int WidthCm = 10, int HeightCm = 10);
 
+/// <summary>
+/// Đăng ký một điểm lấy hàng (shop) với nhà vận chuyển cho một garden store. GHN: mỗi shop có
+/// địa chỉ gửi + SĐT riêng dưới cùng một tài khoản (client), trả về ShopId dùng ở header mỗi request.
+/// </summary>
+public record ShopRegistrationRequest(
+    string Name,          // tên shop hiển thị bên nhà vận chuyển (dùng tên garden store)
+    string Phone,         // SĐT người gửi — phải là di động 10 số
+    string Address,       // địa chỉ chi tiết điểm lấy hàng
+    int DistrictId,       // mã quận/huyện của nhà vận chuyển
+    string WardCode);     // mã phường/xã của nhà vận chuyển
+
 public record ShipmentResult(
     string Provider,
     string ProviderOrderId,

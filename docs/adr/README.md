@@ -28,6 +28,7 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 | File | Nội dung |
 |---|---|
 | [fix-garden-owner-flow.md](./fix-garden-owner-flow.md) | Luồng tự nâng cấp Garden Owner |
+| [fix-ghn-create-shipment.md](./fix-ghn-create-shipment.md) | Tạo vận đơn GHN lỗi 400 "Lỗi lấy thông tin shop" (ShopId sai) + gọi HTTP trong transaction |
 | [fix-shipping-fee-preview.md](./fix-shipping-fee-preview.md) | Preview phí ship trước khi đặt hàng |
 | [fix-staff-seller-access.md](./fix-staff-seller-access.md) | Quyền truy cập của staff trong kênh người bán |
 | [fix-store-address.md](./fix-store-address.md) | Địa chỉ garden store |

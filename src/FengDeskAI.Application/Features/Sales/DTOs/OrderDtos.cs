@@ -49,6 +49,9 @@ public class OrderItemResponse
     public Guid Id { get; set; }
     public Guid ProductItemId { get; set; }
 
+    /// <summary>Id sản phẩm gốc (Product) của biến thể — FE dùng để đánh giá / mở trang sản phẩm.</summary>
+    public Guid ProductId { get; set; }
+
     /// <summary>Null khi đơn online chưa thanh toán (delivery chưa được tạo).</summary>
     public Guid? DeliveryId { get; set; }
     public string ProductName { get; set; } = null!;
@@ -81,6 +84,13 @@ public class OrderStatusLogResponse
     public DateTime ChangedAt { get; set; }
 }
 
+/// <summary>Cửa hàng có hàng trong đơn — FE hiển thị tên shop trên thẻ đơn hàng và link sang trang store.</summary>
+public class OrderStoreResponse
+{
+    public Guid StoreId { get; set; }
+    public string? StoreName { get; set; }
+}
+
 public class OrderListItemResponse
 {
     public Guid Id { get; set; }
@@ -92,6 +102,9 @@ public class OrderListItemResponse
     public decimal TotalAmount { get; set; }
     public int DeliveryCount { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    /// <summary>Lấy từ delivery; đơn online chưa thanh toán (chưa có delivery) thì suy ra từ sản phẩm trong đơn.</summary>
+    public List<OrderStoreResponse> Stores { get; set; } = new();
 }
 
 public class OrderDetailResponse

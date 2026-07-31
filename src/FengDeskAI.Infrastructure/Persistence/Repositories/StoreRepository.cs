@@ -26,6 +26,30 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
                .Include(s => s.Address).ThenInclude(a => a!.Ward).ThenInclude(w => w.District).ThenInclude(d => d.Province)
                .ToListAsync(ct);
 
+    public Task<List<GardenStore>> GetMissingCarrierShopIdAsync(int limit, CancellationToken ct = default)
+        // Lọc ngay ở SQL mọi điều kiện kiểm được: chỉ store thực sự có thể đăng ký mới được nạp về.
+        // Riêng SĐT phải chuẩn hoá (bỏ dấu cách/+84) nên không dịch sang SQL được — provisioner
+        // lọc nốt trong bộ nhớ trước khi gọi nhà vận chuyển.
+        => _set.AsNoTracking()
+               .Where(s => s.IsActive
+                        && s.GhnShopId == null
+                        && s.Address != null
+                        && s.Address.StreetAddress != ""
+                        && s.Address.Ward.GhnWardCode != null
+                        && s.Address.Ward.GhnWardCode != ""
+                        && s.Address.Ward.District.GhnDistrictId != null)
+               .Include(s => s.Address).ThenInclude(a => a!.Ward).ThenInclude(w => w.District)
+               .OrderBy(s => s.CreatedAt)
+               .Take(limit)
+               .ToListAsync(ct);
+
+    public async Task SetCarrierShopIdAsync(Guid storeId, int shopId, CancellationToken ct = default)
+        => await _set.Where(s => s.Id == storeId)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(s => s.GhnShopId, shopId)
+                // ExecuteUpdate bỏ qua interceptor SaveChanges nên phải tự set UpdatedAt.
+                .SetProperty(s => s.UpdatedAt, DateTime.UtcNow), ct);
+
     public async Task<bool> CanManageAsync(Guid storeId, Guid userId, CancellationToken ct = default)
     {
         if (await IsOwnerAsync(storeId, userId, ct)) return true;

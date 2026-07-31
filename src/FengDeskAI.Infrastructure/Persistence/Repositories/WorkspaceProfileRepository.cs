@@ -52,12 +52,13 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
     {
         // LẤY THEO ORDER (không bắt buộc đã có delivery): COD / đơn mới chưa tạo vận đơn vẫn
         // xem trước được tác động lên radar. Chỉ nhận đơn đã Paid (online) hoặc đã vào
-        // Processing/Completed (COD store đã xác nhận / đang giao / đã xong).
+        // Processing/Shipping/Completed (COD store đã xác nhận / đang chuẩn bị / đang ship / đã xong).
         // Nếu ĐÃ có delivery thì loại delivery bị hủy/hoàn/giao thất bại.
         var okOrderStatuses = new[]
         {
             Domain.Enums.Sales.OrderStatus.Paid,
             Domain.Enums.Sales.OrderStatus.Processing,
+            Domain.Enums.Sales.OrderStatus.Shipping,
             Domain.Enums.Sales.OrderStatus.Completed,
         };
         var excludedDelivery = new[]

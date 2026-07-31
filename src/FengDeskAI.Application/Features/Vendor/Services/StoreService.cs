@@ -1,8 +1,10 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Common.Validation;
 using FengDeskAI.Application.Features.Announcement.DTOs;
 using FengDeskAI.Application.Features.Announcement.Services;
+using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Features.Vendor.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Vendor;
@@ -19,12 +21,15 @@ public class StoreService : IStoreService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly INotificationService _notifications;
+    private readonly IStoreShopProvisioner _shopProvisioner;
 
-    public StoreService(IUnitOfWork uow, IMapper mapper, INotificationService notifications)
+    public StoreService(IUnitOfWork uow, IMapper mapper, INotificationService notifications,
+        IStoreShopProvisioner shopProvisioner)
     {
         _uow = uow;
         _mapper = mapper;
         _notifications = notifications;
+        _shopProvisioner = shopProvisioner;
     }
 
     public async Task<IServiceResult<List<StoreResponse>>> GetActiveAsync(CancellationToken ct = default)
@@ -45,6 +50,8 @@ public class StoreService : IStoreService
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.NameRequired);
         if (string.IsNullOrWhiteSpace(request.Hotline))
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineRequired);
+        if (!VietnamPhone.IsContactValid(request.Hotline))
+            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineInvalid);
 
         var entity = _mapper.Map<GardenStore>(request);
         entity.Name = request.Name.Trim();
@@ -75,6 +82,10 @@ public class StoreService : IStoreService
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.EditForbidden);
         if (string.IsNullOrWhiteSpace(request.Name))
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.NameRequired);
+        if (string.IsNullOrWhiteSpace(request.Hotline))
+            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineRequired);
+        if (!VietnamPhone.IsContactValid(request.Hotline))
+            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineInvalid);
 
         store.Name = request.Name.Trim();
         store.Description = request.Description;
@@ -138,6 +149,8 @@ public class StoreService : IStoreService
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreAddress.StreetRequired);
         if (!await _uow.Locations.WardExistsAsync(request.WardId, ct))
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreAddress.WardInvalid);
+        if (!IsSenderPhoneAcceptable(request.SenderPhone))
+            return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreShipping.SenderPhoneInvalid);
 
         // StoreId là unique (1-1). Nếu đã có bản ghi đã soft-delete thì hồi sinh thay vì insert mới (tránh đụng unique).
         var address = await _uow.Stores.GetAddressIncludingDeletedAsync(id, ct);
@@ -158,8 +171,11 @@ public class StoreService : IStoreService
         address.Latitude = request.Latitude;
         address.Longitude = request.Longitude;
         address.IsActive = true;
+        ApplySender(address, request.SenderName, request.SenderPhone);
 
         await _uow.SaveChangesAsync(ct);
+        await TryProvisionShopAsync(id, ct);
+
         return ServiceResult<StoreAddressResponse>.Success(
             _mapper.Map<StoreAddressResponse>(address), ApiStatusMessages.StoreAddress.Created, ApiStatusCodes.Created);
     }
@@ -175,6 +191,8 @@ public class StoreService : IStoreService
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreAddress.StreetRequired);
         if (!await _uow.Locations.WardExistsAsync(request.WardId, ct))
             return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreAddress.WardInvalid);
+        if (!IsSenderPhoneAcceptable(request.SenderPhone))
+            return ServiceResult<StoreAddressResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.StoreShipping.SenderPhoneInvalid);
 
         var address = await _uow.Stores.GetAddressAsync(id, ct);
         if (address is null)
@@ -184,8 +202,11 @@ public class StoreService : IStoreService
         address.StreetAddress = request.StreetAddress.Trim();
         address.Latitude = request.Latitude;
         address.Longitude = request.Longitude;
+        ApplySender(address, request.SenderName, request.SenderPhone);
 
         await _uow.SaveChangesAsync(ct);
+        await TryProvisionShopAsync(id, ct);
+
         return ServiceResult<StoreAddressResponse>.Success(_mapper.Map<StoreAddressResponse>(address), ApiStatusMessages.StoreAddress.Updated);
     }
 
@@ -521,6 +542,28 @@ public class StoreService : IStoreService
 
     private async Task<bool> IsOwnerOrAdminAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
         => isAdmin || await _uow.Stores.IsOwnerAsync(storeId, userId, ct);
+
+    /// <summary>
+    /// Owner vừa lưu địa chỉ → thử cấp luôn mã shop nhà vận chuyển cho store nếu chưa có.
+    /// Best-effort: provisioner tự nuốt lỗi, cập nhật địa chỉ vẫn thành công dù GHN lỗi.
+    /// </summary>
+    private async Task TryProvisionShopAsync(Guid storeId, CancellationToken ct)
+    {
+        // Nạp lại kèm Ward → District vì cần mã vùng nhà vận chuyển.
+        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { storeId }, ct)).FirstOrDefault();
+        if (store is not null) await _shopProvisioner.EnsureShopIdAsync(store, ct);
+    }
+
+    /// <summary>Bỏ trống được (sẽ fallback hotline); đã nhập thì phải là di động 10 số cho nhà vận chuyển.</summary>
+    private static bool IsSenderPhoneAcceptable(string? phone)
+        => string.IsNullOrWhiteSpace(phone) || VietnamPhone.IsCarrierValid(phone);
+
+    /// <summary>Ghi người gửi cho nhà vận chuyển; chuẩn hoá SĐT về dạng 0xxxxxxxxx, trống → null để fallback.</summary>
+    private static void ApplySender(StoreAddress address, string? senderName, string? senderPhone)
+    {
+        address.SenderName = string.IsNullOrWhiteSpace(senderName) ? null : senderName.Trim();
+        address.SenderPhone = VietnamPhone.Normalize(senderPhone);
+    }
 
     /// <summary>Cấp flag <see cref="UserRole.GardenOwner"/> cho user nếu chưa có (không SaveChanges).</summary>
     private async Task GrantGardenOwnerRoleAsync(Guid userId, CancellationToken ct)

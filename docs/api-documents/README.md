@@ -2,7 +2,7 @@
 
 Tài liệu API đầy đủ cho hệ thống **FengDeskAI** (BackEnd `.NET 8`). Mỗi controller một file; nội dung phản ánh đúng source code trong `FengDeskAI.WebAPI/Controllers` và DTO ở `FengDeskAI.Application`.
 
-**Tổng quan:** 24 controller · 147 endpoint.
+**Tổng quan:** 25 controller · 155 endpoint.
 
 ---
 
@@ -12,7 +12,7 @@ Tài liệu API đầy đủ cho hệ thống **FengDeskAI** (BackEnd `.NET 8`).
 |---|----------|-----------|:-----------:|----------|
 | 00 | [Tổng quan & Quy ước](./00-overview.md) | — | — | Base URL, Auth/JWT, envelope, lỗi, phân trang |
 | 01 | [Authentication](./01-authentication.md) | `AuthController` | 7 | Đăng ký (OTP), đăng nhập, refresh, logout, me |
-| 02 | [Products](./02-products.md) | `ProductsController` | 16 | Sản phẩm, SKU, ảnh, model 3D, phong thủy |
+| 02 | [Products](./02-products.md) | `ProductsController` | 18 | Sản phẩm, SKU, ảnh, model 3D (request), phong thủy |
 | 03 | [Categories](./03-categories.md) | `CategoriesController` | 5 | Danh mục sản phẩm |
 | 04 | [Tags](./04-tags.md) | `TagsController` | 4 | Tag sản phẩm |
 | 05 | [Styles](./05-styles.md) | `StylesController` | 3 | Tra cứu phong cách |
@@ -36,6 +36,7 @@ Tài liệu API đầy đủ cho hệ thống **FengDeskAI** (BackEnd `.NET 8`).
 | 23 | [Ping](./23-ping.md) | `PingController` | 5 | Demo test authorization (Dev) |
 | 24 | [Dev Tools](./24-dev-tools.md) | `DevToolsController` | 2 | Test AI tool (Dev) |
 | 25 | [Scoring Config](./25-scoring-config.md) | `ScoringConfigController` | 11 | Admin cấu hình engine gợi ý v3 |
+| 26 | [Model3D Requests (staff sàn)](./26-model3d-requests.md) | `Model3DRequestsController` | 6 | Hàng chờ Regenerate model 3D — xử lý thủ công |
 | A | [Phụ lục — Enums & Models](./99-appendix-models.md) | — | — | Toàn bộ enum, envelope, error codes |
 
 ---

@@ -23,17 +23,38 @@ public sealed record Model3DTaskResult(
     Model3DGenerationState State, int Progress, string? GlbUrl, string? ThumbnailUrl, string? Error);
 
 /// <summary>
-/// Sinh model 3D từ ảnh — gọi Meshy AI (image-to-3D, bất đồng bộ). Job chạy ngầm: caller start → nhận taskId,
-/// worker nền poll qua <see cref="GetTaskAsync"/> tới khi Succeeded rồi tải GLB qua <see cref="DownloadAsync"/>.
+/// Meshy trả <c>402 Payment Required</c> — hết credit ngay lúc gửi task (không phải lỗi xuất hiện
+/// sau khi poll). Caller (worker/service) bắt riêng exception này để requeue + backoff thay vì đánh
+/// dấu Failed. Xem <c>docs/adr/refactor-model3d-request-flow.md</c> mục 5.
+/// </summary>
+public sealed class InsufficientCreditsException : Exception
+{
+    public InsufficientCreditsException(string message) : base(message) { }
+}
+
+/// <summary>
+/// Sinh model 3D từ ảnh — gọi Meshy AI (multi-image-to-3D, bất đồng bộ, 1–4 ảnh cùng 1 object từ
+/// nhiều góc). Job chạy ngầm: caller start → nhận taskId, worker nền poll qua
+/// <see cref="GetTaskAsync"/> tới khi Succeeded rồi tải GLB qua <see cref="DownloadAsync"/>.
 /// </summary>
 public interface IModel3DGenerator
 {
-    /// <summary>Gửi job image-to-3D với ảnh nguồn (URL công khai). Trả về taskId của provider.</summary>
-    Task<string> StartImageTo3DAsync(string imageUrl, CancellationToken ct = default);
+    /// <summary>
+    /// Gửi job multi-image-to-3D với 1–4 ảnh nguồn (URL công khai, cùng 1 vật thể nhiều góc).
+    /// Trả về taskId của provider. Ném <see cref="InsufficientCreditsException"/> nếu Meshy trả 402.
+    /// </summary>
+    Task<string> StartImageTo3DAsync(IReadOnlyList<string> imageUrls, CancellationToken ct = default);
 
     /// <summary>Poll trạng thái 1 job.</summary>
     Task<Model3DTaskResult> GetTaskAsync(string taskId, CancellationToken ct = default);
 
     /// <summary>Tải nội dung file 3D (GLB) từ URL provider về stream để re-host sang storage.</summary>
     Task<Stream> DownloadAsync(string url, CancellationToken ct = default);
+
+    /// <summary>
+    /// Số phút backoff trước khi worker thử lại 1 request Initial sau khi gặp
+    /// <see cref="InsufficientCreditsException"/> (cấu hình provider, vd <c>MeshySettings</c> ở tầng Infrastructure —
+    /// expose qua đây để Application không phụ thuộc ngược vào Infrastructure).
+    /// </summary>
+    int InsufficientCreditsBackoffMinutes { get; }
 }

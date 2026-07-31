@@ -1,6 +1,6 @@
 namespace FengDeskAI.Infrastructure.ExternalServices.Model3D;
 
-/// <summary>Cấu hình tích hợp Meshy AI (image-to-3D). Bí mật (ApiKey) để trong secrets/Development.</summary>
+/// <summary>Cấu hình tích hợp Meshy AI (multi-image-to-3D). Bí mật (ApiKey) để trong secrets/Development.</summary>
 public class MeshySettings
 {
     public const string SectionName = "MeshySettings";
@@ -8,8 +8,11 @@ public class MeshySettings
     /// <summary>Base URL của Meshy OpenAPI.</summary>
     public string BaseUrl { get; set; } = "https://api.meshy.ai";
 
-    /// <summary>Đường dẫn endpoint image-to-3D.</summary>
-    public string ImageTo3DPath { get; set; } = "/openapi/v1/image-to-3d";
+    /// <summary>
+    /// Đường dẫn endpoint multi-image-to-3D — dùng chung cho MỌI trường hợp (Initial 1 ảnh lẫn
+    /// Regenerate nhiều ảnh, Meshy nhận 1–4 ảnh trên cùng endpoint này).
+    /// </summary>
+    public string MultiImageTo3DPath { get; set; } = "/openapi/v1/multi-image-to-3d";
 
     /// <summary>API key Meshy (Bearer). Bỏ trống → client vẫn resolve được nhưng gọi thật sẽ 401.</summary>
     public string? ApiKey { get; set; }
@@ -19,6 +22,12 @@ public class MeshySettings
 
     /// <summary>Chu kỳ worker nền poll trạng thái job (giây).</summary>
     public int PollIntervalSeconds { get; set; } = 15;
+
+    /// <summary>
+    /// Backoff (phút) trước khi worker thử lại 1 request Initial sau khi Meshy trả 402 (hết credit).
+    /// Xem <c>Model3DRequest.NextAttemptAt</c>.
+    /// </summary>
+    public int InsufficientCreditsBackoffMinutes { get; set; } = 10;
 
     // ----- Tham số render (gửi kèm khi tạo job) -----
 

@@ -26,4 +26,9 @@ public class LocationRepository : ILocationRepository
 
     public Task<bool> WardExistsAsync(Guid wardId, CancellationToken ct = default)
         => _context.Set<Ward>().AnyAsync(w => w.Id == wardId, ct);
+
+    public Task<Ward?> GetWardWithAncestorsAsync(Guid wardId, CancellationToken ct = default)
+        => _context.Set<Ward>().AsNoTracking()
+            .Include(w => w.District).ThenInclude(d => d.Province)
+            .FirstOrDefaultAsync(w => w.Id == wardId, ct);
 }

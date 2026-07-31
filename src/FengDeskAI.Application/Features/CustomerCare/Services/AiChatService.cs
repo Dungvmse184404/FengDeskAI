@@ -562,18 +562,18 @@ public sealed class AiChatService : IAiChatService
     private static readonly IReadOnlyDictionary<string, string> ToolFriendlyNotes =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
-            ["search_products"] = "Đang tìm sản phẩm phù hợp",
-            ["get_product"] = "Đang xem chi tiết sản phẩm",
-            ["recommend_products"] = "Đang tư vấn sản phẩm theo phong thủy",
-            ["list_my_workspaces"] = "Đang lấy hồ sơ không gian của bạn",
-            ["get_my_profile"] = "Đang lấy thông tin tài khoản của bạn",
-            ["list_my_orders"] = "Đang lấy danh sách đơn hàng của bạn",
-            ["get_payment_status"] = "Đang kiểm tra trạng thái thanh toán",
-            ["get_chat_partner_info"] = "Đang lấy thông tin khách hàng",
-            ["list_my_addresses"] = "Đang lấy danh sách địa chỉ của bạn",
-            ["prepare_order"] = "Đang chuẩn bị đơn hàng của bạn",
-            ["confirm_order"] = "Đang xác nhận và tạo đơn hàng",
-            ["compute_destiny_chart"] = "Đang lập lá số mệnh phong thủy",
+            ["search_products"] = "Searching for suitable products",
+            ["get_product"] = "Looking up product details",
+            ["recommend_products"] = "Recommending products by feng shui",
+            ["list_my_workspaces"] = "Fetching your space profiles",
+            ["get_my_profile"] = "Fetching your account info",
+            ["list_my_orders"] = "Fetching your orders",
+            ["get_payment_status"] = "Checking payment status",
+            ["get_chat_partner_info"] = "Fetching customer info",
+            ["list_my_addresses"] = "Fetching your addresses",
+            ["prepare_order"] = "Preparing your order",
+            ["confirm_order"] = "Confirming and creating your order",
+            ["compute_destiny_chart"] = "Building your feng shui chart",
         };
 
     private static string? ToolFriendlyNote(string toolName)

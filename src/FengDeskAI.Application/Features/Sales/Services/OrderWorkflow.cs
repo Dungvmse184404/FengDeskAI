@@ -37,6 +37,10 @@ public static class OrderWorkflow
         if (deliveryStatuses.Count == 0) return OrderStatus.Pending;
         if (deliveryStatuses.All(s => s == DeliveryStatus.Delivered)) return OrderStatus.Completed;
         if (deliveryStatuses.All(s => s == DeliveryStatus.Cancelled)) return OrderStatus.Cancelled;
+        // TẤT CẢ delivery đã Shipped trở lên (nhưng chưa phải tất cả Delivered — đã chốt ở nhánh trên)
+        // → cả order coi như đang vận chuyển. Đơn nhiều nhà vườn: chỉ 1 delivery ship xong thì vẫn tính Processing.
+        if (deliveryStatuses.All(s => s is DeliveryStatus.Shipped or DeliveryStatus.Delivered))
+            return OrderStatus.Shipping;
         if (deliveryStatuses.Any(s => s is DeliveryStatus.Confirmed or DeliveryStatus.Preparing
                 or DeliveryStatus.Shipped or DeliveryStatus.Delivered))
             return OrderStatus.Processing;

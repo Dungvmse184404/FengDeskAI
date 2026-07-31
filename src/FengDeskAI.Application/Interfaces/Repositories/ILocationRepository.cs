@@ -9,4 +9,7 @@ public interface ILocationRepository
     Task<List<District>> GetDistrictsByProvinceAsync(Guid provinceId, CancellationToken ct = default);
     Task<List<Ward>> GetWardsByDistrictAsync(Guid districtId, CancellationToken ct = default);
     Task<bool> WardExistsAsync(Guid wardId, CancellationToken ct = default);
+
+    /// <summary>Lấy phường kèm quận và tỉnh cha. Null nếu không tồn tại.</summary>
+    Task<Ward?> GetWardWithAncestorsAsync(Guid wardId, CancellationToken ct = default);
 }

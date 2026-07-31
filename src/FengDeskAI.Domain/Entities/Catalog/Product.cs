@@ -32,6 +32,9 @@ public class Product : BaseEntity
     /// <summary>Model 3D sinh từ ảnh (1–1). Null nếu chưa yêu cầu sinh.</summary>
     public ProductModel3D? Model3D { get; set; }
 
+    /// <summary>Lịch sử yêu cầu sinh/tạo lại model 3D (n–1). Xem <see cref="Model3DRequest"/>.</summary>
+    public ICollection<Model3DRequest> Model3DRequests { get; set; } = new List<Model3DRequest>();
+
     // ── Cache vector ngũ hành (engine v3) — 5 cột numeric(4,3), Σ≈1 khi đã tính ──
     public decimal? ElementTho { get; set; }
     public decimal? ElementKim { get; set; }

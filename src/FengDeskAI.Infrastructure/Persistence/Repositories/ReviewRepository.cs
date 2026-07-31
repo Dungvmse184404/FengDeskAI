@@ -31,7 +31,8 @@ public class ReviewRepository : GenericRepository<Review>, IReviewRepository
                .Where(o => o.CustomerId == userId
                         && (o.Status == OrderStatus.Paid
                          || o.Status == OrderStatus.Completed
-                         || o.Status == OrderStatus.Processing))//mốt gom lại sau
+                         || o.Status == OrderStatus.Processing
+                         || o.Status == OrderStatus.Shipping))//mốt gom lại sau
                .SelectMany(o => o.Items)
                .AnyAsync(oi => oi.ProductItem.ProductId == productId, ct);
 

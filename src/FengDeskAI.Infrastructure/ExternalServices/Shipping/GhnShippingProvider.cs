@@ -22,12 +22,16 @@ public class GhnShippingProvider : IShippingProvider
     private const string CreatePath = "/shiip/public-api/v2/shipping-order/create";
     private const string FeePath = "/shiip/public-api/v2/shipping-order/fee";
     private const string RedeliverPath = "/shiip/public-api/v2/switch-status/storing"; // "Giao lại" — GHN doc id=65
+    private const string RegisterShopPath = "/shiip/public-api/v2/shop/register";      // tạo điểm lấy hàng cho store
 
     private readonly HttpClient _http;
     private readonly GhnSettings _cfg;
     private readonly ILogger<GhnShippingProvider> _logger;
 
     public string Name => "GHN";
+
+    /// <summary>Chỉ bắt buộc store có <c>GhnShopId</c> riêng khi cấu hình không có ShopId mặc định.</summary>
+    public bool RequiresStoreShopId => _cfg.DefaultShopId <= 0;
 
     public GhnShippingProvider(HttpClient http, IOptions<GhnSettings> options, ILogger<GhnShippingProvider> logger)
     {
@@ -55,7 +59,7 @@ public class GhnShippingProvider : IShippingProvider
             TrackingCode: data.OrderCode,
             EstimatedDeliveryDate: data.ExpectedDeliveryTime,
             TrackingUrl: $"https://donhang.ghn.vn/?order_code={data.OrderCode}",
-            ShippingFee: ParseFee(data.TotalFee));
+            ShippingFee: data.TotalFee);
     }
 
     public async Task<decimal?> EstimateFeeAsync(ShipmentRequest req, CancellationToken ct = default)
@@ -79,6 +83,30 @@ public class GhnShippingProvider : IShippingProvider
         return true;
     }
 
+    /// <summary>
+    /// Tạo shop (điểm lấy hàng) dưới tài khoản GHN đang cấu hình. Endpoint này KHÔNG cần header
+    /// ShopId vì nó sinh ra ShopId. Trả null nếu GHN không trả về mã hợp lệ.
+    /// </summary>
+    public async Task<int?> RegisterShopAsync(ShopRegistrationRequest req, CancellationToken ct = default)
+    {
+        var body = new
+        {
+            district_id = req.DistrictId,
+            ward_code = req.WardCode,
+            name = req.Name,
+            phone = req.Phone,
+            address = req.Address,
+        };
+
+        var data = await SendAsync<RegisterShopData>(RegisterShopPath, body, shopId: null, ct,
+            $"đăng ký shop \"{req.Name}\"");
+        if (data.ShopId <= 0) return null;
+
+        _logger.LogInformation("[GHN] Đã đăng ký shop {ShopId} cho \"{Name}\" (quận {DistrictId}, phường {WardCode}).",
+            data.ShopId, req.Name, req.DistrictId, req.WardCode);
+        return data.ShopId;
+    }
+
     private int ResolveShopId(ShipmentRequest req)
     {
         var shopId = req.ShopId ?? _cfg.DefaultShopId;
@@ -87,10 +115,11 @@ public class GhnShippingProvider : IShippingProvider
         return shopId;
     }
 
-    private async Task<HttpResponseMessage> PostAsync(string path, object body, int shopId, CancellationToken ct, string action)
+    /// <summary><paramref name="shopId"/> null → không gắn header ShopId (dùng cho /shop/register vốn tạo ra ShopId).</summary>
+    private async Task<HttpResponseMessage> PostAsync(string path, object body, int? shopId, CancellationToken ct, string action)
     {
         var msg = new HttpRequestMessage(HttpMethod.Post, path) { Content = JsonContent.Create(body) };
-        msg.Headers.Add("ShopId", shopId.ToString(CultureInfo.InvariantCulture));
+        if (shopId is { } shop) msg.Headers.Add("ShopId", shop.ToString(CultureInfo.InvariantCulture));
 
         var res = await _http.SendAsync(msg, ct);
         if (!res.IsSuccessStatusCode)
@@ -103,7 +132,7 @@ public class GhnShippingProvider : IShippingProvider
         return res;
     }
 
-    private async Task<T> SendAsync<T>(string path, object body, int shopId, CancellationToken ct, string action)
+    private async Task<T> SendAsync<T>(string path, object body, int? shopId, CancellationToken ct, string action)
     {
         using var res = await PostAsync(path, body, shopId, ct, action);
         var dto = await res.Content.ReadFromJsonAsync<GhnResponse<T>>(cancellationToken: ct);
@@ -168,9 +197,6 @@ public class GhnShippingProvider : IShippingProvider
 
     private static string? NullIfEmpty(string? value) => string.IsNullOrEmpty(value) ? null : value;
 
-    private static decimal? ParseFee(string? raw)
-        => decimal.TryParse(raw, NumberStyles.Any, CultureInfo.InvariantCulture, out var v) ? v : null;
-
     private sealed record GhnResponse<T>(
         [property: JsonPropertyName("code")] int Code,
         [property: JsonPropertyName("message")] string? Message,
@@ -178,10 +204,17 @@ public class GhnShippingProvider : IShippingProvider
 
     private sealed record CreateOrderData(
         [property: JsonPropertyName("order_code")] string OrderCode,
-        [property: JsonPropertyName("total_fee")] string? TotalFee,
+        // GHN trả total_fee lúc là number lúc là string → converter nhận cả hai.
+        [property: JsonPropertyName("total_fee")]
+        [property: JsonConverter(typeof(FlexibleDecimalConverter))] decimal? TotalFee,
         [property: JsonPropertyName("expected_delivery_time")] DateTime? ExpectedDeliveryTime);
 
+    private sealed record RegisterShopData(
+        [property: JsonPropertyName("shop_id")] int ShopId);
+
     private sealed record FeeData(
-        [property: JsonPropertyName("total")] decimal Total,
-        [property: JsonPropertyName("service_fee")] decimal ServiceFee);
+        [property: JsonPropertyName("total")]
+        [property: JsonConverter(typeof(FlexibleDecimalConverter))] decimal? Total,
+        [property: JsonPropertyName("service_fee")]
+        [property: JsonConverter(typeof(FlexibleDecimalConverter))] decimal? ServiceFee);
 }

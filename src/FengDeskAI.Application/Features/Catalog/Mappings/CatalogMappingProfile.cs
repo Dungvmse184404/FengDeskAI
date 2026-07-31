@@ -1,6 +1,7 @@
 using AutoMapper;
 using FengDeskAI.Application.Features.Catalog.DTOs;
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Enums.Catalog;
 
 namespace FengDeskAI.Application.Features.Catalog.Mappings;
 
@@ -25,9 +26,25 @@ public class CatalogMappingProfile : Profile
         CreateMap<ProductItem, ProductItemResponse>();
         CreateMap<ProductImage, ProductImageResponse>();
 
-        // Model 3D — Status enum → tên chuỗi.
+        // Model 3D — Status enum → tên chuỗi. IsEnabled tự map theo tên (convention).
         CreateMap<ProductModel3D, ProductModel3DResponse>()
             .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()));
+
+        // Model3DRequest — owner/garden staff (che giấu lý do hết credit, hiện "Processing" thay vì
+        // lộ InternalFailureReason) vs staff sàn (đầy đủ, kèm tên product/store).
+        CreateMap<Model3DRequest, Model3DRequestResponse>()
+            .ForMember(d => d.RequestType, o => o.MapFrom(s => s.RequestType.ToString()))
+            .ForMember(d => d.Status, o => o.MapFrom(s =>
+                s.InternalFailureReason == Model3DFailureReason.InsufficientCredits
+                    ? Model3DRequestStatus.Processing.ToString()
+                    : s.Status.ToString()));
+
+        CreateMap<Model3DRequest, Model3DRequestQueueItemResponse>()
+            .ForMember(d => d.ProductName, o => o.MapFrom(s => s.Product.Name))
+            .ForMember(d => d.StoreName, o => o.MapFrom(s => s.Product.Store.Name))
+            .ForMember(d => d.RequestType, o => o.MapFrom(s => s.RequestType.ToString()))
+            .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()))
+            .ForMember(d => d.InternalFailureReason, o => o.MapFrom(s => s.InternalFailureReason != null ? s.InternalFailureReason.ToString() : null));
         CreateMap<CreateProductItemRequest, ProductItem>()
             .ForMember(d => d.Id, o => o.Ignore())
             .ForMember(d => d.ProductId, o => o.Ignore())

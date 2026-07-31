@@ -1,4 +1,5 @@
 using AutoMapper;
+using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Geography.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
@@ -27,4 +28,13 @@ public class LocationService : ILocationService
     public async Task<IServiceResult<List<WardResponse>>> GetWardsAsync(Guid districtId, CancellationToken ct = default)
         => ServiceResult<List<WardResponse>>.Success(
             _mapper.Map<List<WardResponse>>(await _locations.GetWardsByDistrictAsync(districtId, ct)));
+
+    public async Task<IServiceResult<WardPathResponse>> GetWardPathAsync(Guid wardId, CancellationToken ct = default)
+    {
+        var ward = await _locations.GetWardWithAncestorsAsync(wardId, ct);
+        if (ward is null)
+            return ServiceResult<WardPathResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy phường/xã.");
+
+        return ServiceResult<WardPathResponse>.Success(_mapper.Map<WardPathResponse>(ward));
+    }
 }

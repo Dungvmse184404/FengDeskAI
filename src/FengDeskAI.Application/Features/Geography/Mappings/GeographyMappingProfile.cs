@@ -12,6 +12,14 @@ public class GeographyMappingProfile : Profile
         CreateMap<District, DistrictResponse>();
         CreateMap<Ward, WardResponse>();
 
+        CreateMap<Ward, WardPathResponse>()
+            .ForMember(d => d.WardId, o => o.MapFrom(s => s.Id))
+            .ForMember(d => d.WardName, o => o.MapFrom(s => s.Name))
+            .ForMember(d => d.DistrictId, o => o.MapFrom(s => s.DistrictId))
+            .ForMember(d => d.DistrictName, o => o.MapFrom(s => s.District.Name))
+            .ForMember(d => d.ProvinceId, o => o.MapFrom(s => s.District.ProvinceId))
+            .ForMember(d => d.ProvinceName, o => o.MapFrom(s => s.District.Province.Name));
+
         CreateMap<UserAddress, UserAddressResponse>();
 
         CreateMap<CreateUserAddressRequest, UserAddress>()

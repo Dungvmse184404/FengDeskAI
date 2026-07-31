@@ -69,6 +69,7 @@ public static class DependencyInjection
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IProductVectorService, ProductVectorService>();
         services.AddScoped<IProductModel3DService, ProductModel3DService>();
+        services.AddScoped<IModel3DRequestService, Model3DRequestService>();
         services.AddScoped<ITaxonomyService, TaxonomyService>();
 
         services.AddScoped<ICartService, CartService>();
@@ -85,6 +86,8 @@ public static class DependencyInjection
         services.AddSingleton<IShippingFeeCalculator, ShippingFeeCalculator>();
         // Ước tính phí ship lúc checkout: gọi nhà vận chuyển (GHN /fee), fallback calculator.
         services.AddScoped<IDeliveryFeeEstimator, DeliveryFeeEstimator>();
+        // Tự cấp mã shop nhà vận chuyển cho store chưa có (mỗi store = 1 điểm lấy hàng riêng).
+        services.AddScoped<IStoreShopProvisioner, StoreShopProvisioner>();
 
         services.AddScoped<IPaymentService, PaymentService>();
 

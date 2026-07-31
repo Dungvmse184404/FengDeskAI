@@ -118,5 +118,32 @@ public class ShippingController : ApiControllerBase
     [HttpPost("deliveries/{deliveryId:guid}/redeliver")]
     public async Task<IActionResult> Redeliver(Guid deliveryId, CancellationToken ct)
         => ToActionResult(await _service.RedeliverAsync(deliveryId, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>
+    /// Cửa hàng đã đủ thông tin để tạo vận đơn chưa. FE gọi khi mở màn hình đơn giao:
+    /// <c>canFix = true</c> (owner/admin) → điều hướng sang <c>section</c> để bổ sung;
+    /// <c>canFix = false</c> (garden staff) → chỉ hiện <c>message</c> báo liên hệ chủ cửa hàng.
+    /// </summary>
+    [HttpGet("stores/{storeId:guid}/readiness")]
+    public async Task<IActionResult> GetStoreReadiness(Guid storeId, CancellationToken ct)
+        => ToActionResult(await _service.GetStoreReadinessAsync(storeId, CurrentUserId, IsAdmin, ct));
+
+    /// <summary>
+    /// [Nhân viên sàn] Nút "Đồng bộ mã shop" — chạy ngay một lượt cấp mã cho các cửa hàng đủ điều kiện
+    /// thay vì chờ worker định kỳ. Trả số cửa hàng đã cấp + danh sách bị bỏ qua kèm lý do.
+    /// </summary>
+    [HttpPost("carrier-shops/sync")]
+    [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
+    public async Task<IActionResult> SyncCarrierShops([FromQuery] int batchSize = 50, CancellationToken ct = default)
+        => ToActionResult(await _service.SyncCarrierShopsAsync(batchSize, ct));
+
+    /// <summary>
+    /// [Nhân viên sàn] Đồng bộ mã shop cho một cửa hàng cụ thể (nút trên từng dòng danh sách).
+    /// Trả tình trạng sẵn sàng sau khi chạy để UI cập nhật ngay.
+    /// </summary>
+    [HttpPost("stores/{storeId:guid}/carrier-shop/sync")]
+    [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
+    public async Task<IActionResult> SyncStoreCarrierShop(Guid storeId, CancellationToken ct)
+        => ToActionResult(await _service.SyncStoreCarrierShopAsync(storeId, ct));
 }
   

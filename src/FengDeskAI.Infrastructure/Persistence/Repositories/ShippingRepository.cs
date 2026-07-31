@@ -25,6 +25,13 @@ public class ShippingRepository : IShippingRepository
             .Include(d => d.Order).ThenInclude(o => o.Deliveries)
             .FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
 
+    public Task<List<Delivery>> GetDeliveriesByOrderAsync(Guid orderId, CancellationToken ct = default)
+        => _context.Set<Delivery>().AsNoTracking()
+            .Include(d => d.Store)
+            .Where(d => d.OrderId == orderId)
+            .OrderBy(d => d.CreatedAt)
+            .ToListAsync(ct);
+
     public async Task AddProgressLogAsync(DeliveryProgressLog log, CancellationToken ct = default)
         => await _context.Set<DeliveryProgressLog>().AddAsync(log, ct);
 

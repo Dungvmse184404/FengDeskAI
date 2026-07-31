@@ -1,5 +1,6 @@
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace FengDeskAI.Infrastructure.Persistence;
@@ -118,6 +119,20 @@ public class UnitOfWork : IUnitOfWork
             await tx.CommitAsync(CancellationToken.None);
             _logger.LogInformation("ExecuteInTransactionAsync committed: {Count} thay đổi đã lưu.", saved);
             return result;
+        }
+        catch (DbUpdateConcurrencyException ex)
+        {
+            // "affected 0 row(s)" chỉ nói chung chung. Liệt kê entity + state + khoá để biết
+            // lệnh nào không khớp dòng nào — không phải đoán qua stack trace.
+            foreach (var entry in ex.Entries)
+            {
+                var keys = string.Join(", ", entry.Metadata.FindPrimaryKey()?.Properties
+                    .Select(p => $"{p.Name}={entry.Property(p.Name).CurrentValue}") ?? Array.Empty<string>());
+                _logger.LogError("Concurrency: {Entity} state={State} key({Keys})",
+                    entry.Entity.GetType().Name, entry.State, keys);
+            }
+            await tx.RollbackAsync(CancellationToken.None);
+            throw;
         }
         catch (Exception ex)
         {

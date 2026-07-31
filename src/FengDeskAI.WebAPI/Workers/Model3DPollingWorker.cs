@@ -39,7 +39,7 @@ public sealed class Model3DPollingWorker : BackgroundService
                 {
                     await using var scope = _scopeFactory.CreateAsyncScope();
                     var service = scope.ServiceProvider.GetRequiredService<IProductModel3DService>();
-                    await service.PollPendingAsync(stoppingToken);
+                    await service.ProcessInitialQueueAsync(stoppingToken);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {

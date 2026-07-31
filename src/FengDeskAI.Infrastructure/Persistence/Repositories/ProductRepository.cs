@@ -163,6 +163,64 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Where(m => m.Status == Model3DStatus.Processing)
             .ToListAsync(ct);
 
+    // ----- Model3DRequest (hàng chờ + lịch sử, n–1 với product) -----
+
+    private static readonly Model3DRequestStatus[] OpenStatuses =
+    {
+        Model3DRequestStatus.Queued, Model3DRequestStatus.Processing,
+        Model3DRequestStatus.AwaitingStaff, Model3DRequestStatus.InProgress,
+    };
+
+    public Task<Model3DRequest?> GetOpenModel3DRequestAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<Model3DRequest>()
+            .Where(r => r.ProductId == productId && OpenStatuses.Contains(r.Status))
+            .FirstOrDefaultAsync(ct);
+
+    public async Task AddModel3DRequestAsync(Model3DRequest request, CancellationToken ct = default)
+        => await _context.Set<Model3DRequest>().AddAsync(request, ct);
+
+    public Task<Model3DRequest?> GetModel3DRequestAsync(Guid requestId, CancellationToken ct = default)
+        => _context.Set<Model3DRequest>()
+            .Include(r => r.Product).ThenInclude(p => p.Store)
+            .FirstOrDefaultAsync(r => r.Id == requestId, ct);
+
+    public Task<List<Model3DRequest>> ListModel3DRequestsAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<Model3DRequest>().AsNoTracking()
+            .Where(r => r.ProductId == productId)
+            .OrderByDescending(r => r.CreatedAt)
+            .ToListAsync(ct);
+
+    public async Task<(List<Model3DRequest> Items, int Total)> GetStaffQueueAsync(
+        Model3DRequestStatus? status, Model3DFailureReason? reason,
+        int skip, int take, CancellationToken ct = default)
+    {
+        var query = _context.Set<Model3DRequest>().AsNoTracking()
+            .Include(r => r.Product).ThenInclude(p => p.Store)
+            .AsQueryable();
+
+        if (status is { } s) query = query.Where(r => r.Status == s);
+        if (reason is { } rs) query = query.Where(r => r.InternalFailureReason == rs);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderBy(r => r.CreatedAt)
+            .Skip(skip).Take(take)
+            .ToListAsync(ct);
+        return (items, total);
+    }
+
+    public Task<List<Model3DRequest>> GetDueInitialQueueAsync(DateTime now, CancellationToken ct = default)
+        => _context.Set<Model3DRequest>()
+            .Where(r => r.RequestType == Model3DRequestType.Initial
+                        && r.Status == Model3DRequestStatus.Queued
+                        && (r.NextAttemptAt == null || r.NextAttemptAt <= now))
+            .ToListAsync(ct);
+
+    public Task<List<Model3DRequest>> GetProcessingInitialRequestsAsync(CancellationToken ct = default)
+        => _context.Set<Model3DRequest>()
+            .Where(r => r.RequestType == Model3DRequestType.Initial && r.Status == Model3DRequestStatus.Processing)
+            .ToListAsync(ct);
+
     public async Task ReplaceCategoriesAsync(Guid productId, IEnumerable<Guid> categoryIds, CancellationToken ct = default)
     {
         var set = _context.Set<ProductCategory>();

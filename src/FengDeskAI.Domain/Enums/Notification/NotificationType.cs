@@ -5,6 +5,7 @@ public enum NotificationType
     // Order
     OrderPlaced,
     OrderPaid,
+    OrderShipping,
     OrderCancelled,
     OrderCompleted,
 

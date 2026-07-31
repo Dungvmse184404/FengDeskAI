@@ -35,8 +35,7 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     {
         var query = _set.AsNoTracking().Where(o => o.CustomerId == customerId);
         var total = await query.CountAsync(ct);
-        var items = await query
-            .Include(o => o.Deliveries)
+        var items = await IncludeStores(query)
             .OrderByDescending(o => o.CreatedAt)
             .Skip(skip).Take(take)
             .ToListAsync(ct);
@@ -47,20 +46,30 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     {
         var query = _set.AsNoTracking();
         var total = await query.CountAsync(ct);
-        var items = await query
-            .Include(o => o.Deliveries)
+        var items = await IncludeStores(query)
             .OrderByDescending(o => o.CreatedAt)
             .Skip(skip).Take(take)
             .ToListAsync(ct);
         return (items, total);
     }
 
+    /// <summary>
+    /// Nạp cửa hàng cho màn danh sách đơn: qua delivery, và qua product của item (đơn online chưa
+    /// thanh toán chưa có delivery). Split query vì 2 collection include gây nhân bản dòng.
+    /// </summary>
+    private static IQueryable<Order> IncludeStores(IQueryable<Order> query)
+        => query
+            .Include(o => o.Deliveries).ThenInclude(d => d.Store)
+            .Include(o => o.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product).ThenInclude(p => p.Store)
+            .AsSplitQuery();
+
     public Task<Order?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking()
-            .Include(o => o.Items)
+            .Include(o => o.Items).ThenInclude(i => i.ProductItem)
             .Include(o => o.Deliveries).ThenInclude(d => d.Store)
             .Include(o => o.StatusLogs)
+            .AsSplitQuery()
             .AsQueryable();
         if (customerId.HasValue) query = query.Where(o => o.CustomerId == customerId.Value);
         return query.FirstOrDefaultAsync(o => o.Id == id, ct);

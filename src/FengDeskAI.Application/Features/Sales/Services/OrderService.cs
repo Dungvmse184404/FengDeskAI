@@ -2,6 +2,7 @@ using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Common.Validation;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Interfaces.External;
@@ -10,6 +11,7 @@ using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
+using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
@@ -27,15 +29,17 @@ public class OrderService : IOrderService
     private readonly IOrderCancellationService _cancellation;
     private readonly IShippingProvider _shipping;
     private readonly IDeliveryFeeEstimator _feeEstimator;
+    private readonly IStoreShopProvisioner _shopProvisioner;
 
     public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation,
-        IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator)
+        IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator, IStoreShopProvisioner shopProvisioner)
     {
         _uow = uow;
         _mapper = mapper;
         _cancellation = cancellation;
         _shipping = shipping;
         _feeEstimator = feeEstimator;
+        _shopProvisioner = shopProvisioner;
     }
 
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
@@ -46,9 +50,20 @@ public class OrderService : IOrderService
 
         var orderedProductItemIds = lines.Select(l => l.Pi.Id).ToHashSet();
 
+        // Điểm giao (khách) + điểm lấy (các store) — nạp 1 lần, dùng cho cả validate lẫn tính phí.
+        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(address.Id, ct);
+        var storeIds = lines.Select(l => l.Pi.Product.GardenStoreId).Distinct().ToList();
+        var stores = (await _uow.Stores.GetWithAddressByIdsAsync(storeIds, ct)).ToDictionary(s => s.Id);
+
+        // Chặn đơn không thể giao được ngay từ đầu: thiếu thông tin ở BẤT KỲ phía nào cũng
+        // dẫn tới đơn đã thu tiền mà không tạo nổi vận đơn.
+        var blocked = ValidateOrderShipping(shipTo, stores, storeIds);
+        if (blocked is not null)
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.UnprocessableEntity, blocked);
+
         // Ước tính phí ship theo từng store (gọi GHN /fee, fallback calculator) để cộng vào tổng
         // ngay lúc checkout — COD trả đúng tổng, đơn online PayOS thu cả phí ship.
-        var storeFees = await ComputeStoreFeesAsync(lines, address.Id, ct);
+        var storeFees = await ComputeStoreFeesAsync(lines, shipTo, stores, ct);
         var feeByStore = storeFees.ToDictionary(s => s.StoreId, s => s.ShippingFee);
 
         var orderId = await _uow.ExecuteInTransactionAsync(async _ =>
@@ -280,6 +295,18 @@ public class OrderService : IOrderService
                 IsRead = false,
             }, ct);
 
+            if (delivery.Order.Status == OrderStatus.Shipping && preRollupStatus != OrderStatus.Shipping)
+                await _uow.Notifications.AddAsync(new Notification
+                {
+                    UserId = delivery.Order.CustomerId,
+                    Type = NotificationType.OrderShipping,
+                    Title = "Đơn hàng đang vận chuyển",
+                    Message = "Đơn hàng của bạn đang trên đường giao đến bạn.",
+                    ReferenceId = delivery.Order.Id,
+                    ReferenceType = ReferenceType.Order,
+                    IsRead = false,
+                }, ct);
+
             if (delivery.Order.Status == OrderStatus.Completed && preRollupStatus != OrderStatus.Completed)
                 await _uow.Notifications.AddAsync(new Notification
                 {
@@ -329,12 +356,9 @@ public class OrderService : IOrderService
     /// (điểm lấy) + địa chỉ khách (điểm giao) read-only rồi gọi <see cref="IDeliveryFeeEstimator"/> cho mỗi store.
     /// </summary>
     private async Task<List<StoreShippingFee>> ComputeStoreFeesAsync(
-        List<(ProductItem Pi, int Quantity)> lines, Guid shippingAddressId, CancellationToken ct)
+        List<(ProductItem Pi, int Quantity)> lines, UserAddress? shipTo,
+        IReadOnlyDictionary<Guid, GardenStore> stores, CancellationToken ct)
     {
-        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(shippingAddressId, ct);
-        var storeIds = lines.Select(l => l.Pi.Product.GardenStoreId).Distinct().ToList();
-        var stores = (await _uow.Stores.GetWithAddressByIdsAsync(storeIds, ct)).ToDictionary(s => s.Id);
-
         var result = new List<StoreShippingFee>();
         foreach (var group in lines.GroupBy(l => l.Pi.Product.GardenStoreId))
         {
@@ -350,6 +374,37 @@ public class OrderService : IOrderService
             result.Add(new StoreShippingFee(group.Key, store?.Name ?? string.Empty, subtotal, fee));
         }
         return result;
+    }
+
+    /// <summary>
+    /// Ràng buộc điều kiện giao hàng của CẢ HAI phía ngay lúc đặt hàng. FE đã chặn phía người mua
+    /// nhưng server không được tin FE, và phía người bán trước đây không ai kiểm — dẫn tới đơn đã
+    /// thu tiền mà store không tạo nổi vận đơn. Trả null nếu hợp lệ, ngược lại là message chặn.
+    /// </summary>
+    private string? ValidateOrderShipping(
+        UserAddress? shipTo, IReadOnlyDictionary<Guid, GardenStore> stores, IReadOnlyList<Guid> storeIds)
+    {
+        // ===== Người mua (điểm giao) =====
+        if (shipTo is null)
+            return ApiStatusMessages.Order.ShippingAddressInvalid;
+        if (string.IsNullOrWhiteSpace(shipTo.RecipientName))
+            return ApiStatusMessages.StoreShipping.RecipientNameRequired;
+        if (!VietnamPhone.IsCarrierValid(shipTo.RecipientPhone))
+            return ApiStatusMessages.StoreShipping.RecipientPhoneInvalid;
+        if (string.IsNullOrEmpty(shipTo.Ward?.GhnWardCode) || shipTo.Ward?.District?.GhnDistrictId is null)
+            return ApiStatusMessages.StoreShipping.ShippingAddressNotMapped;
+
+        // ===== Người bán (điểm lấy) — mọi store trong đơn đều phải giao được =====
+        foreach (var storeId in storeIds)
+        {
+            stores.TryGetValue(storeId, out var store);
+            var issues = StoreShippingReadiness.Evaluate(store, _shipping.RequiresStoreShopId);
+            if (issues.Count > 0)
+                return string.Format(ApiStatusMessages.StoreShipping.StoreNotReadyFormat,
+                    store?.Name ?? string.Empty, StoreShippingReadiness.DescribeFields(issues));
+        }
+
+        return null;
     }
 
     private sealed record StoreShippingFee(Guid StoreId, string StoreName, decimal Subtotal, decimal ShippingFee);
@@ -436,7 +491,12 @@ public class OrderService : IOrderService
         if (!resolved.IsSuccess) return ServiceResult<ShippingFeePreviewResponse>.Failure(resolved.StatusCode, resolved.Message!);
         var (address, lines, _) = resolved.Data!;
 
-        var storeFees = await ComputeStoreFeesAsync(lines, address.Id, ct);
+        // Xem trước phí KHÔNG chặn khi thiếu thông tin giao hàng — để FE vẫn hiện được giỏ hàng;
+        // việc chặn nằm ở CheckoutAsync và endpoint readiness.
+        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(address.Id, ct);
+        var storeIds = lines.Select(l => l.Pi.Product.GardenStoreId).Distinct().ToList();
+        var stores = (await _uow.Stores.GetWithAddressByIdsAsync(storeIds, ct)).ToDictionary(s => s.Id);
+        var storeFees = await ComputeStoreFeesAsync(lines, shipTo, stores, ct);
         var subtotal = storeFees.Sum(s => s.Subtotal);
         var shipping = storeFees.Sum(s => s.ShippingFee);
 
@@ -460,9 +520,8 @@ public class OrderService : IOrderService
     /// KHÔNG đổi <c>Status</c> và KHÔNG ghi <c>DeliveryProgressLog</c> — caller quyết định ngữ cảnh
     /// chuyển trạng thái (hiện tại là Confirmed→Preparing trong <see cref="CreateDeliveryShipmentAsync"/>).
     /// </summary>
-    private async Task CreateShipmentForDeliveryAsync(Delivery delivery, CancellationToken ct)
+    private async Task CreateShipmentForDeliveryAsync(Delivery delivery, GardenStore? store, CancellationToken ct)
     {
-        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { delivery.GardenStoreId }, ct)).FirstOrDefault();
         var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(delivery.Order.ShippingAddressId, ct);
 
         var items = delivery.Items
@@ -505,9 +564,24 @@ public class OrderService : IOrderService
         if (!string.IsNullOrEmpty(delivery.ProviderOrderId))
             return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.ShipmentAlreadyCreated);
 
+        // Chặn sớm khi cửa hàng thiếu thông tin giao hàng — nếu để GHN từ chối thì chỉ nhận được
+        // lỗi 400 khó hiểu. Message khác nhau: owner/admin tự bổ sung được, garden staff phải báo chủ.
+        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { delivery.GardenStoreId }, ct)).FirstOrDefault();
+        // Store cũ (tạo trước khi có cơ chế tự cấp) chưa có mã shop → thử cấp ngay tại đây.
+        if (store is not null && store.GhnShopId is null)
+            await _shopProvisioner.EnsureShopIdAsync(store, ct);
+
+        var issues = StoreShippingReadiness.Evaluate(store, _shipping.RequiresStoreShopId);
+        if (issues.Count > 0)
+        {
+            var canFix = isAdmin || await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct);
+            return ServiceResult<DeliveryResponse>.Failure(
+                ApiStatusCodes.UnprocessableEntity, StoreShippingReadiness.BuildBlockedMessage(issues, canFix));
+        }
+
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            await CreateShipmentForDeliveryAsync(delivery, ct);
+            await CreateShipmentForDeliveryAsync(delivery, store, ct);
 
             var now = DateTime.UtcNow;
             delivery.Status = DeliveryStatus.Preparing;
@@ -574,6 +648,7 @@ public class OrderService : IOrderService
             {
                 Id = i.Id,
                 ProductItemId = i.ProductItemId,
+                ProductId = i.ProductItem?.ProductId ?? Guid.Empty,
                 DeliveryId = i.DeliveryId,
                 ProductName = i.ProductName,
                 UnitPrice = i.UnitPrice,

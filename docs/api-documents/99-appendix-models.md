@@ -83,7 +83,10 @@ Tổng hợp enum, envelope và mã trạng thái dùng chung. **Mọi enum seri
 | Enum | Giá trị |
 |------|---------|
 | `SizeClass` | `Small`, `Medium`, `Large` |
-| `Model3DStatus` | `Pending` (0), `Processing` (1), `Succeeded` (2), `Failed` (3) |
+| `Model3DStatus` | `Pending` (0), `Processing` (1), `Succeeded` (2), `Failed` (3) — trạng thái model hiện tại (`ProductModel3D`) |
+| `Model3DRequestType` | `Initial` (0, tự động), `Regenerate` (1, thủ công qua staff sàn) |
+| `Model3DRequestStatus` | `Queued` (0), `Processing` (1), `AwaitingStaff` (2), `InProgress` (3), `Succeeded` (4), `Failed` (5), `Rejected` (6) — xem `docs/adr/refactor-model3d-request-flow.md` |
+| `Model3DFailureReason` | `InsufficientCredits` (0), `GenerationFailed` (1), `InvalidImage` (2) — **staff-only**, không map ra API cho garden owner/garden staff |
 
 ---
 

@@ -51,6 +51,18 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     /// </summary>
     Task<List<GardenStore>> GetWithAddressByIdsAsync(IEnumerable<Guid> storeIds, CancellationToken ct = default);
 
+    /// <summary>
+    /// Store đang hoạt động, đã có địa chỉ nhưng CHƯA có mã shop nhà vận chuyển (<c>GhnShopId</c>),
+    /// kèm chuỗi phường/quận/tỉnh và ở trạng thái tracked để cập nhật. Dùng cho worker backfill.
+    /// </summary>
+    Task<List<GardenStore>> GetMissingCarrierShopIdAsync(int limit, CancellationToken ct = default);
+
+    /// <summary>
+    /// Ghi mã shop nhà vận chuyển cho store bằng UPDATE 1 cột. Dùng ExecuteUpdate để không đụng
+    /// change-tracker — hàm này được gọi từ nhiều luồng đang tracked sẵn entity store.
+    /// </summary>
+    Task SetCarrierShopIdAsync(Guid storeId, int shopId, CancellationToken ct = default);
+
     /// <summary>Địa chỉ active của store (đã lọc soft-delete), tracked để cập nhật.</summary>
     Task<StoreAddress?> GetAddressAsync(Guid storeId, CancellationToken ct = default);
     /// <summary>Địa chỉ của store kể cả đã soft-delete (để hồi sinh khi Add lại — StoreId là unique).</summary>

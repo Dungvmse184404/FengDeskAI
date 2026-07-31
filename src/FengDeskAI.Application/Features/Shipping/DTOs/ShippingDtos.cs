@@ -20,6 +20,19 @@ public class ShippingWebhookRequest
     public string? RawPayload { get; set; }
 }
 
+/// <summary>
+/// [DEV] Kết quả giả lập trạng thái nhà vận chuyển cho một delivery. Một order nhiều store sẽ
+/// có nhiều dòng — delivery nào không đẩy được (đã Cancelled/Returned…) vẫn báo rõ thay vì im lặng.
+/// </summary>
+public class CarrierSimulationResultResponse
+{
+    public Guid DeliveryId { get; set; }
+    /// <summary>Trạng thái sau khi chạy.</summary>
+    public DeliveryStatus Status { get; set; }
+    public bool Succeeded { get; set; }
+    public string? Message { get; set; }
+}
+
 public class DeliveryProgressLogResponse
 {
     public Guid Id { get; set; }

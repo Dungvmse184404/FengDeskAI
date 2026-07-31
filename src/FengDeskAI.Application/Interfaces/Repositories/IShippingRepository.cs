@@ -13,6 +13,12 @@ public interface IShippingRepository
     /// <summary>Tìm delivery theo id (kèm Order.Deliveries để rollup).</summary>
     Task<Delivery?> GetDeliveryByIdAsync(Guid deliveryId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Các delivery của một order (kèm Store), theo thứ tự tạo. KHÔNG lọc theo chủ đơn — dùng cho
+    /// pipeline nhà vận chuyển (webhook không có ngữ cảnh người dùng) và công cụ dev.
+    /// </summary>
+    Task<List<Delivery>> GetDeliveriesByOrderAsync(Guid orderId, CancellationToken ct = default);
+
     Task AddProgressLogAsync(DeliveryProgressLog log, CancellationToken ct = default);
     Task<List<DeliveryProgressLog>> GetProgressLogsAsync(Guid deliveryId, CancellationToken ct = default);
 }

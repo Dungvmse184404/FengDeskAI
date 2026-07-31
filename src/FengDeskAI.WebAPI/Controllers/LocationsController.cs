@@ -25,4 +25,9 @@ public class LocationsController : ApiControllerBase
     [HttpGet("districts/{districtId:guid}/wards")]
     public async Task<IActionResult> GetWards(Guid districtId, CancellationToken ct)
         => ToActionResult(await _service.GetWardsAsync(districtId, ct));
+
+    /// <summary>Tra ngược phường → quận → tỉnh. FE dùng để dựng lại dropdown khi mở form sửa địa chỉ đã lưu.</summary>
+    [HttpGet("wards/{wardId:guid}/path")]
+    public async Task<IActionResult> GetWardPath(Guid wardId, CancellationToken ct)
+        => ToActionResult(await _service.GetWardPathAsync(wardId, ct));
 }

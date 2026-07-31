@@ -57,6 +57,34 @@ public interface IProductRepository : IGenericRepository<Product>
     /// <summary>Các model đang Processing — worker nền poll Meshy để hoàn tất. Tracked để cập nhật.</summary>
     Task<List<ProductModel3D>> GetProcessingModel3DsAsync(CancellationToken ct = default);
 
+    // ----- Model3DRequest (hàng chờ + lịch sử, n–1 với product) -----
+
+    /// <summary>Request đang "mở" (chưa Succeeded/Failed/Rejected) của product — dùng để chặn tạo chồng request.</summary>
+    Task<Model3DRequest?> GetOpenModel3DRequestAsync(Guid productId, CancellationToken ct = default);
+
+    Task AddModel3DRequestAsync(Model3DRequest request, CancellationToken ct = default);
+
+    /// <summary>Load 1 request theo id (tracked) — dùng cho các thao tác staff sàn (generate/retry/accept/reject).</summary>
+    Task<Model3DRequest?> GetModel3DRequestAsync(Guid requestId, CancellationToken ct = default);
+
+    /// <summary>Lịch sử request của 1 product, mới nhất trước.</summary>
+    Task<List<Model3DRequest>> ListModel3DRequestsAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Hàng chờ cho staff sàn — kèm <c>Product</c>/<c>Product.Store</c> để hiển thị. Lọc theo
+    /// <paramref name="status"/> và/hoặc <paramref name="reason"/> (vd Queued + InsufficientCredits
+    /// = các request Initial đang kẹt vì hết credit Meshy).
+    /// </summary>
+    Task<(List<Model3DRequest> Items, int Total)> GetStaffQueueAsync(
+        Model3DRequestStatus? status, Model3DFailureReason? reason,
+        int skip, int take, CancellationToken ct = default);
+
+    /// <summary>Request Initial đang Queued và đến hạn thử lại (NextAttemptAt null hoặc &lt;= now) — cho worker.</summary>
+    Task<List<Model3DRequest>> GetDueInitialQueueAsync(DateTime now, CancellationToken ct = default);
+
+    /// <summary>Request Initial đang Processing (đã gửi Meshy) — worker poll kết quả.</summary>
+    Task<List<Model3DRequest>> GetProcessingInitialRequestsAsync(CancellationToken ct = default);
+
     // Thay thế toàn bộ liên kết category của product
     Task ReplaceCategoriesAsync(Guid productId, IEnumerable<Guid> categoryIds, CancellationToken ct = default);
 

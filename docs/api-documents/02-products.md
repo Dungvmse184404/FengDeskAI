@@ -23,8 +23,10 @@ Ghi (product, SKU, ảnh, danh mục, phong thủy) yêu cầu **owner/staff c�
 | POST | `/api/products/{id}/images` | Owner/Admin | Upload ảnh (multipart) |
 | POST | `/api/products/{id}/images/link` | Owner/Admin | Gắn ảnh bằng URL |
 | DELETE | `/api/products/{id}/images/{imageId}` | Owner/Admin | Xóa ảnh |
-| GET | `/api/products/{id}/model-3d` | Public | Trạng thái/kết quả model 3D |
-| POST | `/api/products/{id}/model-3d` | Owner/Admin | Sinh model 3D (xử lý nền, `202`) |
+| GET | `/api/products/{id}/model-3d` | Public | Trạng thái/kết quả model 3D hiện tại |
+| POST | `/api/products/{id}/model-3d/requests` | Owner/Admin | Tạo yêu cầu sinh/tạo lại model 3D (`202`) |
+| GET | `/api/products/{id}/model-3d/requests` | Owner/Admin | Lịch sử yêu cầu |
+| PATCH | `/api/products/{id}/model-3d/toggle` | Owner/Admin | Bật/tắt hiển thị model 3D |
 | DELETE | `/api/products/{id}/model-3d` | Owner/Admin | Xóa model 3D |
 | PUT | `/api/products/{id}/categories` | Owner/Admin | Gán danh mục |
 | PUT | `/api/products/{id}/feng-shui` | Owner/Admin | Khai báo thuộc tính phong thủy |
@@ -137,21 +139,52 @@ Xóa mềm sản phẩm.
 
 ---
 
-## Model 3D (sinh từ ảnh qua Meshy AI)
+## Model 3D (sinh từ ảnh qua Meshy AI — multi-image, 1–4 ảnh)
 
-**GET `/api/products/{id}/model-3d`** (Public) — trạng thái/kết quả. `data` = `ProductModel3DResponse`:
+> Thiết kế đầy đủ: `docs/adr/refactor-model3d-request-flow.md`. **Request đầu tiên** (Initial, sản
+> phẩm chưa có model) chạy **tự động** (worker nền gọi Meshy, tự retry nếu Meshy hết credit).
+> **Request tiếp theo** (Regenerate, sản phẩm đã có model) vào hàng chờ, chỉ **staff sàn** xử lý
+> thủ công — xem [26-model3d-requests.md](./26-model3d-requests.md).
+
+**GET `/api/products/{id}/model-3d`** (Public) — trạng thái/kết quả model hiện tại. `data` = `ProductModel3DResponse`:
 ```json
 { "id": "guid", "productId": "guid", "status": "Succeeded", "progress": 100,
   "sourceImageUrl": "...", "modelUrl": "https://....glb",
-  "thumbnailUrl": "...", "errorMessage": null, "updatedAt": "..." }
+  "thumbnailUrl": "...", "errorMessage": null, "isEnabled": true, "updatedAt": "..." }
 ```
-Status: `Pending | Processing | Succeeded | Failed`.
+Status: `Pending | Processing | Succeeded | Failed`. `isEnabled` = toggle hiển thị của owner/garden
+staff — `false` thì FE ẩn hẳn phần 3D (dữ liệu model vẫn còn, chỉ ẩn hiển thị).
 
-**POST `/api/products/{id}/model-3d`** — yêu cầu sinh model (xử lý nền, trả `202` + trạng thái `Processing`). Body (`GenerateModel3DRequest`, có thể bỏ trống → dùng ảnh primary):
+**POST `/api/products/{id}/model-3d/requests`** — tạo yêu cầu. `multipart/form-data`:
+
+| Field | Kiểu | Ghi chú |
+|---|---|---|
+| `sourceImageIds` | `guid[]` | Ảnh sản phẩm có sẵn được tick (0 hoặc nhiều) |
+| `newImages` | `file[]` | Ảnh mới upload — tự tạo `ProductImage` bình thường (vào gallery sản phẩm) |
+
+Tổng `sourceImageIds` + `newImages` phải 1–4 ảnh (giới hạn Meshy). **Chỉ áp dụng khi tạo request
+Initial** (sản phẩm chưa có model) — bỏ trống cả 2 field → dùng ảnh primary. Nếu sản phẩm **đã có**
+model, đây là request Regenerate: không cần ảnh ở bước này (staff sàn tự chọn ảnh khi xử lý) — 2
+field trên bị bỏ qua nếu có gửi.
+
+Trả `202` + `data` = `Model3DRequestResponse`:
 ```json
-{ "sourceImageId": "guid" }
+{ "id": "guid", "productId": "guid", "requestType": "Initial", "status": "Queued",
+  "createdAt": "...", "updatedAt": "..." }
 ```
-**DELETE `/api/products/{id}/model-3d`** — xóa model.
+`requestType`: `Initial | Regenerate`. `status` đã che giấu lỗi hết credit Meshy — owner/garden
+staff chỉ thấy `Queued | Processing | AwaitingStaff | InProgress | Succeeded | Failed | Rejected`,
+không bao giờ thấy lý do lỗi nội bộ thật. Trả `409 Conflict` nếu sản phẩm đang có request khác
+chưa xử lý xong (chỉ 1 request "mở" tại 1 thời điểm).
+
+**GET `/api/products/{id}/model-3d/requests`** — lịch sử request, `data` = `Model3DRequestResponse[]` (mới nhất trước).
+
+**PATCH `/api/products/{id}/model-3d/toggle`** — bật/tắt hiển thị:
+```json
+{ "isEnabled": false }
+```
+
+**DELETE `/api/products/{id}/model-3d`** — xóa model hiện tại (kèm xóa file GLB trên storage).
 
 ---
 

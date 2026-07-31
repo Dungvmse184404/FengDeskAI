@@ -20,6 +20,7 @@ public class ProductModel3DConfiguration : IEntityTypeConfiguration<ProductModel
         builder.Property(m => m.ThumbnailUrl).HasColumnName("thumbnail_url");
         builder.Property(m => m.Progress).HasColumnName("progress").HasDefaultValue(0);
         builder.Property(m => m.ErrorMessage).HasColumnName("error_message");
+        builder.Property(m => m.IsEnabled).HasColumnName("is_enabled").HasDefaultValue(true);
 
         builder.Property(m => m.CreatedAt).HasColumnName("created_at");
         builder.Property(m => m.UpdatedAt).HasColumnName("updated_at");

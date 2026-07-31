@@ -8,7 +8,8 @@ public enum OrderStatus
 {
     Pending,    // vừa tạo, chờ xử lý/thanh toán
     Paid,       // đã thanh toán
-    Processing, // các nhà vườn đang chuẩn bị/giao
+    Processing, // các nhà vườn đang chuẩn bị hàng
+    Shipping,   // TẤT CẢ delivery đã bàn giao vận chuyển (Shipped) trở lên, nhưng chưa giao xong hết
     Completed,  // tất cả delivery đã giao
     Cancelled,  // đã hủy
     Expired,    // quá hạn thanh toán (đơn online không trả tiền trong thời hạn)
