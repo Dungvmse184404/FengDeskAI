@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Common.Sanitization;
 using FengDeskAI.Application.Features.Catalog.Mappings;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Features.Chat.Mappings;
@@ -20,6 +21,7 @@ using FengDeskAI.Application.Features.Identity.Mappings;
 using FengDeskAI.Application.Features.Identity.Services;
 using FengDeskAI.Application.Features.Workspace.Mappings;
 using FengDeskAI.Application.Features.Workspace.Services;
+using FengDeskAI.Application.Features.CustomerCare;
 using FengDeskAI.Application.Features.CustomerCare.Mappings;
 using FengDeskAI.Application.Features.CustomerCare.Services;
 using FengDeskAI.Application.Features.CustomerCare.Tools;
@@ -49,6 +51,10 @@ public static class DependencyInjection
             cfg.AddProfile<NotificationMappingProfile>();
             cfg.AddProfile<ChatMappingProfile>();
         });
+
+        // Bộ lọc text AI dùng chung (đáp án cuối + mọi kênh stream). Stateless → Singleton.
+        services.AddSingleton<ISensitiveTermSource, AiToolNameTermSource>();
+        services.AddSingleton<IAiTextSanitizer, AiTextSanitizer>();
 
         services.AddScoped<IAuthService, AuthService>();
         services.AddScoped<IRegistrationFlowService, RegistrationFlowService>();

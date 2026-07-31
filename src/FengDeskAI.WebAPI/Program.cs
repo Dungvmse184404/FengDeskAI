@@ -98,7 +98,14 @@ builder.Services.AddCors(options =>
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
 builder.Services.AddScoped<IAuthorizationHandler, ResourceAccessHandler>();
 builder.Services.AddScoped<FengDeskAI.Application.Interfaces.External.IChatRealtimeNotifier, FengDeskAI.WebAPI.Hubs.ChatRealtimeNotifier>();
-builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiActivityNotifier, FengDeskAI.WebAPI.Hubs.AiActivityNotifier>();
+// Notifier thật (SignalR) được BỌC bởi SanitizingAiActivityNotifier: mọi event realtime — thinking tail,
+// narration, nhãn tool, workspace intake — đều qua bộ lọc trước khi ra dây. Đăng ký impl thô dưới dạng
+// concrete type để chỉ decorator resolve được nó, tránh ai đó lỡ inject thẳng bản chưa lọc.
+builder.Services.AddSingleton<FengDeskAI.WebAPI.Hubs.AiActivityNotifier>();
+builder.Services.AddSingleton<FengDeskAI.Application.Interfaces.External.IAiActivityNotifier>(sp =>
+    new FengDeskAI.Application.Common.Sanitization.SanitizingAiActivityNotifier(
+        sp.GetRequiredService<FengDeskAI.WebAPI.Hubs.AiActivityNotifier>(),
+        sp.GetRequiredService<FengDeskAI.Application.Common.Sanitization.IAiTextSanitizer>()));
 
 // Bot AI nền (Phase 3): hàng đợi singleton + worker xử lý.
 builder.Services.AddSingleton<FengDeskAI.WebAPI.Workers.AiBotQueue>();

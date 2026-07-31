@@ -1,5 +1,3 @@
-using FengDeskAI.Application.Common;
-
 namespace FengDeskAI.Application.Interfaces.External;
 
 /// <summary>
@@ -108,8 +106,9 @@ internal sealed class AiThinkingProgress : IProgress<AiStreamChunk>
 
     private async Task SafePublishAsync(string tail)
     {
-        // Che GUID trần model lỡ "nghĩ" ra (vd lý giải về tool result chứa ID) trước khi lên UI.
-        try { await _scope.PhaseAsync("thinking", note: AiTextSanitizer.CensorEntityIds(tail)); }
+        // KHÔNG lọc ở đây: mọi event đi qua SanitizingAiActivityNotifier (choke point duy nhất) nên
+        // tail bị cắt giữa một GUID vẫn được bắt bởi luật "mảnh hex" của SanitizeMode.LiveStream.
+        try { await _scope.PhaseAsync("thinking", note: tail); }
         catch { /* best-effort: lỗi realtime không được chặn model */ }
     }
 }
