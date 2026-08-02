@@ -27,6 +27,7 @@ public class StateMachineTests
         new object[] { ReturnRequestStatus.Exchanging, ReturnRequestStatus.Completed, ReturnReason.WrongItem },
         new object[] { ReturnRequestStatus.Exchanging, ReturnRequestStatus.Refunding, ReturnReason.WrongItem },
         new object[] { ReturnRequestStatus.Refunding, ReturnRequestStatus.Completed, ReturnReason.WrongItem },
+        new object[] { ReturnRequestStatus.Refunding, ReturnRequestStatus.Rejected, ReturnReason.WrongItem },
     };
 
     [Theory]

@@ -365,6 +365,9 @@ public static class ApiStatusMessages
         public const string ManualEvidenceRequired = "Xác nhận thủ công cần đủ lý do và URL bằng chứng.";
         public const string WebhookInvalid = "Webhook hoàn tiền không hợp lệ.";
         public const string WebhookProcessed = "Đã xử lý webhook hoàn tiền.";
+        public const string ReturnTrackingRequired = "Vui lòng cung cấp mã vận đơn trả hàng.";
+        public const string ReturnShipmentNotSubmitted = "Khách hàng chưa khai báo mã vận đơn trả hàng.";
+        public const string VendorResponseExpired = "Đã hết thời hạn phản hồi của cửa hàng.";
         public const string LiabilityForbidden = "Bạn không có quyền xem/thao tác công nợ của garden này.";
         public const string LiabilityNotFound = "Không tìm thấy khoản công nợ.";
         public const string LiabilityDisputeExpired = "Đã quá hạn phản đối khoản công nợ.";

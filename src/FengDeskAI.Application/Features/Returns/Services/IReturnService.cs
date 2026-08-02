@@ -20,6 +20,7 @@ public interface IReturnService
     Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, RmaActor actor, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> ResubmitEvidenceAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default);
 
     Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> DeleteImageAsync(Guid id, Guid imageId, Guid userId, CancellationToken ct = default);
@@ -38,6 +39,9 @@ public interface IReturnService
     Task<IServiceResult<ReturnDetailResponse>> ApproveRefundAsync(Guid id, RmaActor actor, ApproveRefundRequest request, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> ApproveExchangeAsync(Guid id, RmaActor actor, ApproveExchangeRequest request, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> RejectAsync(Guid id, RmaActor actor, RejectReturnRequest request, CancellationToken ct = default);
+
+    /// <summary>Hook nội bộ từ delivery pipeline: hoàn tất ticket đổi hàng khi đơn thay thế giao thành công.</summary>
+    Task CompleteExchangeDeliveryAsync(Guid replacementDeliveryId, Guid? actorId = null, CancellationToken ct = default);
 
     /// <summary>Worker: auto-reject các ticket ở NeedMoreEvidence quá evidence_deadline. Trả số đã xử lý.</summary>
     Task<int> AutoRejectOverdueEvidenceAsync(CancellationToken ct = default);

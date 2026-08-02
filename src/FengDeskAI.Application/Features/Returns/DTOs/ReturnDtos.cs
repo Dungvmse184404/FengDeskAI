@@ -60,6 +60,13 @@ public class RejectReturnRequest
     public string Reason { get; set; } = null!;
 }
 
+/// <summary>Khách khai báo đã gửi hàng vật lý trả về cửa hàng.</summary>
+public class ShipBackRequest
+{
+    /// <summary>Mã vận đơn chiều trả do đơn vị vận chuyển cấp.</summary>
+    public string TrackingCode { get; set; } = null!;
+}
+
 public class ApproveRefundRequest
 {
     /// <summary>Hoàn kho hàng trả nếu đã nhận & kiểm đạt (chỉ áp dụng lý do hàng vật lý).</summary>
@@ -126,6 +133,18 @@ public class RefundResponse
     public DateTime? CompletedAt { get; set; }
 }
 
+public class ReplacementDeliveryResponse
+{
+    public Guid Id { get; set; }
+    public DeliveryStatus Status { get; set; }
+    public string? ShippingProvider { get; set; }
+    public string? TrackingCode { get; set; }
+    public string? TrackingUrl { get; set; }
+    public DateTime? EstimatedDeliveryDate { get; set; }
+    public DateTime? ShippedAt { get; set; }
+    public DateTime? DeliveredAt { get; set; }
+}
+
 public class VendorLiabilityResponse
 {
     public Guid Id { get; set; }
@@ -185,6 +204,7 @@ public class ReturnDetailResponse
     public string? RejectedReason { get; set; }
     public DateTime? ReceivedAt { get; set; }
     public Guid? ReplacementDeliveryId { get; set; }
+    public ReplacementDeliveryResponse? ReplacementDelivery { get; set; }
     public DateTime CreatedAt { get; set; }
 
     public List<ReturnItemResponse> Items { get; set; } = new();

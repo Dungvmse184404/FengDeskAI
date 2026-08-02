@@ -8,14 +8,14 @@ using FengDeskAI.Domain.Enums.Payment;
 namespace FengDeskAI.Application.Features.Returns.Services;
 
 /// <summary>
-/// Refund sub-saga (do Manager giám sát). Nền tảng ứng tiền hoàn cho khách ngay khi Staff duyệt;
+/// Refund sub-saga (do Manager giám sát). Staff duyệt sẽ tạo refund Pending; worker dispatch sang gateway;
 /// chống hoàn trùng bằng idempotency key; <see cref="RefundStatus.Failed"/> không dead-end
 /// (auto-retry rồi escalate Manager). Xác nhận thủ công BẮT BUỘC audit trail.
 /// </summary>
 public interface IRefundService
 {
     /// <summary>
-    /// Tạo & khởi động lệnh hoàn tiền cho ticket (PHẢI gọi trong transaction của ticket).
+    /// Tạo lệnh hoàn tiền Pending cho ticket (PHẢI gọi trong transaction của ticket).
     /// Idempotent theo ticket: nếu đã có refund thì trả về refund cũ, không tạo mới.
     /// </summary>
     Task<Refund> CreateRefundAsync(ReturnRequest ticket, decimal amount, RefundMethod method, string reason, CancellationToken ct = default);
@@ -35,6 +35,13 @@ public interface IRefundService
     /// <summary>Danh sách refund cần Manager (Failed / ManagerReview).</summary>
     Task<IServiceResult<PagedResult<RefundResponse>>> GetForManagerAsync(PageRequest page, CancellationToken ct = default);
 
+    Task<IServiceResult<RefundResponse>> GetByIdAsync(Guid refundId, RmaActor actor, CancellationToken ct = default);
+
     /// <summary>Worker: auto-retry các refund Failed còn lượt; hết lượt → escalate ManagerReview. Trả số đã xử lý.</summary>
     Task<int> AutoProcessFailedRefundsAsync(CancellationToken ct = default);
+    Task<int> ProcessPendingRefundsAsync(CancellationToken ct = default);
+    Task<int> FailStaleProcessingRefundsAsync(CancellationToken ct = default);
+
+    /// <summary>Development-only hook; controller phải chặn ngoài môi trường Development.</summary>
+    Task<IServiceResult<RefundResponse>> SimulateResultAsync(Guid refundId, bool success, RmaActor actor, CancellationToken ct = default);
 }

@@ -1,108 +1,155 @@
-# 11 — Returns
+# 11 — Returns / Refunds / Exchanges
 
 [← Mục lục](./README.md)
 
-Controller: `ReturnsController` · Route gốc: `/api/returns` · Mặc định `[Authorize]`.
+Nguồn hiện thực: `ReturnsController`, `RefundsController` và `DevRefundsController`.
+Mọi transition không hợp lệ trả `409 Conflict`.
 
-Trả hàng / hoàn tiền / đổi trả (RMA).
-- **Customer:** tạo yêu cầu, xem của mình, hủy, gửi hàng trả, upload/xóa ảnh.
-- **Vendor (owner/staff store):** xem & xử lý yêu cầu của delivery thuộc store mình (duyệt/từ chối/nhận hàng/xử lý).
-- **Admin:** xem toàn bộ, can thiệp, xác nhận hoàn tiền.
+## State machine ReturnRequest
 
----
+```text
+Requested
+  ├─ request-more-evidence → NeedMoreEvidence
+  │    ├─ resubmit-evidence → Requested
+  │    └─ quá deadline → Rejected
+  ├─ cancel → Cancelled
+  └─ accept → UnderReview
+       ├─ PlantHealth → Reviewing
+       └─ WrongItem / DamagedPackage / NotAsDescribed → ReturnInTransit
+            └─ ship-back + confirm-received → ItemReceived → Reviewing
 
-## 📋 Bảng endpoint
-
-| Method | Path | Quyền | Mô tả |
-|--------|------|-------|-------|
-| POST | `/api/returns` | Customer | Tạo yêu cầu trả |
-| GET | `/api/returns/mine` | Customer | Yêu cầu của tôi (paged) |
-| POST | `/api/returns/{id}/cancel` | Customer | Hủy yêu cầu |
-| POST | `/api/returns/{id}/ship-back` | Customer | Khai báo gửi hàng trả |
-| POST | `/api/returns/{id}/images` | Customer (chủ) | Upload ảnh bằng chứng (multipart) |
-| DELETE | `/api/returns/{id}/images/{imageId}` | Customer (chủ) | Xóa ảnh (khi còn chờ duyệt) |
-| GET | `/api/returns/all` | AdminOnly | Tất cả yêu cầu (paged) |
-| GET | `/api/returns/stores/{storeId}` | Owner/Staff/Admin | Yêu cầu của 1 store (paged) |
-| GET | `/api/returns/{id}` | Customer/Vendor/Admin | Chi tiết yêu cầu |
-| POST | `/api/returns/{id}/approve` | Vendor/Admin | Duyệt |
-| POST | `/api/returns/{id}/reject` | Vendor/Admin | Từ chối |
-| POST | `/api/returns/{id}/receive` | Vendor/Admin | Xác nhận đã nhận hàng trả |
-| POST | `/api/returns/{id}/resolve` | Vendor/Admin | Xử lý (hoàn kho / hoàn tiền / đổi) |
-| POST | `/api/returns/{id}/complete-refund` | AdminOnly | Xác nhận hoàn tiền xong |
-
----
-
-## POST `/api/returns`
-
-**Request body** (`CreateReturnRequest`)
-```json
-{
-  "deliveryId": "guid",
-  "type": "Refund",
-  "reason": "Defective",
-  "reasonDetail": "Chậu bị nứt",
-  "items": [{ "orderItemId": "guid", "quantity": 1, "exchangeProductItemId": null }],
-  "imageUrls": ["https://..."],
-  "bankAccountName": "NGUYEN VAN A",
-  "bankAccountNumber": "0123456789",
-  "bankName": "Vietcombank"
-}
-```
-| Field | Ghi chú |
-|-------|---------|
-| `type` | `Refund` hoặc `Exchange` |
-| `items[].exchangeProductItemId` | Bắt buộc khi `type = Exchange` |
-| `bank*` | Bắt buộc khi đơn COD + hoàn tiền (chuyển khoản) |
-
----
-
-## GET `/api/returns/mine` · `/all` · `/stores/{storeId}`
-
-Paged. `data` = `PagedResult<ReturnListItemResponse>`:
-```json
-{ "id": "guid", "orderId": "guid", "deliveryId": "guid", "type": "Refund",
-  "status": "Requested", "reason": "Defective", "refundAmount": 120000,
-  "itemCount": 1, "createdAt": "..." }
+Reviewing
+  ├─ reject → Rejected
+  ├─ approve-refund → Refunding → refund Completed → Completed
+  └─ approve-exchange → Exchanging
+       ├─ replacement hết hàng → Refunding
+       └─ replacement delivery Delivered → Completed
 ```
 
-## GET `/api/returns/{id}`
-`data` = `ReturnDetailResponse` (gồm `items`, `imageUrls`, `statusLogs`, `refund`):
-```json
+`UnderReview` và `ItemReceived` là transition trung gian được ghi trong `statusLogs`;
+response của `accept`/`confirm-received` trả trạng thái sau khi route xong.
+
+## Endpoint ReturnRequest
+
+| Method | Path | Actor | Điều kiện / kết quả |
+|---|---|---|---|
+| POST | `/api/returns` | Customer | Tạo ticket `Requested`, trong 7 ngày từ `DeliveredAt`, bắt buộc evidence |
+| GET | `/api/returns/mine` | Customer | Danh sách ticket của caller |
+| GET | `/api/returns/{id}` | Customer / store member / platform Staff+ | Chi tiết ticket |
+| POST | `/api/returns/{id}/cancel` | Customer | Chỉ từ `Requested` |
+| POST | `/api/returns/{id}/resubmit-evidence` | Customer | `NeedMoreEvidence → Requested`, multipart field `files` |
+| POST | `/api/returns/{id}/ship-back` | Customer | Ghi mã vận đơn khi `ReturnInTransit` |
+| POST | `/api/returns/{id}/images` | Customer | Thêm evidence khi `Requested/NeedMoreEvidence` |
+| DELETE | `/api/returns/{id}/images/{imageId}` | Customer | Xóa evidence khi `Requested/NeedMoreEvidence` |
+| GET | `/api/returns/stores/{storeId}` | Owner / accepted store staff / platform Staff+ | Ticket của store |
+| POST | `/api/returns/{id}/vendor-acknowledge` | Owner / accepted store staff / Admin | Phản hồi trong SLA, không quyết định ticket |
+| POST | `/api/returns/{id}/vendor-dispute` | Owner / accepted store staff / Admin | Phản đối trong SLA, không chặn Staff |
+| POST | `/api/returns/{id}/confirm-received` | Owner / accepted store staff / Admin | Cần có tracking; `ReturnInTransit → ItemReceived → Reviewing` |
+| GET | `/api/returns/pending` | Staff / Manager / Admin | Queue `Requested/UnderReview/Reviewing` |
+| GET | `/api/returns/all` | Staff / Manager / Admin | Tất cả ticket |
+| POST | `/api/returns/{id}/accept` | Staff / Manager / Admin | Tiếp nhận và tự route theo `reason` |
+| POST | `/api/returns/{id}/request-more-evidence` | Staff / Manager / Admin | `Requested → NeedMoreEvidence` |
+| POST | `/api/returns/{id}/approve-refund` | Staff / Manager / Admin | `Reviewing → Refunding`, tạo refund `Pending` |
+| POST | `/api/returns/{id}/approve-exchange` | Staff / Manager / Admin | `Reviewing → Exchanging`; hoàn tất khi delivery thay thế Delivered |
+| POST | `/api/returns/{id}/reject` | Staff / Manager / Admin | `Reviewing/NeedMoreEvidence → Rejected` |
+
+### Khai báo gửi trả
+
+```http
+POST /api/returns/{returnId}/ship-back
+Content-Type: application/json
+
 {
-  "id": "guid", "orderId": "guid", "deliveryId": "guid", "customerId": "guid",
-  "type": "Refund", "status": "ItemReceived", "reason": "Defective", "reasonDetail": "...",
-  "refundAmount": 120000, "refundMethod": "Original",
-  "bankAccountName": null, "bankAccountNumber": null, "bankName": null,
-  "returnTrackingCode": "...", "approvedAt": "...", "rejectedReason": null,
-  "receivedAt": "...", "replacementDeliveryId": null, "createdAt": "...",
-  "items": [{ "id": "guid", "orderItemId": "guid", "productName": "...",
-              "quantity": 1, "unitPrice": 120000, "lineTotal": 120000, "exchangeProductItemId": null }],
-  "imageUrls": ["https://..."],
-  "statusLogs": [{ "fromStatus": "Requested", "toStatus": "Approved", "note": null, "changedAt": "..." }],
-  "refund": { "id": "guid", "amount": 120000, "method": "Original", "status": "Pending",
-              "providerRefundId": null, "processedAt": null, "completedAt": null }
+  "trackingCode": "GHN-RETURN-123456"
 }
 ```
 
----
+Sau đó vendor gọi `POST /api/returns/{returnId}/confirm-received`. Backend từ chối xác
+nhận nếu customer chưa khai báo tracking code.
 
-## Hành động (customer)
+### Duyệt hoàn tiền
 
-- **POST `/{id}/cancel`** — hủy yêu cầu.
-- **POST `/{id}/ship-back`** — body `ShipBackRequest`: `{ "trackingCode": "..." }`.
-- **POST `/{id}/images`** — `multipart/form-data`, field `files` (chọn nhiều tệp). Chỉ chủ yêu cầu.
-- **DELETE `/{id}/images/{imageId}`** — xóa ảnh, chỉ khi còn chờ duyệt.
+```http
+POST /api/returns/{returnId}/approve-refund
+Content-Type: application/json
 
-## Hành động (vendor/admin)
+{
+  "restock": true,
+  "note": "Đã kiểm tra hàng"
+}
+```
 
-- **POST `/{id}/approve`** — body `ApproveReturnRequest`: `{ "note": "..." }`.
-- **POST `/{id}/reject`** — body `RejectReturnRequest`: `{ "reason": "..." }` (bắt buộc).
-- **POST `/{id}/receive`** — xác nhận đã nhận hàng trả (không body).
-- **POST `/{id}/resolve`** — body `ResolveReturnRequest`: `{ "restock": true, "note": "..." }`.
-- **POST `/{id}/complete-refund`** (AdminOnly) — xác nhận hoàn tiền hoàn tất.
+Response có `status = Refunding` và `refund.status = Pending`. Worker gửi refund sang
+gateway, chuyển `Pending → Processing`; webhook thành công chuyển refund và ticket sang
+`Completed`. `Processing` không có webhook trong 30 phút chuyển `Failed` để retry.
 
-Trạng thái: xem [Appendix → ReturnRequestStatus / ReturnType / ReturnReason](./99-appendix-models.md).
+### Duyệt đổi hàng
 
----
+```http
+POST /api/returns/{returnId}/approve-exchange
+Content-Type: application/json
+
+{
+  "restock": true,
+  "note": "Đồng ý đổi sản phẩm"
+}
+```
+
+Response giữ `status = Exchanging` và trả cả `replacementDeliveryId` lẫn
+`replacementDelivery` (`status`, provider, tracking, trackingUrl, ETA). Carrier webhook
+hoặc cập nhật delivery thủ công sang `Delivered` sẽ tự chuyển ticket sang `Completed`.
+Nếu tạo shipment ban đầu lỗi, delivery vẫn được giữ ở `Pending` để vendor xác nhận và gọi
+`POST /api/orders/deliveries/{replacementDeliveryId}/shipment` thử lại.
+
+Customer được xem delivery thay thế bằng:
+
+```http
+GET /api/orders/deliveries/{replacementDeliveryId}/detail
+GET /api/shipping/deliveries/{replacementDeliveryId}/progress
+```
+
+## Refund sub-saga
+
+```text
+Pending
+  ├─ Manager cancel fraud → Cancelled; ReturnRequest → Rejected
+  └─ worker dispatch → Processing
+       ├─ webhook success → Completed; ReturnRequest → Completed nếu đang Refunding
+       └─ webhook error/timeout → Failed
+            ├─ retry (tối đa 3) → Processing
+            └─ hết retry → ManagerReview
+                 ├─ retry → Processing
+                 └─ manager-confirm → Completed
+```
+
+| Method | Path | Actor | Mô tả |
+|---|---|---|---|
+| POST | `/api/refunds/payos/webhook` | Anonymous + chữ ký PayOS | Callback idempotent |
+| GET | `/api/refunds` | Manager / Admin | Danh sách `Failed/ManagerReview` |
+| GET | `/api/refunds/{id}` | Manager / Admin | Chi tiết refund |
+| POST | `/api/refunds/{id}/retry` | Manager / Admin | Retry `Failed/ManagerReview` |
+| POST | `/api/refunds/{id}/manager-confirm` | Manager / Admin | Hoàn thủ công từ `ManagerReview`, bắt buộc reason/evidence |
+| POST | `/api/refunds/{id}/manager-cancel` | Manager / Admin | Chỉ từ `Pending`, đồng thời reject ticket do fraud |
+
+Development-only, ngoài Development trả `404`:
+
+```http
+POST /api/dev/refunds/{refundId}/success
+POST /api/dev/refunds/{refundId}/failed
+```
+
+Hai endpoint dev yêu cầu role Admin và đi qua cùng nghiệp vụ hoàn tất/thất bại với webhook.
+
+## Contract FE theo trạng thái
+
+| Status | Customer action | Vendor action | Staff action |
+|---|---|---|---|
+| `Requested` | Cancel | — | Accept / request evidence |
+| `NeedMoreEvidence` | Resubmit evidence | — | Theo dõi deadline / reject |
+| `ReturnInTransit` | Ship back nếu chưa có tracking | Confirm received khi đã có tracking | Chỉ theo dõi |
+| `Reviewing` | Theo dõi | Acknowledge/dispute nếu còn SLA | Approve refund/exchange hoặc reject |
+| `Refunding` | Theo dõi nested `refund.status` | — | Theo dõi refund saga |
+| `Exchanging` | Theo dõi `replacementDelivery` | Xử lý shipment nếu Pending | Theo dõi delivery thay thế |
+| `Completed/Cancelled/Rejected` | Chỉ đọc | Chỉ đọc | Chỉ đọc |
 
 [← Payments](./10-payments.md) · [Tiếp: Shipping →](./12-shipping.md)

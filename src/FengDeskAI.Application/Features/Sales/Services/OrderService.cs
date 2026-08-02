@@ -5,6 +5,7 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Common.Validation;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Shipping.Services;
+using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
@@ -30,9 +31,11 @@ public class OrderService : IOrderService
     private readonly IShippingProvider _shipping;
     private readonly IDeliveryFeeEstimator _feeEstimator;
     private readonly IStoreShopProvisioner _shopProvisioner;
+    private readonly IReturnService _returns;
 
     public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation,
-        IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator, IStoreShopProvisioner shopProvisioner)
+        IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator, IStoreShopProvisioner shopProvisioner,
+        IReturnService returns)
     {
         _uow = uow;
         _mapper = mapper;
@@ -40,6 +43,7 @@ public class OrderService : IOrderService
         _shipping = shipping;
         _feeEstimator = feeEstimator;
         _shopProvisioner = shopProvisioner;
+        _returns = returns;
     }
 
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
@@ -267,6 +271,9 @@ public class OrderService : IOrderService
                 case DeliveryStatus.Shipped: delivery.ShippedAt = now; break;
                 case DeliveryStatus.Delivered: delivery.DeliveredAt = now; break;
             }
+
+            if (delivery.IsExchange && request.Status == DeliveryStatus.Delivered)
+                await _returns.CompleteExchangeDeliveryAsync(delivery.Id, userId, ct);
 
             // Add tường minh qua repo (Added → INSERT). Add qua navigation vào delivery đã-tracked
             // bị EF đánh Modified (UPDATE 0 rows) vì BaseEntity set sẵn Id — xem ghi chú ở PaymentService.
@@ -621,7 +628,7 @@ public class OrderService : IOrderService
         var isOwner = await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct);
         var isAssignedStaff = delivery.AssignedStaffId == userId
             && await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
-        if (!isAdmin && !isOwner && !isAssignedStaff)
+        if (!isAdmin && delivery.Order.CustomerId != userId && !isOwner && !isAssignedStaff)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
         var order = delivery.Order;
@@ -635,7 +642,9 @@ public class OrderService : IOrderService
             ShippingFee = delivery.ShippingFee,
             Subtotal = delivery.Subtotal,
             TrackingCode = delivery.TrackingCode,
+            TrackingUrl = delivery.TrackingUrl,
             ShippingProvider = delivery.ShippingProvider,
+            IsExchange = delivery.IsExchange,
             ShippedAt = delivery.ShippedAt,
             DeliveredAt = delivery.DeliveredAt,
             EstimatedDeliveryDate = delivery.EstimatedDeliveryDate,
@@ -681,7 +690,8 @@ public class OrderService : IOrderService
 
     private static void RecomputeOrderStatus(Order order, Guid? actorId)
     {
-        var next = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
+        var next = OrderWorkflow.ComputeOrderStatus(order.Deliveries
+            .Where(d => !d.IsExchange).Select(d => d.Status).ToList());
         if (next == order.Status) return;
 
         // Đổi trạng thái + đặt note; OrderStatusLog do AppDbContext.ApplyAuditInformation tự sinh khi

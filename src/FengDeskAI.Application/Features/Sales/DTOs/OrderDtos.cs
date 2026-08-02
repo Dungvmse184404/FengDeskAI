@@ -70,7 +70,9 @@ public class DeliveryResponse
     public decimal ShippingFee { get; set; }
     public decimal Subtotal { get; set; }
     public string? TrackingCode { get; set; }
+    public string? TrackingUrl { get; set; }
     public string? ShippingProvider { get; set; }
+    public bool IsExchange { get; set; }
     public DateTime? ShippedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
     public DateTime? EstimatedDeliveryDate { get; set; }
@@ -134,6 +136,8 @@ public class StoreDeliveryResponse
     public decimal ShippingFee { get; set; }
     public decimal Subtotal { get; set; }
     public string? TrackingCode { get; set; }
+    public string? TrackingUrl { get; set; }
+    public bool IsExchange { get; set; }
     public DateTime CreatedAt { get; set; }
 }
 
@@ -146,7 +150,9 @@ public class UpdateDeliveryStatusRequest
 {
     public DeliveryStatus Status { get; set; }
     public string? TrackingCode { get; set; }
+    public string? TrackingUrl { get; set; }
     public string? ShippingProvider { get; set; }
+    public bool IsExchange { get; set; }
     public string? Note { get; set; }
 }
 
@@ -172,7 +178,9 @@ public class DeliveryOrderDetailResponse
     public decimal ShippingFee { get; set; }
     public decimal Subtotal { get; set; }
     public string? TrackingCode { get; set; }
+    public string? TrackingUrl { get; set; }
     public string? ShippingProvider { get; set; }
+    public bool IsExchange { get; set; }
     public DateTime? ShippedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
     public DateTime? EstimatedDeliveryDate { get; set; }

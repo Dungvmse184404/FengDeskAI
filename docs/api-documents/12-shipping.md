@@ -15,7 +15,7 @@ Tích hợp vận chuyển (GHN, AhaMove). Các webhook chuẩn hóa payload ri�
 | POST | `/api/shipping/webhook` | Public + header secret | Webhook tổng quát |
 | POST | `/api/shipping/ahamove/webhook` | Public + header secret | Webhook AhaMove |
 | POST | `/api/shipping/ghn/webhook` | Public + query `key` | Webhook GHN |
-| GET | `/api/shipping/deliveries/{deliveryId}/progress` | Owner/Staff/Admin | Lịch sử tiến trình giao |
+| GET | `/api/shipping/deliveries/{deliveryId}/progress` | Customer sở hữu order / Owner/Staff/Admin | Lịch sử tiến trình giao, gồm delivery đổi hàng |
 | POST | `/api/shipping/deliveries/{deliveryId}/redeliver` | Owner/Staff/Admin | Yêu cầu giao lại |
 
 ---

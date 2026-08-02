@@ -23,6 +23,9 @@ public static class ReturnWorkflow
     /// <summary>Số lần auto-retry tối đa cho một refund thất bại.</summary>
     public const int MaxRefundRetries = 3;
 
+    /// <summary>Quá thời gian này mà không có webhook thì Processing được coi là timeout để retry/escalate.</summary>
+    public const int RefundProcessingTimeoutMinutes = 30;
+
     /// <summary>True nếu vẫn còn trong cửa sổ trả hàng (đã biết delivery đã Delivered).</summary>
     public static bool IsWithinWindow(DateTime? deliveredAtUtc, DateTime nowUtc)
         => (deliveredAtUtc ?? nowUtc).AddDays(ReturnWindowDays) >= nowUtc;

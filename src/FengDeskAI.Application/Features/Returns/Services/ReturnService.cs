@@ -15,6 +15,7 @@ using FengDeskAI.Domain.Enums.Notification;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.Domain.Enums.Shipping;
+using FengDeskAI.Domain.Enums.Vendor;
 using FengDeskAI.Domain.StateMachines;
 
 namespace FengDeskAI.Application.Features.Returns.Services;
@@ -187,11 +188,11 @@ public class ReturnService : IReturnService
             return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
 
         var authorized = rr.CustomerId == actor.UserId || actor.CanDecide
-            || (actor.IsGardenOwner && await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct));
+            || await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct);
         if (!authorized)
             return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ViewForbidden);
 
-        return ServiceResult<ReturnDetailResponse>.Success(_mapper.Map<ReturnDetailResponse>(rr));
+        return ServiceResult<ReturnDetailResponse>.Success(await MapDetailAsync(rr, ct));
     }
 
     public async Task<IServiceResult<ReturnDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default)
@@ -243,6 +244,33 @@ public class ReturnService : IReturnService
         return await LoadDetailAsync(id, ct);
     }
 
+    public async Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(
+        Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.TrackingCode))
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ReturnTrackingRequired);
+        if (request.TrackingCode.Trim().Length > 100)
+            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ReturnTrackingRequired);
+
+        var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
+        if (rr is null || rr.CustomerId != userId)
+            return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
+        if (rr.Status != ReturnRequestStatus.ReturnInTransit)
+            return InvalidTransition(rr.Status, ReturnRequestStatus.ReturnInTransit);
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            rr.SubmitReturnShipment(request.TrackingCode);
+            LogTransition(rr, rr.Status, $"Khách đã gửi hàng trả, mã vận đơn: {rr.ReturnTrackingCode}", userId);
+            await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnRequested,
+                "Khách đã gửi hàng trả", "Khách hàng đã khai báo mã vận đơn trả hàng. Vui lòng theo dõi và xác nhận khi nhận được hàng.",
+                rr.Id, ct);
+            return null;
+        }, ct);
+
+        return await LoadDetailAsync(id, ct);
+    }
+
     public async Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
     {
         if (files is null || files.Count == 0)
@@ -283,7 +311,7 @@ public class ReturnService : IReturnService
 
     public async Task<IServiceResult<PagedResult<ReturnListItemResponse>>> GetForStoreAsync(Guid storeId, RmaActor actor, PageRequest page, CancellationToken ct = default)
     {
-        if (!actor.CanDecide && !(actor.IsGardenOwner && await _uow.Stores.CanManageAsync(storeId, actor.UserId, ct)))
+        if (!actor.CanDecide && !await _uow.Stores.CanManageAsync(storeId, actor.UserId, ct))
             return ServiceResult<PagedResult<ReturnListItemResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManageForbidden);
 
         var (items, total) = await _uow.Returns.GetForStoreAsync(storeId, page.Skip, page.PageSize, ct);
@@ -294,9 +322,16 @@ public class ReturnService : IReturnService
     {
         var (rr, error) = await LoadForVendorAsync(id, actor, ct);
         if (error is not null) return error;
+        if (rr!.VendorResponseDeadline is { } deadline && deadline < DateTime.UtcNow)
+            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.VendorResponseExpired);
 
-        rr!.VendorAcknowledge();
-        await _uow.SaveChangesAsync(ct);
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            rr.VendorAcknowledge();
+            LogTransition(rr, rr.Status, "Vendor đã ghi nhận yêu cầu", actor.UserId);
+            await Task.CompletedTask;
+            return null;
+        }, ct);
         return await LoadDetailAsync(id, ct);
     }
 
@@ -307,6 +342,8 @@ public class ReturnService : IReturnService
 
         var (rr, error) = await LoadForVendorAsync(id, actor, ct);
         if (error is not null) return error;
+        if (rr!.VendorResponseDeadline is { } deadline && deadline < DateTime.UtcNow)
+            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.VendorResponseExpired);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
@@ -326,6 +363,8 @@ public class ReturnService : IReturnService
         if (error is not null) return error;
         if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.ItemReceived, rr.Reason))
             return InvalidTransition(rr.Status, ReturnRequestStatus.ItemReceived);
+        if (string.IsNullOrWhiteSpace(rr.ReturnTrackingCode))
+            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.ReturnShipmentNotSubmitted);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
@@ -383,6 +422,10 @@ public class ReturnService : IReturnService
                     ? "Nền tảng đã tiếp nhận yêu cầu và đang xem xét (không cần gửi trả cây)."
                     : "Nền tảng đã tiếp nhận. Vui lòng gửi hàng trả về theo hướng dẫn.",
                 rr.Id, ReferenceType.Return, ct);
+            await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnRequested,
+                "Có yêu cầu trả hàng mới",
+                $"Yêu cầu đã được Staff tiếp nhận. Cửa hàng có {ReturnWorkflow.VendorResponseSlaHours} giờ để phản hồi.",
+                rr.Id, ct);
             return null;
         }, ct);
 
@@ -483,16 +526,16 @@ public class ReturnService : IReturnService
             else
             {
                 await CreateReplacementDeliveryAsync(rr, exItems, now, ct);
-                var exFrom = rr.Status;
-                rr.CompleteExchange(); // Exchanging → Completed
-                LogTransition(rr, exFrom, "Đã tạo đơn giao hàng thay thế", actor.UserId);
+                LogTransition(rr, rr.Status,
+                    "Đã tạo đơn giao hàng thay thế; ticket sẽ hoàn tất khi giao hàng thành công", actor.UserId);
 
                 // Đổi rẻ hơn → hoàn chênh lệch (refund độc lập, không đổi trạng thái ticket).
                 if (rr.RefundAmount > 0)
                     await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn chênh lệch đổi hàng ticket #{rr.Id}", ct);
 
-                await NotifyAsync(rr.CustomerId, NotificationType.ExchangeShipped, "Đang giao hàng đổi",
-                    "Nền tảng đã tạo đơn giao hàng thay thế cho bạn.", rr.Id, ReferenceType.Return, ct);
+                await NotifyAsync(rr.CustomerId, NotificationType.ExchangeShipped, "Đã tạo đơn đổi hàng",
+                    "Nền tảng đã tạo đơn giao hàng thay thế. Bạn có thể theo dõi tiến trình trong chi tiết yêu cầu.",
+                    rr.Id, ReferenceType.Return, ct);
             }
             return null;
         }, ct);
@@ -521,6 +564,20 @@ public class ReturnService : IReturnService
         }, ct);
 
         return await LoadDetailAsync(id, ct);
+    }
+
+    public async Task CompleteExchangeDeliveryAsync(
+        Guid replacementDeliveryId, Guid? actorId = null, CancellationToken ct = default)
+    {
+        var rr = await _uow.Returns.GetByReplacementDeliveryIdAsync(replacementDeliveryId, ct);
+        if (rr is null || rr.Status != ReturnRequestStatus.Exchanging) return;
+
+        var from = rr.Status;
+        rr.CompleteExchange();
+        LogTransition(rr, from, "Đơn giao hàng thay thế đã giao thành công", actorId);
+        await NotifyAsync(rr.CustomerId, NotificationType.ExchangeCompleted, "Đổi hàng hoàn tất",
+            "Sản phẩm thay thế đã được giao thành công. Yêu cầu đổi hàng của bạn đã hoàn tất.",
+            rr.Id, ReferenceType.Return, ct);
     }
 
     // ===================== Worker =====================
@@ -598,25 +655,47 @@ public class ReturnService : IReturnService
         var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { replacement.GardenStoreId }, ct)).FirstOrDefault();
         var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(rr.Order.ShippingAddressId, ct);
 
-        var shipment = await _shipping.CreateShipmentAsync(ShipmentRequestBuilder.Build(
-            replacement.Id, rr.OrderId, subtotal, store, shipTo,
-            codAmount: 0m, totalWeightGram: totalWeightGram, items: shipmentItems), ct);
-        replacement.ShippingProvider = shipment.Provider;
-        replacement.ProviderOrderId = shipment.ProviderOrderId;
-        replacement.TrackingCode = shipment.TrackingCode;
-        replacement.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
-        replacement.AssignedAt = now;
-        replacement.Status = DeliveryStatus.Confirmed;
-
-        await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+        try
         {
-            DeliveryId = replacement.Id,
-            SourceType = DeliverySource.System,
-            FromStatus = DeliveryStatus.Pending.ToString(),
-            ToStatus = DeliveryStatus.Confirmed.ToString(),
-            Note = $"Tạo vận đơn hàng đổi {shipment.Provider} ({shipment.TrackingCode})",
-            LoggedAt = now,
-        }, ct);
+            var shipment = await _shipping.CreateShipmentAsync(ShipmentRequestBuilder.Build(
+                replacement.Id, rr.OrderId, subtotal, store, shipTo,
+                codAmount: 0m, totalWeightGram: totalWeightGram, items: shipmentItems), ct);
+            replacement.ShippingProvider = shipment.Provider;
+            replacement.ProviderOrderId = shipment.ProviderOrderId;
+            replacement.TrackingCode = shipment.TrackingCode;
+            replacement.TrackingUrl = shipment.TrackingUrl;
+            replacement.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
+            replacement.AssignedAt = now;
+            replacement.Status = DeliveryStatus.Confirmed;
+
+            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+            {
+                DeliveryId = replacement.Id,
+                SourceType = DeliverySource.System,
+                FromStatus = DeliveryStatus.Pending.ToString(),
+                ToStatus = DeliveryStatus.Confirmed.ToString(),
+                Note = $"Tạo vận đơn hàng đổi {shipment.Provider} ({shipment.TrackingCode})",
+                LoggedAt = now,
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception)
+        {
+            // Quyết định đổi hàng và giữ tồn kho vẫn được commit. Vendor có thể xác nhận delivery Pending
+            // rồi gọi endpoint tạo shipment hiện có để thử lại, tránh rollback toàn bộ ticket vì provider lỗi.
+            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+            {
+                DeliveryId = replacement.Id,
+                SourceType = DeliverySource.System,
+                FromStatus = DeliveryStatus.Pending.ToString(),
+                ToStatus = DeliveryStatus.Pending.ToString(),
+                Note = "Chưa tạo được vận đơn hàng đổi; cửa hàng cần tạo lại vận đơn",
+                LoggedAt = now,
+            }, ct);
+        }
 
         rr.ReplacementDeliveryId = replacement.Id;
     }
@@ -637,7 +716,7 @@ public class ReturnService : IReturnService
         if (rr is null)
             return (null, Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound));
         var allowed = actor.IsAdmin
-            || (actor.IsGardenOwner && await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct));
+            || await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct);
         if (!allowed)
             return (null, Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManageForbidden));
         return (rr, null);
@@ -701,12 +780,48 @@ public class ReturnService : IReturnService
             IsRead = false,
         }, ct);
 
+    private async Task NotifyStoreMembersAsync(
+        Guid storeId, NotificationType type, string title, string message, Guid refId, CancellationToken ct)
+    {
+        var owners = await _uow.Stores.GetOwnersAsync(storeId, ct);
+        var staff = await _uow.Stores.GetStaffAsync(storeId, ct);
+        var recipientIds = owners.Select(owner => owner.OwnerUserId)
+            .Concat(staff.Where(member => member.Status == InvitationStatus.Accepted).Select(member => member.StaffId))
+            .Distinct();
+        foreach (var userId in recipientIds)
+            await NotifyAsync(userId, type, title, message, refId, ReferenceType.Return, ct);
+    }
+
     private async Task<IServiceResult<ReturnDetailResponse>> LoadDetailAsync(Guid id, CancellationToken ct)
     {
         var rr = await _uow.Returns.GetDetailAsync(id, null, ct);
         return rr is null
             ? Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound)
-            : ServiceResult<ReturnDetailResponse>.Success(_mapper.Map<ReturnDetailResponse>(rr));
+            : ServiceResult<ReturnDetailResponse>.Success(await MapDetailAsync(rr, ct));
+    }
+
+    private async Task<ReturnDetailResponse> MapDetailAsync(ReturnRequest rr, CancellationToken ct)
+    {
+        var response = _mapper.Map<ReturnDetailResponse>(rr);
+        if (rr.ReplacementDeliveryId is { } deliveryId)
+        {
+            var delivery = await _uow.Shipping.GetDeliveryByIdAsync(deliveryId, ct);
+            if (delivery is not null)
+            {
+                response.ReplacementDelivery = new ReplacementDeliveryResponse
+                {
+                    Id = delivery.Id,
+                    Status = delivery.Status,
+                    ShippingProvider = delivery.ShippingProvider,
+                    TrackingCode = delivery.TrackingCode,
+                    TrackingUrl = delivery.TrackingUrl,
+                    EstimatedDeliveryDate = delivery.EstimatedDeliveryDate,
+                    ShippedAt = delivery.ShippedAt,
+                    DeliveredAt = delivery.DeliveredAt,
+                };
+            }
+        }
+        return response;
     }
 
     private IServiceResult<PagedResult<ReturnListItemResponse>> Paged(List<ReturnRequest> items, PageRequest page, int total)

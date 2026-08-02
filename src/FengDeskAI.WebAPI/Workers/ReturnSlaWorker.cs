@@ -51,12 +51,15 @@ public sealed class ReturnSlaWorker : BackgroundService
                     var liabilities = scope.ServiceProvider.GetRequiredService<IVendorLiabilityService>();
 
                     var rejected = await returns.AutoRejectOverdueEvidenceAsync(stoppingToken);
+                    var dispatched = await refunds.ProcessPendingRefundsAsync(stoppingToken);
+                    var timedOut = await refunds.FailStaleProcessingRefundsAsync(stoppingToken);
                     var retried = await refunds.AutoProcessFailedRefundsAsync(stoppingToken);
                     var settled = await liabilities.AutoSettleOverdueAsync(stoppingToken);
 
-                    if (rejected + retried + settled > 0)
-                        _logger.LogInformation("ReturnSla: auto-reject={Rejected}, refund-retry={Retried}, liability-settle={Settled}",
-                            rejected, retried, settled);
+                    if (rejected + dispatched + timedOut + retried + settled > 0)
+                        _logger.LogInformation(
+                            "ReturnSla: auto-reject={Rejected}, refund-dispatch={Dispatched}, refund-timeout={TimedOut}, refund-retry={Retried}, liability-settle={Settled}",
+                            rejected, dispatched, timedOut, retried, settled);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {

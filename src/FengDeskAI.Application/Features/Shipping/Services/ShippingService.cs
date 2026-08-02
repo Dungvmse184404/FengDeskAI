@@ -5,6 +5,7 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.DTOs;
+using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Shipping;
@@ -21,14 +22,16 @@ public class ShippingService : IShippingService
     private readonly IMapper _mapper;
     private readonly Interfaces.External.IShippingProvider _shipping;
     private readonly IStoreShopProvisioner _shopProvisioner;
+    private readonly IReturnService _returns;
 
     public ShippingService(IUnitOfWork uow, IMapper mapper, Interfaces.External.IShippingProvider shipping,
-        IStoreShopProvisioner shopProvisioner)
+        IStoreShopProvisioner shopProvisioner, IReturnService returns)
     {
         _uow = uow;
         _mapper = mapper;
         _shipping = shipping;
         _shopProvisioner = shopProvisioner;
+        _returns = returns;
     }
 
     public async Task<IServiceResult> ProcessWebhookAsync(ShippingWebhookRequest request, CancellationToken ct = default)
@@ -74,6 +77,9 @@ public class ShippingService : IShippingService
                 case DeliveryStatus.Shipped: delivery.ShippedAt = now; break;
                 case DeliveryStatus.Delivered: delivery.DeliveredAt = now; break;
             }
+
+            if (delivery.IsExchange && request.NewStatus == DeliveryStatus.Delivered)
+                await _returns.CompleteExchangeDeliveryAsync(delivery.Id, actorId: null, ct);
 
             await _uow.Shipping.AddProgressLogAsync(BuildLog(delivery, from, request, payloadJson, request.EventType), ct);
 
@@ -128,7 +134,8 @@ public class ShippingService : IShippingService
         var delivery = await _uow.Shipping.GetDeliveryByIdAsync(deliveryId, ct);
         if (delivery is null)
             return ServiceResult<List<DeliveryProgressLogResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Shipping.DeliveryNotFound);
-        if (!isAdmin && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
+        if (!isAdmin && delivery.Order.CustomerId != userId
+            && !await _uow.Stores.CanManageAsync(delivery.GardenStoreId, userId, ct))
             return ServiceResult<List<DeliveryProgressLogResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Shipping.ViewProgressForbidden);
 
         var logs = await _uow.Shipping.GetProgressLogsAsync(deliveryId, ct);
@@ -422,7 +429,8 @@ public class ShippingService : IShippingService
 
     private static void RollupOrder(Order order)
     {
-        var next = OrderWorkflow.ComputeOrderStatus(order.Deliveries.Select(d => d.Status).ToList());
+        var next = OrderWorkflow.ComputeOrderStatus(order.Deliveries
+            .Where(d => !d.IsExchange).Select(d => d.Status).ToList());
         if (next == order.Status) return;
 
         var from = order.Status;

@@ -112,10 +112,10 @@ Tổng hợp enum, envelope và mã trạng thái dùng chung. **Mọi enum seri
 `Refund` (trả & hoàn tiền) · `Exchange` (đổi sản phẩm/biến thể)
 
 ### `ReturnReason`
-`Defective` · `WrongItem` · `NotAsDescribed` · `DamagedInTransit` · `ChangedMind` · `Other`
+`PlantHealth` · `WrongItem` · `DamagedPackage` · `NotAsDescribed`
 
 ### `ReturnRequestStatus`
-`Requested` → `Approved` → `ReturnInTransit` → `ItemReceived` → (`Refunding` | `Exchanging`) → `Completed`. Ngoài luồng: `Rejected`, `Cancelled`.
+`Requested` · `NeedMoreEvidence` · `UnderReview` · `ReturnInTransit` · `ItemReceived` · `Reviewing` · `Refunding` · `Exchanging` · `Completed` · `Rejected` · `Cancelled`. Chi tiết transition xem [Returns](./11-returns.md).
 
 ---
 
@@ -126,7 +126,7 @@ Tổng hợp enum, envelope và mã trạng thái dùng chung. **Mọi enum seri
 | `PaymentMethod` | `PayOS` (online), `COD` (khi nhận hàng) |
 | `PaymentStatus` | `Pending`, `Paid`, `Cancelled`, `Failed`, `Expired` |
 | `RefundMethod` | `Original` (về nguồn PayOS), `BankTransfer` (COD), `Manual` |
-| `RefundStatus` | `Pending`, `Processing`, `Completed`, `Failed`, `Cancelled` |
+| `RefundStatus` | `Pending`, `Processing`, `Completed`, `Failed`, `ManagerReview`, `Cancelled` |
 
 ---
 
@@ -151,7 +151,7 @@ Tổng hợp enum, envelope và mã trạng thái dùng chung. **Mọi enum seri
 ## Notification
 
 ### `NotificationType`
-`OrderPlaced`, `OrderPaid`, `OrderCancelled`, `OrderCompleted`, `DeliveryConfirmed`, `DeliveryPreparing`, `DeliveryShipped`, `DeliveryDelivered`, `DeliveryReturned`, `DeliveryCancelled`, `ReturnRequested`, `ReturnApproved`, `ReturnRejected`, `ReturnReceived`, `ReturnCancelled`, `RefundCompleted`, `ExchangeShipped`, `SystemAlert`
+`OrderPlaced`, `OrderPaid`, `OrderCancelled`, `OrderCompleted`, `DeliveryConfirmed`, `DeliveryPreparing`, `DeliveryShipped`, `DeliveryDelivered`, `DeliveryReturned`, `DeliveryCancelled`, `ReturnRequested`, `ReturnApproved`, `ReturnRejected`, `ReturnReceived`, `ReturnCancelled`, `RefundCompleted`, `ExchangeShipped`, `ExchangeCompleted`, `SystemAlert`
 
 ### `ReferenceType`
 `None` (0) · `Order` (1) · `Delivery` (2) · `Payment` (3) · `CustomerDesign` (4) · `Promotion` (5) · `System` (6) · `Return` (7) · `Refund` (8)

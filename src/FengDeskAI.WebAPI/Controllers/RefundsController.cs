@@ -33,6 +33,11 @@ public class RefundsController : ApiControllerBase
     public async Task<IActionResult> GetForManager([FromQuery] PageRequest page, CancellationToken ct)
         => ToActionResult(await _service.GetForManagerAsync(page, ct));
 
+    [HttpGet("{id:guid}")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
+    public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.GetByIdAsync(id, RmaActor, ct));
+
     /// <summary>Manager retry thủ công một refund (Failed / ManagerReview).</summary>
     [HttpPost("{id:guid}/retry")]
     [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]

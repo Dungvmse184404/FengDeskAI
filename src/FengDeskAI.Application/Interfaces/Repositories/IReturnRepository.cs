@@ -9,6 +9,9 @@ public interface IReturnRepository : IGenericRepository<ReturnRequest>
     /// <summary>Yêu cầu trả hàng (tracked) kèm Items→OrderItem, Delivery, Order, Refund, StatusLogs — để cập nhật trạng thái.</summary>
     Task<ReturnRequest?> GetWithGraphAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>Ticket đổi hàng theo delivery thay thế, dùng để hoàn tất khi carrier báo Delivered.</summary>
+    Task<ReturnRequest?> GetByReplacementDeliveryIdAsync(Guid replacementDeliveryId, CancellationToken ct = default);
+
     /// <summary>Chi tiết yêu cầu (AsNoTracking) kèm Items→OrderItem, Images, StatusLogs, Refund. Lọc theo customer nếu truyền.</summary>
     Task<ReturnRequest?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default);
 
@@ -40,8 +43,11 @@ public interface IReturnRepository : IGenericRepository<ReturnRequest>
     /// <summary>Refund cần Manager để mắt (Failed hoặc ManagerReview) — màn Manager.</summary>
     Task<(List<Refund> Items, int Total)> GetRefundsForManagerAsync(int skip, int take, CancellationToken ct = default);
 
-    /// <summary>Refund Failed còn lượt retry (&lt; maxRetry) — worker auto-retry.</summary>
-    Task<List<Refund>> GetRetryableFailedRefundsAsync(int maxRetry, int max, CancellationToken ct = default);
+    /// <summary>Refund Failed — worker retry hoặc chuyển ManagerReview nếu đã hết lượt.</summary>
+    Task<List<Refund>> GetFailedRefundsAsync(int max, CancellationToken ct = default);
+
+    Task<List<Refund>> GetPendingRefundsAsync(int max, CancellationToken ct = default);
+    Task<List<Refund>> GetStaleProcessingRefundsAsync(DateTime staleBeforeUtc, int max, CancellationToken ct = default);
 
     // ----- Vendor liability (công nợ) -----
 

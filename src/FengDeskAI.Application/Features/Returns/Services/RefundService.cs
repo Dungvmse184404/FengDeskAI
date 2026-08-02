@@ -36,7 +36,7 @@ public class RefundService : IRefundService
         _logger = logger;
     }
 
-    // ===================== Tạo & khởi động (gọi trong transaction của ticket) =====================
+    // ===================== Tạo Pending (gọi trong transaction của ticket) =====================
 
     public async Task<Refund> CreateRefundAsync(ReturnRequest ticket, decimal amount, RefundMethod method, string reason, CancellationToken ct = default)
     {
@@ -50,7 +50,6 @@ public class RefundService : IRefundService
         var cap = ReturnWorkflow.ComputeRefundAmount(ticket.Items);
         if (amount > cap) amount = cap;
 
-        var now = DateTime.UtcNow;
         var refund = new Refund
         {
             ReturnRequestId = ticket.Id,
@@ -65,36 +64,17 @@ public class RefundService : IRefundService
         await _uow.Returns.AddRefundAsync(refund, ct);
 
         // Hoàn về nguồn: gắn giao dịch PayOS gốc nếu có.
-        long orderCode = 0;
         if (method == RefundMethod.Original)
         {
             var txn = await _uow.Transactions.GetLatestByOrderAsync(ticket.OrderId, ct);
             if (txn is not null && txn.Status == PaymentStatus.Paid)
             {
                 refund.TransactionId = txn.Id;
-                orderCode = txn.OrderCode;
             }
         }
 
-        // Gọi cổng (mock idempotent). Pending → Processing; nếu submit lỗi → Processing → Failed để worker retry.
-        try
-        {
-            var rounded = (int)Math.Round(amount, MidpointRounding.AwayFromZero);
-            var result = await _gateway.RefundAsync(new RefundRequest(orderCode, rounded, reason, key), ct);
-            refund.MarkProcessing(result.ProviderRefundId, now);
-            if (!result.Success)
-            {
-                _logger.LogWarning("Refund {Key} cổng trả thất bại: {Code} {Message}", key, result.Code, result.Message);
-                refund.MarkFailed();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Gọi cổng hoàn tiền thất bại cho ticket {TicketId} — đánh Failed để worker retry.", ticket.Id);
-            refund.MarkProcessing(null, now);
-            refund.MarkFailed();
-        }
-
+        // Chỉ tạo Pending trong transaction của ticket. Worker dispatch sau commit để Pending là trạng thái
+        // quan sát/hủy được và transaction quyết định ticket không phải chờ provider.
         return refund;
     }
 
@@ -120,15 +100,23 @@ public class RefundService : IRefundService
         // Idempotent: webhook lặp cho refund đã kết thúc → no-op thành công.
         if (RefundStateMachine.IsTerminal(refund.Status))
             return ServiceResult.Success(ApiStatusMessages.Returns.WebhookProcessed);
-        if (refund.Status != RefundStatus.Processing)
-            return ServiceResult.Success(ApiStatusMessages.Returns.WebhookProcessed);
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
             if (verified.Success)
-                await CompleteRefundAndTicketAsync(refund, actorId: null, ct);
-            else
+            {
+                if (refund.Status == RefundStatus.Pending)
+                    refund.MarkProcessing(verified.ProviderReference, DateTime.UtcNow);
+                else if (refund.Status is RefundStatus.Failed or RefundStatus.ManagerReview)
+                    refund.RetryToProcessing(verified.ProviderReference, DateTime.UtcNow);
+
+                if (refund.Status == RefundStatus.Processing)
+                    await CompleteRefundAndTicketAsync(refund, actorId: null, ct);
+            }
+            else if (refund.Status == RefundStatus.Processing)
+            {
                 refund.MarkFailed();
+            }
             return null;
         }, ct);
 
@@ -148,7 +136,7 @@ public class RefundService : IRefundService
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
-            await AttemptGatewayRetryAsync(refund, ct);
+            await AttemptGatewayRetryAsync(refund, allowBeyondAutoRetryLimit: true, ct);
             return null;
         }, ct);
 
@@ -184,9 +172,40 @@ public class RefundService : IRefundService
         if (refund is null) return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.RefundNotFound);
         if (!RefundStateMachine.CanTransition(refund.Status, RefundStatus.Cancelled))
             return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.RefundNotCancellable);
+        if (refund.ReturnRequest.Status != Domain.Enums.Sales.ReturnRequestStatus.Refunding)
+            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.RefundNotCancellable);
 
-        refund.Cancel(actor.UserId);
-        await _uow.SaveChangesAsync(ct);
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            refund.Cancel(actor.UserId);
+            var ticket = refund.ReturnRequest;
+            if (ticket.Status == Domain.Enums.Sales.ReturnRequestStatus.Refunding)
+            {
+                var from = ticket.Status;
+                const string reason = "Manager hủy hoàn tiền do phát hiện dấu hiệu gian lận.";
+                ticket.Reject(actor.UserId, DateTime.UtcNow, reason);
+                _uow.Returns.AddStatusLog(new ReturnStatusLog
+                {
+                    ReturnRequestId = ticket.Id,
+                    FromStatus = from.ToString(),
+                    ToStatus = ticket.Status.ToString(),
+                    ChangedBy = actor.UserId,
+                    Note = reason,
+                    ChangedAt = DateTime.UtcNow,
+                });
+                await _uow.Notifications.AddAsync(new Notification
+                {
+                    UserId = ticket.CustomerId,
+                    Type = NotificationType.ReturnRejected,
+                    Title = "Yêu cầu hoàn tiền bị hủy",
+                    Message = reason,
+                    ReferenceId = ticket.Id,
+                    ReferenceType = ReferenceType.Return,
+                    IsRead = false,
+                }, ct);
+            }
+            return null;
+        }, ct);
         return Ok(refund);
     }
 
@@ -197,11 +216,21 @@ public class RefundService : IRefundService
             new PagedResult<RefundResponse>(_mapper.Map<List<RefundResponse>>(items), page.Page, page.PageSize, total));
     }
 
+    public async Task<IServiceResult<RefundResponse>> GetByIdAsync(
+        Guid refundId, RmaActor actor, CancellationToken ct = default)
+    {
+        if (!actor.CanManageRefund) return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManagerOnly);
+        var refund = await _uow.Returns.GetRefundByIdAsync(refundId, ct);
+        return refund is null
+            ? Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.RefundNotFound)
+            : Ok(refund);
+    }
+
     // ===================== Worker =====================
 
     public async Task<int> AutoProcessFailedRefundsAsync(CancellationToken ct = default)
     {
-        var failed = await _uow.Returns.GetRetryableFailedRefundsAsync(ReturnWorkflow.MaxRefundRetries, 50, ct);
+        var failed = await _uow.Returns.GetFailedRefundsAsync(50, ct);
         if (failed.Count == 0) return 0;
 
         foreach (var refund in failed)
@@ -210,7 +239,7 @@ public class RefundService : IRefundService
             {
                 await _uow.ExecuteInTransactionAsync<object?>(async _ =>
                 {
-                    await AttemptGatewayRetryAsync(refund, ct);
+                    await AttemptGatewayRetryAsync(refund, allowBeyondAutoRetryLimit: false, ct);
                     return null;
                 }, ct);
             }
@@ -222,12 +251,80 @@ public class RefundService : IRefundService
         return failed.Count;
     }
 
+    public async Task<int> ProcessPendingRefundsAsync(CancellationToken ct = default)
+    {
+        var pending = await _uow.Returns.GetPendingRefundsAsync(50, ct);
+        foreach (var refund in pending)
+        {
+            try
+            {
+                await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+                {
+                    await SubmitPendingRefundAsync(refund, ct);
+                    return null;
+                }, ct);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Dispatch refund Pending {RefundId} thất bại.", refund.Id);
+            }
+        }
+        return pending.Count;
+    }
+
+    public async Task<int> FailStaleProcessingRefundsAsync(CancellationToken ct = default)
+    {
+        var staleBefore = DateTime.UtcNow.AddMinutes(-ReturnWorkflow.RefundProcessingTimeoutMinutes);
+        var stale = await _uow.Returns.GetStaleProcessingRefundsAsync(staleBefore, 50, ct);
+        foreach (var refund in stale)
+        {
+            refund.MarkFailed();
+            _logger.LogWarning("Refund {RefundId} timeout webhook; chuyển Processing → Failed.", refund.Id);
+        }
+        if (stale.Count > 0) await _uow.SaveChangesAsync(ct);
+        return stale.Count;
+    }
+
+    public async Task<IServiceResult<RefundResponse>> SimulateResultAsync(
+        Guid refundId, bool success, RmaActor actor, CancellationToken ct = default)
+    {
+        if (!actor.IsAdmin) return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManagerOnly);
+        var refund = await _uow.Returns.GetRefundByIdAsync(refundId, ct);
+        if (refund is null) return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.RefundNotFound);
+        if (refund.Status is RefundStatus.Completed or RefundStatus.Cancelled) return Ok(refund);
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            if (refund.Status == RefundStatus.Pending)
+                refund.MarkProcessing($"DEV-{refund.Id:N}", DateTime.UtcNow);
+            else if (success && refund.Status is RefundStatus.Failed or RefundStatus.ManagerReview)
+                refund.RetryToProcessing(refund.ProviderRefundId ?? $"DEV-{refund.Id:N}", DateTime.UtcNow);
+
+            if (success && refund.Status == RefundStatus.Processing)
+                await CompleteRefundAndTicketAsync(refund, actor.UserId, ct);
+            else if (!success && refund.Status == RefundStatus.Processing)
+                refund.MarkFailed();
+            return null;
+        }, ct);
+
+        return Ok(refund);
+    }
+
     // ===================== Helpers =====================
 
     /// <summary>Gọi lại cổng cho một refund Failed/ManagerReview; hết lượt → escalate ManagerReview.</summary>
-    private async Task AttemptGatewayRetryAsync(Refund refund, CancellationToken ct)
+    private async Task AttemptGatewayRetryAsync(
+        Refund refund, bool allowBeyondAutoRetryLimit, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
+        if (!allowBeyondAutoRetryLimit && refund.RetryCount >= ReturnWorkflow.MaxRefundRetries)
+        {
+            refund.EscalateToManagerReview();
+            return;
+        }
+
+        // Ghi nhận lượt thử trước khi gọi external provider để exception/timeout vẫn tăng retry_count.
+        refund.RetryToProcessing(refund.ProviderRefundId, now);
         try
         {
             var rounded = (int)Math.Round(refund.Amount, MidpointRounding.AwayFromZero);
@@ -239,7 +336,7 @@ public class RefundService : IRefundService
             }
             var result = await _gateway.RefundAsync(
                 new RefundRequest(orderCode, rounded, refund.Note ?? "Retry hoàn tiền", refund.IdempotencyKey, refund.ProviderRefundId), ct);
-            refund.RetryToProcessing(result.ProviderRefundId, now);
+            refund.SetProviderReference(result.ProviderRefundId);
             if (!result.Success)
             {
                 refund.MarkFailed();
@@ -249,10 +346,36 @@ public class RefundService : IRefundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Retry cổng hoàn tiền refund {RefundId} lỗi.", refund.Id);
-            // RetryToProcessing đã đưa về Processing? chưa — nên xử lý an toàn:
             if (refund.Status == RefundStatus.Processing) refund.MarkFailed();
             if (refund.RetryCount >= ReturnWorkflow.MaxRefundRetries
                 && refund.Status == RefundStatus.Failed) refund.EscalateToManagerReview();
+        }
+    }
+
+    private async Task SubmitPendingRefundAsync(Refund refund, CancellationToken ct)
+    {
+        if (refund.Status != RefundStatus.Pending) return;
+        var now = DateTime.UtcNow;
+        try
+        {
+            var rounded = (int)Math.Round(refund.Amount, MidpointRounding.AwayFromZero);
+            long orderCode = 0;
+            if (refund.TransactionId is not null)
+            {
+                var txn = await _uow.Transactions.GetLatestByOrderAsync(refund.OrderId, ct);
+                if (txn is not null) orderCode = txn.OrderCode;
+            }
+
+            var result = await _gateway.RefundAsync(
+                new RefundRequest(orderCode, rounded, refund.Note ?? "Hoàn tiền", refund.IdempotencyKey), ct);
+            refund.MarkProcessing(result.ProviderRefundId, now);
+            if (!result.Success) refund.MarkFailed();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Gửi refund Pending {RefundId} sang cổng lỗi.", refund.Id);
+            refund.MarkProcessing(null, now);
+            refund.MarkFailed();
         }
     }
 

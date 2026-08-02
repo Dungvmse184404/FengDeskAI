@@ -82,6 +82,14 @@ public class Refund : BaseEntity
         ProcessedAt = nowUtc;
     }
 
+    /// <summary>Cập nhật mã tham chiếu sau khi gateway chấp nhận request đã được đánh dấu Processing.</summary>
+    public void SetProviderReference(string? gatewayRef)
+    {
+        if (Status != RefundStatus.Processing)
+            throw new InvalidStateTransitionException(nameof(Refund), Status.ToString(), "SetProviderReference");
+        if (!string.IsNullOrWhiteSpace(gatewayRef)) ProviderRefundId = gatewayRef;
+    }
+
     /// <summary>Webhook thành công → đã hoàn tiền cho khách.</summary>
     public void MarkCompleted(Guid? actorId, DateTime nowUtc)
     {
