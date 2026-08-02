@@ -15,6 +15,8 @@ public sealed record NewModel3DImage(Stream Content, string FileName, string Con
 /// </summary>
 public class RequestModel3DRequest
 {
+    /// <summary>Ảnh đại diện mà model kết quả sẽ gắn vào.</summary>
+    public Guid? ProductImageId { get; set; }
     public List<Guid>? SourceImageIds { get; set; }
     public List<NewModel3DImage>? NewImages { get; set; }
 }
@@ -34,6 +36,7 @@ public class Model3DRequestResponse
 {
     public Guid Id { get; set; }
     public Guid ProductId { get; set; }
+    public Guid? ProductImageId { get; set; }
 
     /// <summary>Initial | Regenerate.</summary>
     public string RequestType { get; set; } = null!;
@@ -52,6 +55,8 @@ public class Model3DRequestQueueItemResponse
     public Guid ProductId { get; set; }
     public string ProductName { get; set; } = null!;
     public string StoreName { get; set; } = null!;
+    public Guid? ProductImageId { get; set; }
+    public string? ProductImageUrl { get; set; }
 
     public string RequestType { get; set; } = null!;
     public string Status { get; set; } = null!;
@@ -73,6 +78,7 @@ public class Model3DRequestQueueResponse
 {
     public List<Model3DRequestQueueItemResponse> Items { get; set; } = new();
     public int Total { get; set; }
+    public Dictionary<string, int> StatusCounts { get; set; } = new();
 }
 
 /// <summary>

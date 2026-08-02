@@ -29,6 +29,7 @@ public class ProductModel3DResponse
 {
     public Guid Id { get; set; }
     public Guid ProductId { get; set; }
+    public Guid? ProductImageId { get; set; }
 
     /// <summary>Pending | Processing | Succeeded | Failed.</summary>
     public string Status { get; set; } = null!;
@@ -87,8 +88,8 @@ public class ProductDetailResponse
     public List<string> Vibes { get; set; } = new();
     public List<string> Styles { get; set; } = new();
 
-    /// <summary>Model 3D (nếu đã sinh). Null nếu sản phẩm chưa có.</summary>
-    public ProductModel3DResponse? Model3D { get; set; }
+    /// <summary>Các model 3D theo từng ảnh của sản phẩm.</summary>
+    public List<ProductModel3DResponse> Models3D { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 }

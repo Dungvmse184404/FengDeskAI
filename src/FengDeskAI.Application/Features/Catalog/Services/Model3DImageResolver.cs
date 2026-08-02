@@ -31,6 +31,13 @@ internal static class Model3DImageResolver
         var ids = new List<Guid>();
         var urls = new List<string>();
 
+        var existingCount = request.SourceImageIds?.Distinct().Count() ?? 0;
+        var newCount = request.NewImages?.Count ?? 0;
+        if (existingCount + newCount > 4) return (ids, urls, ErrorCode.TooManyImages);
+        if (request.NewImages is { Count: > 0 }
+            && request.NewImages.Any(file => !ImageUpload.IsAllowed(file.ContentType)))
+            return (ids, urls, ErrorCode.ImageTypeInvalid);
+
         if (request.SourceImageIds is { Count: > 0 })
         {
             foreach (var imageId in request.SourceImageIds.Distinct())
@@ -46,9 +53,6 @@ internal static class Model3DImageResolver
         {
             foreach (var file in request.NewImages)
             {
-                if (!ImageUpload.IsAllowed(file.ContentType))
-                    return (ids, urls, ErrorCode.ImageTypeInvalid);
-
                 var ext = Path.GetExtension(file.FileName);
                 if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(file.ContentType);
                 var objectPath = $"Product_images/{productId}/{Guid.NewGuid():N}{ext}";
@@ -72,8 +76,6 @@ internal static class Model3DImageResolver
         }
 
         if (ids.Count == 0) return (ids, urls, ErrorCode.NoImages);
-        if (ids.Count > 4) return (ids, urls, ErrorCode.TooManyImages);
-
         return (ids, urls, ErrorCode.None);
     }
 

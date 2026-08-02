@@ -1,11 +1,11 @@
 namespace FengDeskAI.Domain.Enums.Catalog;
 
-/// <summary>Loại yêu cầu sinh model 3D — quyết định chạy tự động hay qua hàng chờ thủ công.</summary>
+/// <summary>Loại yêu cầu sinh model 3D; cả hai loại đều qua hàng chờ staff.</summary>
 public enum Model3DRequestType
 {
-    /// <summary>Product chưa từng có model — tự động gọi Meshy (có retry khi hết credit).</summary>
+    /// <summary>Ảnh sản phẩm chưa từng có model.</summary>
     Initial = 0,
 
-    /// <summary>Product đã có model, owner/garden staff muốn tạo lại — vào hàng chờ thủ công của staff sàn.</summary>
+    /// <summary>Ảnh đã có model, owner/garden staff muốn tạo lại.</summary>
     Regenerate = 1,
 }

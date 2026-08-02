@@ -33,6 +33,24 @@ public sealed class InsufficientCreditsException : Exception
 }
 
 /// <summary>
+/// Provider sinh model 3D từ chối request hoặc tạm thời không phục vụ. Giữ lại HTTP status và
+/// thông điệp đã được giới hạn độ dài để tầng Application có thể trả lỗi hữu ích cho staff và log
+/// được nguyên nhân thật, thay vì làm mất response khi gọi <c>EnsureSuccessStatusCode</c>.
+/// </summary>
+public sealed class Model3DProviderException : Exception
+{
+    public Model3DProviderException(int statusCode, string providerMessage)
+        : base($"Model 3D provider trả HTTP {statusCode}: {providerMessage}")
+    {
+        StatusCode = statusCode;
+        ProviderMessage = providerMessage;
+    }
+
+    public int StatusCode { get; }
+    public string ProviderMessage { get; }
+}
+
+/// <summary>
 /// Sinh model 3D từ ảnh — gọi Meshy AI (multi-image-to-3D, bất đồng bộ, 1–4 ảnh cùng 1 object từ
 /// nhiều góc). Job chạy ngầm: caller start → nhận taskId, worker nền poll qua
 /// <see cref="GetTaskAsync"/> tới khi Succeeded rồi tải GLB qua <see cref="DownloadAsync"/>.

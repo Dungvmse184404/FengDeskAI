@@ -13,6 +13,7 @@ public class Model3DRequestConfiguration : IEntityTypeConfiguration<Model3DReque
         builder.HasKey(r => r.Id);
         builder.Property(r => r.Id).HasColumnName("id");
         builder.Property(r => r.ProductId).HasColumnName("product_id").IsRequired();
+        builder.Property(r => r.ProductImageId).HasColumnName("product_image_id");
         builder.Property(r => r.RequestType).HasColumnName("request_type").HasConversion<string>().IsRequired();
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         builder.Property(r => r.RequestedBy).HasColumnName("requested_by").IsRequired();
@@ -32,7 +33,7 @@ public class Model3DRequestConfiguration : IEntityTypeConfiguration<Model3DReque
         builder.Property(r => r.UpdatedBy).HasColumnName("updated_by");
         builder.Property(r => r.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
 
-        // n–1: 1 product có nhiều request (lịch sử), khác ProductModel3D (1–1, "kết quả hiện tại").
+        // n–1: 1 product có nhiều request; mỗi request thuộc về một ảnh đích cụ thể.
         builder.HasIndex(r => r.ProductId);
         // Truy vấn worker (Initial: Queued/Processing) + hàng chờ staff (Regenerate: AwaitingStaff/InProgress).
         builder.HasIndex(r => r.Status);
@@ -41,6 +42,10 @@ public class Model3DRequestConfiguration : IEntityTypeConfiguration<Model3DReque
             .WithMany(p => p.Model3DRequests)
             .HasForeignKey(r => r.ProductId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(r => r.ProductImage)
+            .WithMany()
+            .HasForeignKey(r => r.ProductImageId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasQueryFilter(r => !r.IsDeleted);
     }

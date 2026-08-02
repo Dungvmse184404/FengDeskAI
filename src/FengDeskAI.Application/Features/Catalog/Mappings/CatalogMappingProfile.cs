@@ -42,6 +42,7 @@ public class CatalogMappingProfile : Profile
         CreateMap<Model3DRequest, Model3DRequestQueueItemResponse>()
             .ForMember(d => d.ProductName, o => o.MapFrom(s => s.Product.Name))
             .ForMember(d => d.StoreName, o => o.MapFrom(s => s.Product.Store.Name))
+            .ForMember(d => d.ProductImageUrl, o => o.MapFrom(s => s.ProductImage != null ? s.ProductImage.Url : null))
             .ForMember(d => d.RequestType, o => o.MapFrom(s => s.RequestType.ToString()))
             .ForMember(d => d.Status, o => o.MapFrom(s => s.Status.ToString()))
             .ForMember(d => d.InternalFailureReason, o => o.MapFrom(s => s.InternalFailureReason != null ? s.InternalFailureReason.ToString() : null));

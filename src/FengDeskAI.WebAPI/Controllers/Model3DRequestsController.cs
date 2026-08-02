@@ -9,13 +9,8 @@ using Microsoft.AspNetCore.Mvc;
 namespace FengDeskAI.WebAPI.Controllers;
 
 /// <summary>
-/// Hàng chờ Regenerate cho staff sàn (<c>UserRole.Staff</c> trở lên) — xử lý thủ công request
-/// "tạo lại model 3D" khi sản phẩm đã có model. KHÔNG có claim/khóa: bất kỳ staff nào cũng thao
-/// tác được trên bất kỳ request nào, không giới hạn số lần retry.
-///
-/// Request Initial (tự động, lần sinh model đầu tiên của sản phẩm) KHÔNG đi qua controller này —
-/// xem <c>ProductsController</c> (tạo request) + <c>Model3DPollingWorker</c> (worker nền xử lý).
-/// Xem docs/adr/refactor-model3d-request-flow.md.
+/// Hàng chờ chung cho staff sàn xử lý cả yêu cầu tạo mới (Initial) và tạo lại (Regenerate).
+/// Mỗi request gắn với một ảnh đích; staff có thể chọn thêm ảnh cùng kiểu dáng trước khi gửi Meshy.
 /// </summary>
 [Route("api/model3d-requests")]
 [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
@@ -26,9 +21,7 @@ public class Model3DRequestsController : ApiControllerBase
     public Model3DRequestsController(IModel3DRequestService service) => _service = service;
 
     /// <summary>
-    /// Hàng chờ. Lọc <c>status=AwaitingStaff</c> cho request Regenerate chờ xử lý, hoặc
-    /// <c>status=Queued&amp;reason=InsufficientCredits</c> để xem request Initial đang kẹt vì hết
-    /// credit Meshy (không hiển thị lý do này cho garden owner/garden staff).
+    /// Hàng chờ thống nhất. Có thể lọc theo status/reason; response kèm tổng số theo từng trạng thái.
     /// </summary>
     [HttpGet]
     public async Task<IActionResult> GetQueue(
@@ -88,6 +81,7 @@ public class Model3DRequestsController : ApiControllerBase
 /// </summary>
 public class Model3DRequestFormModel
 {
+    public Guid? ProductImageId { get; set; }
     public List<Guid>? SourceImageIds { get; set; }
     public List<IFormFile>? NewImages { get; set; }
 
@@ -108,6 +102,11 @@ public class Model3DRequestFormModel
             }
         }
 
-        return (new RequestModel3DRequest { SourceImageIds = SourceImageIds, NewImages = newImages }, streams);
+        return (new RequestModel3DRequest
+        {
+            ProductImageId = ProductImageId,
+            SourceImageIds = SourceImageIds,
+            NewImages = newImages,
+        }, streams);
     }
 }

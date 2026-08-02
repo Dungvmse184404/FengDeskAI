@@ -29,8 +29,8 @@ public class Product : BaseEntity
     public ICollection<ProductVibe> Vibes { get; set; } = new List<ProductVibe>();
     public ICollection<ProductStyle> Styles { get; set; } = new List<ProductStyle>();
 
-    /// <summary>Model 3D sinh từ ảnh (1–1). Null nếu chưa yêu cầu sinh.</summary>
-    public ProductModel3D? Model3D { get; set; }
+    /// <summary>Các model 3D theo từng ảnh/kiểu dáng của sản phẩm.</summary>
+    public ICollection<ProductModel3D> Models3D { get; set; } = new List<ProductModel3D>();
 
     /// <summary>Lịch sử yêu cầu sinh/tạo lại model 3D (n–1). Xem <see cref="Model3DRequest"/>.</summary>
     public ICollection<Model3DRequest> Model3DRequests { get; set; } = new List<Model3DRequest>();
