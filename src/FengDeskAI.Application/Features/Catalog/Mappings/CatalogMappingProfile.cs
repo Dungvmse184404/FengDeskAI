@@ -73,12 +73,16 @@ public class CatalogMappingProfile : Profile
             .ForMember(d => d.PrimaryImageUrl, o => o.MapFrom(s => s.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault()))
             // Chỉ lộ model 3D khi thật sự xem được — cùng điều kiện với filter HasModel3D ở repository.
             .ForMember(d => d.Model3DUrl, o => o.MapFrom(s =>
-                s.Model3D != null && s.Model3D.IsEnabled && s.Model3D.Status == Model3DStatus.Succeeded
-                    ? s.Model3D.ModelUrl
-                    : null))
+                s.Models3D
+                    .Where(m => m.IsEnabled && m.Status == Model3DStatus.Succeeded && m.ModelUrl != null)
+                    .OrderByDescending(m => m.UpdatedAt)
+                    .Select(m => m.ModelUrl)
+                    .FirstOrDefault()))
             .ForMember(d => d.Model3DThumbnailUrl, o => o.MapFrom(s =>
-                s.Model3D != null && s.Model3D.IsEnabled && s.Model3D.Status == Model3DStatus.Succeeded
-                    ? s.Model3D.ThumbnailUrl
-                    : null));
+                s.Models3D
+                    .Where(m => m.IsEnabled && m.Status == Model3DStatus.Succeeded && m.ModelUrl != null)
+                    .OrderByDescending(m => m.UpdatedAt)
+                    .Select(m => m.ThumbnailUrl)
+                    .FirstOrDefault()));
     }
 }

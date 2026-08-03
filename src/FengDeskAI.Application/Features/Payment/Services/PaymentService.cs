@@ -143,7 +143,8 @@ public class PaymentService : IPaymentService
                 return null;
             }
 
-            await ApplyPaymentSuccessAsync(txn.Order, txn, result.ProviderReference, now, ct);
+            // Transaction.Order là quan hệ bắt buộc và đã được Include bởi repository.
+            await ApplyPaymentSuccessAsync(txn.Order!, txn, result.ProviderReference, now, ct);
             return null;
         }, ct);
 

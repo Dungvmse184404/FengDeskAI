@@ -58,7 +58,9 @@ public class AdminUserSeeder : IDataSeeder
             updated = true;
         }
 
-        if (!_passwords.Verify(AdminPassword, existing.PasswordHash))
+        // Tài khoản admin có thể từng được tạo qua Google nên chưa có password hash.
+        if (string.IsNullOrWhiteSpace(existing.PasswordHash)
+            || !_passwords.Verify(AdminPassword, existing.PasswordHash))
         {
             existing.PasswordHash = _passwords.Hash(AdminPassword);
             updated = true;
