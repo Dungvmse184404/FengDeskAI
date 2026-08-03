@@ -99,11 +99,9 @@ public class ProductsController : ApiControllerBase
         => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, IsAdmin, ct));
 
     // ----- Model 3D (sinh từ ảnh qua Meshy AI) -----
-    // Flow: POST .../model-3d/requests tạo yêu cầu — product chưa có model → Initial (tự động,
-    // Model3DPollingWorker xử lý); đã có model → Regenerate (vào hàng chờ, chỉ staff sàn xử lý thủ
-    // công qua Model3DRequestsController). Xem docs/adr/refactor-model3d-request-flow.md.
+    // Ảnh chưa có model → Initial, ảnh đã có model → Regenerate; cả hai loại đều vào hàng chờ staff.
 
-    /// <summary>Trạng thái/kết quả model 3D hiện tại của sản phẩm.</summary>
+    /// <summary>Danh sách model 3D theo từng ảnh của sản phẩm.</summary>
     [HttpGet("{id:guid}/model-3d")]
     [AllowAnonymous]
     public async Task<IActionResult> GetModel3D(Guid id, CancellationToken ct)
@@ -135,15 +133,17 @@ public class ProductsController : ApiControllerBase
         => ToActionResult(await _model3DService.ListRequestsAsync(id, CurrentUserId, IsAdmin, ct));
 
     /// <summary>Bật/tắt hiển thị model 3D trên trang sản phẩm — không xóa dữ liệu model đã sinh.</summary>
-    [HttpPatch("{id:guid}/model-3d/toggle")]
+    [HttpPatch("{id:guid}/model-3d/{modelId:guid}/toggle")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
-    public async Task<IActionResult> ToggleModel3D(Guid id, [FromBody] ToggleModel3DVisibilityRequest request, CancellationToken ct)
-        => ToActionResult(await _model3DService.ToggleAsync(id, CurrentUserId, IsAdmin, request.IsEnabled, ct));
+    public async Task<IActionResult> ToggleModel3D(
+        Guid id, Guid modelId, [FromBody] ToggleModel3DVisibilityRequest request, CancellationToken ct)
+        => ToActionResult(await _model3DService.ToggleAsync(
+            id, modelId, CurrentUserId, IsAdmin, request.IsEnabled, ct));
 
-    [HttpDelete("{id:guid}/model-3d")]
+    [HttpDelete("{id:guid}/model-3d/{modelId:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
-    public async Task<IActionResult> DeleteModel3D(Guid id, CancellationToken ct)
-        => ToActionResult(await _model3DService.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
+    public async Task<IActionResult> DeleteModel3D(Guid id, Guid modelId, CancellationToken ct)
+        => ToActionResult(await _model3DService.DeleteAsync(id, modelId, CurrentUserId, IsAdmin, ct));
 
     // ----- Category links -----
 

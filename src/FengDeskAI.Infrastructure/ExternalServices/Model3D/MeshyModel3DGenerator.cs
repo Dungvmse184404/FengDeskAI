@@ -54,16 +54,7 @@ public sealed class MeshyModel3DGenerator : IModel3DGenerator
 
         _logger.LogInformation("[Meshy] POST {Path} (multi-image-to-3D, {Count} ảnh).", _settings.MultiImageTo3DPath, imageUrls.Count);
         using var resp = await _http.PostAsJsonAsync(_settings.MultiImageTo3DPath, payload, JsonOptions, ct);
-
-        // 402 Payment Required = hết credit — ném riêng để caller requeue thay vì fail hẳn.
-        // Nguồn: https://docs.meshy.ai/en/api/errors
-        if (resp.StatusCode == HttpStatusCode.PaymentRequired)
-        {
-            _logger.LogWarning("[Meshy] 402 Payment Required — hết credit.");
-            throw new InsufficientCreditsException("Meshy hết credit (402 Payment Required).");
-        }
-
-        resp.EnsureSuccessStatusCode();
+        await EnsureProviderSuccessAsync(resp, "create multi-image-to-3D task", ct);
 
         var body = await resp.Content.ReadFromJsonAsync<MeshyCreateResponse>(JsonOptions, ct);
         if (body is null || string.IsNullOrWhiteSpace(body.Result))
@@ -74,7 +65,7 @@ public sealed class MeshyModel3DGenerator : IModel3DGenerator
     public async Task<Model3DTaskResult> GetTaskAsync(string taskId, CancellationToken ct = default)
     {
         using var resp = await _http.GetAsync($"{_settings.MultiImageTo3DPath}/{taskId}", ct);
-        resp.EnsureSuccessStatusCode();
+        await EnsureProviderSuccessAsync(resp, "get multi-image-to-3D task", ct);
 
         var task = await resp.Content.ReadFromJsonAsync<MeshyTaskResponse>(JsonOptions, ct)
             ?? throw new InvalidOperationException("Meshy trả về body rỗng khi poll.");
@@ -99,6 +90,50 @@ public sealed class MeshyModel3DGenerator : IModel3DGenerator
         // Dùng absolute URL của provider (khác BaseAddress) — HttpClient cho phép URI tuyệt đối.
         var bytes = await _http.GetByteArrayAsync(url, ct);
         return new MemoryStream(bytes);
+    }
+
+    private async Task EnsureProviderSuccessAsync(
+        HttpResponseMessage response, string operation, CancellationToken ct)
+    {
+        if (response.IsSuccessStatusCode) return;
+
+        var responseBody = await response.Content.ReadAsStringAsync(ct);
+        var providerMessage = ExtractProviderMessage(responseBody);
+
+        // 402 Payment Required = hết credit — ném riêng để caller requeue thay vì fail hẳn.
+        // Nguồn: https://docs.meshy.ai/en/api/errors
+        if (response.StatusCode == HttpStatusCode.PaymentRequired)
+        {
+            _logger.LogWarning("[Meshy] {Operation} thất bại: HTTP 402 — {ProviderMessage}",
+                operation, providerMessage);
+            throw new InsufficientCreditsException($"Meshy hết credit: {providerMessage}");
+        }
+
+        _logger.LogError("[Meshy] {Operation} thất bại: HTTP {StatusCode} — {ProviderMessage}",
+            operation, (int)response.StatusCode, providerMessage);
+        throw new Model3DProviderException((int)response.StatusCode, providerMessage);
+    }
+
+    private static string ExtractProviderMessage(string responseBody)
+    {
+        const int maxLength = 2_000;
+        if (string.IsNullOrWhiteSpace(responseBody)) return "Provider không trả nội dung lỗi.";
+
+        string message;
+        try
+        {
+            using var document = JsonDocument.Parse(responseBody);
+            message = document.RootElement.TryGetProperty("message", out var value)
+                ? value.GetString() ?? responseBody
+                : responseBody;
+        }
+        catch (JsonException)
+        {
+            message = responseBody;
+        }
+
+        message = message.Trim();
+        return message.Length <= maxLength ? message : message[..maxLength];
     }
 
     // ----- DTO khớp Meshy OpenAPI v1 (multi-image-to-3d) -----

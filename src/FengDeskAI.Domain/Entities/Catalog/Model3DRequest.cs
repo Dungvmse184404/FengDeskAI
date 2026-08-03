@@ -5,18 +5,23 @@ namespace FengDeskAI.Domain.Entities.Catalog;
 
 /// <summary>
 /// 1 lần yêu cầu sinh/tạo lại model 3D cho 1 <see cref="Product"/> — hàng chờ + lịch sử (n–1 với Product).
-/// <see cref="Model3DRequestType.Initial"/>: tự động, worker (<c>Model3DPollingWorker</c>) gọi Meshy, retry
-/// khi hết credit (402). <see cref="Model3DRequestType.Regenerate"/>: thủ công, chỉ staff sàn
-/// (<c>UserRole.Staff</c> trở lên) xử lý — không có bước "claim/khóa", bất kỳ staff nào cũng gọi
-/// <c>generate</c>/<c>retry</c>/<c>accept</c> được.
+/// Cả <see cref="Model3DRequestType.Initial"/> và <see cref="Model3DRequestType.Regenerate"/> đều được
+/// staff sàn xử lý qua cùng một hàng chờ trước khi gọi Meshy.
 ///
 /// Không giới hạn số request theo thời gian, nhưng chỉ 1 request "đang mở" tại 1 thời điểm cho mỗi
-/// product — kiểm tra ở tầng service (<c>Model3DRequestService</c>/<c>ProductModel3DService</c>), không
+/// ảnh sản phẩm — kiểm tra ở tầng service (<c>Model3DRequestService</c>/<c>ProductModel3DService</c>), không
 /// phải constraint DB.
 /// </summary>
 public class Model3DRequest : BaseEntity
 {
     public Guid ProductId { get; set; }
+
+    /// <summary>
+    /// Ảnh đại diện mà model kết quả sẽ gắn vào. Các SourceImageIds khác (nếu có) chỉ là góc chụp
+    /// bổ sung của cùng kiểu sản phẩm và không quyết định row model bị cập nhật.
+    /// Nullable chỉ để tương thích dữ liệu request cũ trước migration.
+    /// </summary>
+    public Guid? ProductImageId { get; set; }
 
     public Model3DRequestType RequestType { get; set; }
     public Model3DRequestStatus Status { get; set; }
@@ -46,4 +51,5 @@ public class Model3DRequest : BaseEntity
     public string? RejectedReason { get; set; }
 
     public Product Product { get; set; } = null!;
+    public ProductImage? ProductImage { get; set; }
 }

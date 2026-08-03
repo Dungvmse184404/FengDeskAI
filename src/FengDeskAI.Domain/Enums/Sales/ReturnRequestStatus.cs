@@ -11,7 +11,7 @@ namespace FengDeskAI.Domain.Enums.Sales;
 ///   ItemReceived     → Reviewing
 ///   Reviewing        → Exchanging | Refunding | Rejected
 ///   Exchanging       → Completed | Refunding (fallback hết hàng)
-///   Refunding        → Completed
+///   Refunding        → Completed | Rejected (Manager hủy refund do gian lận)
 /// (terminal: Completed, Cancelled, Rejected)
 /// </summary>
 public enum ReturnRequestStatus

@@ -4,13 +4,15 @@ using FengDeskAI.Domain.Enums.Catalog;
 namespace FengDeskAI.Domain.Entities.Catalog;
 
 /// <summary>
-/// Model 3D của một <see cref="Product"/> (quan hệ 1–1), sinh từ một ảnh sản phẩm qua Meshy AI.
+/// Model 3D của một <see cref="ProductImage"/>. Một product có thể có nhiều model, nhưng mỗi ảnh
+/// đại diện chỉ có tối đa một model 3D.
 /// Việc sinh là bất đồng bộ: lưu <see cref="MeshyTaskId"/> + <see cref="Status"/> = Processing,
 /// worker nền poll Meshy rồi tải GLB và re-host lên storage, ghi <see cref="ModelUrl"/>.
 /// </summary>
 public class ProductModel3D : BaseEntity
 {
     public Guid ProductId { get; set; }
+    public Guid? ProductImageId { get; set; }
 
     public Model3DStatus Status { get; set; } = Model3DStatus.Pending;
 
@@ -39,4 +41,5 @@ public class ProductModel3D : BaseEntity
     public bool IsEnabled { get; set; } = true;
 
     public Product Product { get; set; } = null!;
+    public ProductImage? ProductImage { get; set; }
 }

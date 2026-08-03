@@ -9,5 +9,5 @@ public class ReturnSlaOptions
     public bool IsActive { get; set; } = true;
 
     /// <summary>Chu kỳ quét (giây).</summary>
-    public int ScanIntervalSeconds { get; set; } = 120;
+    public int ScanIntervalSeconds { get; set; } = 15;
 }

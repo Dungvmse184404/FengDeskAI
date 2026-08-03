@@ -23,6 +23,11 @@ public class ReturnRepository : GenericRepository<ReturnRequest>, IReturnReposit
             .Include(r => r.StatusLogs)
             .FirstOrDefaultAsync(r => r.Id == id, ct);
 
+    public Task<ReturnRequest?> GetByReplacementDeliveryIdAsync(Guid replacementDeliveryId, CancellationToken ct = default)
+        => _set
+            .Include(r => r.Refund)
+            .FirstOrDefaultAsync(r => r.ReplacementDeliveryId == replacementDeliveryId, ct);
+
     public Task<ReturnRequest?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking()
@@ -168,11 +173,28 @@ public class ReturnRepository : GenericRepository<ReturnRequest>, IReturnReposit
         return (items, total);
     }
 
-    public Task<List<Refund>> GetRetryableFailedRefundsAsync(int maxRetry, int max, CancellationToken ct = default)
+    public Task<List<Refund>> GetFailedRefundsAsync(int max, CancellationToken ct = default)
         => _context.Set<Refund>()
             .Include(f => f.ReturnRequest)
-            .Where(f => f.Status == RefundStatus.Failed && f.RetryCount < maxRetry)
+            .Where(f => f.Status == RefundStatus.Failed)
             .OrderBy(f => f.UpdatedAt)
+            .Take(max)
+            .ToListAsync(ct);
+
+    public Task<List<Refund>> GetPendingRefundsAsync(int max, CancellationToken ct = default)
+        => _context.Set<Refund>()
+            .Include(f => f.ReturnRequest)
+            .Where(f => f.Status == RefundStatus.Pending)
+            .OrderBy(f => f.CreatedAt)
+            .Take(max)
+            .ToListAsync(ct);
+
+    public Task<List<Refund>> GetStaleProcessingRefundsAsync(DateTime staleBeforeUtc, int max, CancellationToken ct = default)
+        => _context.Set<Refund>()
+            .Include(f => f.ReturnRequest)
+            .Where(f => f.Status == RefundStatus.Processing
+                && f.ProcessedAt != null && f.ProcessedAt < staleBeforeUtc)
+            .OrderBy(f => f.ProcessedAt)
             .Take(max)
             .ToListAsync(ct);
 

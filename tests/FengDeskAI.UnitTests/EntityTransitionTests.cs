@@ -21,6 +21,8 @@ public class EntityTransitionTests
         Assert.Equal(ReturnRequestStatus.UnderReview, t.Status);
         t.RouteAfterAccept();
         Assert.Equal(ReturnRequestStatus.ReturnInTransit, t.Status);
+        t.SubmitReturnShipment("GHN-RETURN-001");
+        Assert.Equal("GHN-RETURN-001", t.ReturnTrackingCode);
         t.ConfirmItemReceived(DateTime.UtcNow);
         Assert.Equal(ReturnRequestStatus.ItemReceived, t.Status);
         t.MoveToReviewing();
@@ -58,6 +60,34 @@ public class EntityTransitionTests
         Assert.Equal(ReturnRequestStatus.Exchanging, t.Status);
         t.FallbackToRefund();
         Assert.Equal(ReturnRequestStatus.Refunding, t.Status);
+    }
+
+    [Fact]
+    public void Exchange_RemainsExchanging_UntilReplacementDeliveryCompletes()
+    {
+        var t = Ticket(ReturnReason.NotAsDescribed);
+        t.Accept(DateTime.UtcNow.AddHours(48));
+        t.RouteAfterAccept();
+        t.ConfirmItemReceived(DateTime.UtcNow);
+        t.MoveToReviewing();
+        t.ApproveExchange(Guid.NewGuid(), DateTime.UtcNow);
+
+        Assert.Equal(ReturnRequestStatus.Exchanging, t.Status);
+        t.CompleteExchange();
+        Assert.Equal(ReturnRequestStatus.Completed, t.Status);
+    }
+
+    [Fact]
+    public void SubmitReturnShipment_OnlyAllowedWhileReturnInTransit()
+    {
+        var t = Ticket(ReturnReason.WrongItem);
+        Assert.Throws<InvalidStateTransitionException>(() => t.SubmitReturnShipment("TRACK-1"));
+
+        t.Accept(DateTime.UtcNow.AddHours(48));
+        t.RouteAfterAccept();
+        t.SubmitReturnShipment(" TRACK-1 ");
+
+        Assert.Equal("TRACK-1", t.ReturnTrackingCode);
     }
 
     [Fact]

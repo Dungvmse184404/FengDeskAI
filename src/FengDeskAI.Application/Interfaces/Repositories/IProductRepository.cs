@@ -50,12 +50,15 @@ public interface IProductRepository : IGenericRepository<Product>
     Task AddImageAsync(ProductImage image, CancellationToken ct = default);
     void RemoveImage(ProductImage image);
 
-    // Model 3D (1–1 với product)
-    Task<ProductModel3D?> GetModel3DAsync(Guid productId, CancellationToken ct = default);
+    // Model 3D theo từng ảnh sản phẩm
+    Task<List<ProductModel3D>> ListModel3DsAsync(Guid productId, CancellationToken ct = default);
+    Task<ProductModel3D?> GetModel3DAsync(Guid productId, Guid productImageId, CancellationToken ct = default);
+    Task<ProductModel3D?> GetModel3DByIdAsync(Guid productId, Guid modelId, CancellationToken ct = default);
 
     /// <summary>Tìm model 3D của product KỂ CẢ bản đã soft-delete (bỏ query filter) — dùng khi sinh lại
     /// để hồi sinh & tái sử dụng row cũ, tránh đụng unique index <c>product_id</c>.</summary>
-    Task<ProductModel3D?> GetModel3DIncludingDeletedAsync(Guid productId, CancellationToken ct = default);
+    Task<ProductModel3D?> GetModel3DIncludingDeletedAsync(
+        Guid productId, Guid productImageId, CancellationToken ct = default);
 
     Task AddModel3DAsync(ProductModel3D model, CancellationToken ct = default);
     void RemoveModel3D(ProductModel3D model);
@@ -66,7 +69,8 @@ public interface IProductRepository : IGenericRepository<Product>
     // ----- Model3DRequest (hàng chờ + lịch sử, n–1 với product) -----
 
     /// <summary>Request đang "mở" (chưa Succeeded/Failed/Rejected) của product — dùng để chặn tạo chồng request.</summary>
-    Task<Model3DRequest?> GetOpenModel3DRequestAsync(Guid productId, CancellationToken ct = default);
+    Task<Model3DRequest?> GetOpenModel3DRequestAsync(
+        Guid productId, Guid productImageId, CancellationToken ct = default);
 
     Task AddModel3DRequestAsync(Model3DRequest request, CancellationToken ct = default);
 
@@ -81,7 +85,7 @@ public interface IProductRepository : IGenericRepository<Product>
     /// <paramref name="status"/> và/hoặc <paramref name="reason"/> (vd Queued + InsufficientCredits
     /// = các request Initial đang kẹt vì hết credit Meshy).
     /// </summary>
-    Task<(List<Model3DRequest> Items, int Total)> GetStaffQueueAsync(
+    Task<(List<Model3DRequest> Items, int Total, Dictionary<Model3DRequestStatus, int> StatusCounts)> GetStaffQueueAsync(
         Model3DRequestStatus? status, Model3DFailureReason? reason,
         int skip, int take, CancellationToken ct = default);
 

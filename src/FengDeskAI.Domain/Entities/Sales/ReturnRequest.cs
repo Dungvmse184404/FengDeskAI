@@ -126,6 +126,17 @@ public class ReturnRequest : BaseEntity
     /// <summary>Chuyển sang bước Staff ra quyết định.</summary>
     public void MoveToReviewing() => TransitionTo(ReturnRequestStatus.Reviewing);
 
+    /// <summary>Khách khai báo mã vận đơn chiều trả khi ticket đang chờ cửa hàng nhận hàng.</summary>
+    public void SubmitReturnShipment(string trackingCode)
+    {
+        if (Status != ReturnRequestStatus.ReturnInTransit)
+            throw new InvalidStateTransitionException(nameof(ReturnRequest), Status.ToString(), "SubmitReturnShipment");
+        if (string.IsNullOrWhiteSpace(trackingCode))
+            throw new ArgumentException("Mã vận đơn trả hàng là bắt buộc.", nameof(trackingCode));
+
+        ReturnTrackingCode = trackingCode.Trim();
+    }
+
     /// <summary>Staff duyệt hoàn tiền.</summary>
     public void ApproveRefund(Guid staffId, DateTime nowUtc)
     {
@@ -175,7 +186,10 @@ public class ReturnRequest : BaseEntity
 
     private void EnsureVendorCanRespond()
     {
-        if (ReturnStateMachine.IsTerminal(Status))
+        if (Status is not (ReturnRequestStatus.UnderReview
+            or ReturnRequestStatus.ReturnInTransit
+            or ReturnRequestStatus.ItemReceived
+            or ReturnRequestStatus.Reviewing))
             throw new InvalidStateTransitionException(nameof(ReturnRequest), Status.ToString(), "VendorResponse");
     }
 }

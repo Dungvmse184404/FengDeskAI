@@ -25,6 +25,7 @@ public enum NotificationType
     ReturnCancelled,
     RefundCompleted,
     ExchangeShipped,
+    ExchangeCompleted,
 
     // Staff invitation
     StaffInvited,

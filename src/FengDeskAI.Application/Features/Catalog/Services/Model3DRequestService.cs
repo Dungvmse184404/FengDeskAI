@@ -35,39 +35,62 @@ public class Model3DRequestService : IModel3DRequestService
     public async Task<IServiceResult<Model3DRequestQueueResponse>> GetQueueAsync(
         Model3DRequestStatus? status, Model3DFailureReason? reason, int skip, int take, CancellationToken ct = default)
     {
-        var (items, total) = await _uow.Products.GetStaffQueueAsync(status, reason, skip, take, ct);
+        skip = Math.Max(0, skip);
+        take = Math.Clamp(take, 1, 100);
+        var (items, total, statusCounts) = await _uow.Products.GetStaffQueueAsync(status, reason, skip, take, ct);
         return ServiceResult<Model3DRequestQueueResponse>.Success(new Model3DRequestQueueResponse
         {
             Items = _mapper.Map<List<Model3DRequestQueueItemResponse>>(items),
             Total = total,
+            StatusCounts = statusCounts.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value),
         });
     }
 
     public Task<IServiceResult<Model3DRequestQueueItemResponse>> GenerateAsync(
         Guid requestId, Guid staffUserId, RequestModel3DRequest body, CancellationToken ct = default)
-        => GenerateOrRetryAsync(requestId, staffUserId, body, ct);
+        => GenerateOrRetryAsync(requestId, staffUserId, body, isRetry: false, ct);
 
     public Task<IServiceResult<Model3DRequestQueueItemResponse>> RetryAsync(
         Guid requestId, Guid staffUserId, RequestModel3DRequest body, CancellationToken ct = default)
-        => GenerateOrRetryAsync(requestId, staffUserId, body, ct);
+        => GenerateOrRetryAsync(requestId, staffUserId, body, isRetry: true, ct);
 
     /// <summary>
     /// generate/retry cùng 1 hành vi: chọn ảnh → gửi Meshy → InProgress. Không có bước claim/khóa —
     /// bất kỳ staff sàn nào cũng gọi được, không giới hạn số lần (đã chốt trong ADR).
     /// </summary>
     private async Task<IServiceResult<Model3DRequestQueueItemResponse>> GenerateOrRetryAsync(
-        Guid requestId, Guid staffUserId, RequestModel3DRequest body, CancellationToken ct)
+        Guid requestId, Guid staffUserId, RequestModel3DRequest body, bool isRetry, CancellationToken ct)
     {
         var req = await _uow.Products.GetModel3DRequestAsync(requestId, ct);
         if (req is null)
             return ServiceResult<Model3DRequestQueueItemResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DRequestNotFound);
-        if (req.RequestType != Model3DRequestType.Regenerate)
-            return ServiceResult<Model3DRequestQueueItemResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DRequestNotActionableByStaff);
-        if (req.Status is not (Model3DRequestStatus.AwaitingStaff or Model3DRequestStatus.InProgress))
+
+        var validStatus = isRetry
+            ? req.Status is Model3DRequestStatus.InProgress or Model3DRequestStatus.Failed
+            : req.Status is Model3DRequestStatus.AwaitingStaff or Model3DRequestStatus.Failed;
+        if (!validStatus)
             return ServiceResult<Model3DRequestQueueItemResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestNotActionableByStaff);
 
+        if (req.ProductImageId is not { } targetImageId)
+            return ServiceResult<Model3DRequestQueueItemResponse>.Failure(
+                ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestTargetImageRequired);
+
+        // Ảnh đích luôn phải nằm trong tập ảnh nguồn. Nếu staff không chọn lại ảnh thì dùng tập ảnh
+        // đã được chủ cửa hàng gửi kèm request.
+        var selectedIds = body.SourceImageIds is { Count: > 0 }
+            ? body.SourceImageIds.Distinct().ToList()
+            : req.SourceImageIds.Distinct().ToList();
+        if (!selectedIds.Contains(targetImageId)) selectedIds.Insert(0, targetImageId);
+
+        var effectiveBody = new RequestModel3DRequest
+        {
+            ProductImageId = targetImageId,
+            SourceImageIds = selectedIds,
+            NewImages = body.NewImages,
+        };
+
         var (ids, urls, error) = await Model3DImageResolver.ResolveAsync(
-            _uow, _storage, req.ProductId, body, defaultToPrimaryIfEmpty: false, ct);
+            _uow, _storage, req.ProductId, effectiveBody, defaultToPrimaryIfEmpty: false, ct);
         if (error != Model3DImageResolver.ErrorCode.None)
             return ServiceResult<Model3DRequestQueueItemResponse>.Failure(ApiStatusCodes.BadRequest, MapImageError(error));
 
@@ -80,16 +103,34 @@ public class Model3DRequestService : IModel3DRequestService
             req.AssignedStaffId = staffUserId;
             req.Status = Model3DRequestStatus.InProgress;
             req.InternalFailureReason = null;
+            req.NextAttemptAt = null;
+            req.RejectedReason = null;
         }
         catch (InsufficientCreditsException)
         {
-            // Khác Initial: đây là thao tác staff chủ động bấm → báo lỗi thật ngay, không âm thầm requeue.
+            req.InternalFailureReason = Model3DFailureReason.InsufficientCredits;
+            await _uow.SaveChangesAsync(ct);
             return ServiceResult<Model3DRequestQueueItemResponse>.Failure(
                 ApiStatusCodes.ServiceUnavailable, ApiStatusMessages.Product.Model3DProviderInsufficientCredits);
+        }
+        catch (Model3DProviderException ex)
+        {
+            _logger.LogError(ex,
+                "[Model3D] Meshy từ chối request {RequestId} của staff {StaffId}: HTTP {StatusCode} — {ProviderMessage}",
+                requestId, staffUserId, ex.StatusCode, ex.ProviderMessage);
+
+            var (statusCode, message) = MapProviderErrorForStaff(ex);
+            req.InternalFailureReason = ex.StatusCode == 400
+                ? Model3DFailureReason.InvalidImage
+                : Model3DFailureReason.GenerationFailed;
+            await _uow.SaveChangesAsync(ct);
+            return ServiceResult<Model3DRequestQueueItemResponse>.Failure(statusCode, message);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "[Model3D] Staff {StaffId} gửi job Meshy thất bại cho request {RequestId}.", staffUserId, requestId);
+            req.InternalFailureReason = Model3DFailureReason.GenerationFailed;
+            await _uow.SaveChangesAsync(ct);
             return ServiceResult<Model3DRequestQueueItemResponse>.Failure(ApiStatusCodes.ServiceUnavailable, ApiStatusMessages.Product.Model3DProviderError);
         }
 
@@ -103,7 +144,8 @@ public class Model3DRequestService : IModel3DRequestService
         var req = await _uow.Products.GetModel3DRequestAsync(requestId, ct);
         if (req is null)
             return ServiceResult<Model3DPreviewResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DRequestNotFound);
-        if (string.IsNullOrWhiteSpace(req.MeshyTaskId))
+        if (req.Status is not (Model3DRequestStatus.InProgress or Model3DRequestStatus.Failed)
+            || string.IsNullOrWhiteSpace(req.MeshyTaskId))
             return ServiceResult<Model3DPreviewResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestNoTaskToAccept);
 
         Model3DTaskResult result;
@@ -111,10 +153,24 @@ public class Model3DRequestService : IModel3DRequestService
         {
             result = await _generator.GetTaskAsync(req.MeshyTaskId, ct);
         }
+        catch (Model3DProviderException ex)
+        {
+            _logger.LogWarning(ex, "[Model3D] Preview provider lỗi cho request {RequestId}: HTTP {StatusCode}.",
+                requestId, ex.StatusCode);
+            var (statusCode, message) = MapProviderErrorForStaff(ex);
+            return ServiceResult<Model3DPreviewResponse>.Failure(statusCode, message);
+        }
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[Model3D] Preview poll thất bại cho request {RequestId}.", requestId);
             return ServiceResult<Model3DPreviewResponse>.Failure(ApiStatusCodes.ServiceUnavailable, ApiStatusMessages.Product.Model3DProviderError);
+        }
+
+        if (result.State == Model3DGenerationState.Failed && req.Status != Model3DRequestStatus.Failed)
+        {
+            req.Status = Model3DRequestStatus.Failed;
+            req.InternalFailureReason = Model3DFailureReason.GenerationFailed;
+            await _uow.SaveChangesAsync(ct);
         }
 
         return ServiceResult<Model3DPreviewResponse>.Success(new Model3DPreviewResponse
@@ -132,8 +188,6 @@ public class Model3DRequestService : IModel3DRequestService
         var req = await _uow.Products.GetModel3DRequestAsync(requestId, ct);
         if (req is null)
             return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DRequestNotFound);
-        if (req.RequestType != Model3DRequestType.Regenerate)
-            return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DRequestNotActionableByStaff);
         if (req.Status != Model3DRequestStatus.InProgress || string.IsNullOrWhiteSpace(req.MeshyTaskId))
             return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestNoTaskToAccept);
 
@@ -151,19 +205,25 @@ public class Model3DRequestService : IModel3DRequestService
         if (result.State != Model3DGenerationState.Succeeded || string.IsNullOrWhiteSpace(result.GlbUrl))
             return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestTaskNotSucceeded);
 
-        var existing = await _uow.Products.GetModel3DIncludingDeletedAsync(req.ProductId, ct);
+        if (req.ProductImageId is not { } targetImageId)
+            return ServiceResult<ProductModel3DResponse>.Failure(
+                ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestTargetImageRequired);
+
+        var existing = await _uow.Products.GetModel3DIncludingDeletedAsync(
+            req.ProductId, targetImageId, ct);
         var oldModelUrl = existing?.ModelUrl;
 
         ProductModel3D model;
         if (existing is null)
         {
-            model = new ProductModel3D { ProductId = req.ProductId };
+            model = new ProductModel3D { ProductId = req.ProductId, ProductImageId = targetImageId };
             await _uow.Products.AddModel3DAsync(model, ct);
         }
         else
         {
             model = existing;
             model.IsDeleted = false;
+            model.ProductImageId = targetImageId;
         }
 
         var sourceUrls = await Model3DImageResolver.GetUrlsForIdsAsync(_uow, req.ProductId, req.SourceImageIds, ct);
@@ -185,10 +245,11 @@ public class Model3DRequestService : IModel3DRequestService
         }
         catch (Exception ex)
         {
-            _logger.LogWarning(ex,
-                "[Model3D] Accept: re-host GLB sang storage thất bại cho product {ProductId} — tạm dùng URL provider.",
+            _logger.LogError(ex,
+                "[Model3D] Accept: không thể lưu GLB vĩnh viễn cho product {ProductId}.",
                 req.ProductId);
-            model.ModelUrl = result.GlbUrl;
+            return ServiceResult<ProductModel3DResponse>.Failure(
+                ApiStatusCodes.ServiceUnavailable, ApiStatusMessages.Product.Model3DStorageError);
         }
 
         model.Status = Model3DStatus.Succeeded;
@@ -199,7 +260,7 @@ public class Model3DRequestService : IModel3DRequestService
 
         await _uow.SaveChangesAsync(ct);
 
-        if (!string.IsNullOrWhiteSpace(oldModelUrl))
+        if (!string.IsNullOrWhiteSpace(oldModelUrl) && oldModelUrl != model.ModelUrl)
             await _storage.DeleteByUrlAsync(oldModelUrl, ct);
 
         return ServiceResult<ProductModel3DResponse>.Success(
@@ -210,10 +271,15 @@ public class Model3DRequestService : IModel3DRequestService
     {
         var req = await _uow.Products.GetModel3DRequestAsync(requestId, ct);
         if (req is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DRequestNotFound);
-        if (req.RequestType != Model3DRequestType.Regenerate)
-            return ServiceResult.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DRequestNotActionableByStaff);
-        if (req.Status is Model3DRequestStatus.Succeeded or Model3DRequestStatus.Rejected)
+        if (req.Status is not (Model3DRequestStatus.AwaitingStaff
+            or Model3DRequestStatus.InProgress or Model3DRequestStatus.Failed))
             return ServiceResult.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestNotActionableByStaff);
+
+        reason = reason?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(reason))
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DRejectReasonRequired);
+        if (reason.Length > 1000)
+            return ServiceResult.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DRejectReasonTooLong);
 
         req.Status = Model3DRequestStatus.Rejected;
         req.RejectedReason = reason;
@@ -230,4 +296,17 @@ public class Model3DRequestService : IModel3DRequestService
         Model3DImageResolver.ErrorCode.TooManyImages => ApiStatusMessages.Product.Model3DImageLimitExceeded,
         _ => ApiStatusMessages.Product.Model3DImageRequired,
     };
+
+    private static (int StatusCode, string Message) MapProviderErrorForStaff(Model3DProviderException error)
+        => error.StatusCode switch
+        {
+            400 => (ApiStatusCodes.BadRequest,
+                $"{ApiStatusMessages.Product.Model3DProviderInvalidRequest} Meshy: {error.ProviderMessage}"),
+            401 or 403 => (ApiStatusCodes.ServiceUnavailable,
+                ApiStatusMessages.Product.Model3DProviderUnauthorized),
+            429 => (ApiStatusCodes.ServiceUnavailable,
+                ApiStatusMessages.Product.Model3DProviderRateLimited),
+            _ => (ApiStatusCodes.ServiceUnavailable,
+                ApiStatusMessages.Product.Model3DProviderError),
+        };
 }

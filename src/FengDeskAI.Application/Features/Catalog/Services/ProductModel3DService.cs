@@ -32,17 +32,15 @@ public class ProductModel3DService : IProductModel3DService
         _logger = logger;
     }
 
-    public async Task<IServiceResult<ProductModel3DResponse>> GetAsync(Guid productId, CancellationToken ct = default)
+    public async Task<IServiceResult<List<ProductModel3DResponse>>> GetAsync(Guid productId, CancellationToken ct = default)
     {
         var product = await _uow.Products.GetByIdAsync(productId, ct);
         if (product is null)
-            return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
+            return ServiceResult<List<ProductModel3DResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
 
-        var model = await _uow.Products.GetModel3DAsync(productId, ct);
-        if (model is null)
-            return ServiceResult<ProductModel3DResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DNotFound);
-
-        return ServiceResult<ProductModel3DResponse>.Success(_mapper.Map<ProductModel3DResponse>(model));
+        var models = await _uow.Products.ListModel3DsAsync(productId, ct);
+        return ServiceResult<List<ProductModel3DResponse>>.Success(
+            _mapper.Map<List<ProductModel3DResponse>>(models));
     }
 
     public async Task<IServiceResult<Model3DRequestResponse>> RequestAsync(
@@ -54,45 +52,69 @@ public class ProductModel3DService : IProductModel3DService
         if (!await CanManageStoreAsync(product.GardenStoreId, userId, isAdmin, ct))
             return ServiceResult<Model3DRequestResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.ManageForbidden);
 
-        // Chỉ 1 request "đang mở" tại 1 thời điểm cho mỗi product.
-        var open = await _uow.Products.GetOpenModel3DRequestAsync(productId, ct);
-        if (open is not null)
-            return ServiceResult<Model3DRequestResponse>.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestOpenConflict);
+        var hasExplicitSources = request.SourceImageIds is { Count: > 0 }
+                                 || request.NewImages is { Count: > 0 };
+        List<Guid> sourceIds = new();
+        if (hasExplicitSources)
+        {
+            var (ids, _, error) = await Model3DImageResolver.ResolveAsync(
+                _uow, _storage, productId, request, defaultToPrimaryIfEmpty: false, ct);
+            if (error != Model3DImageResolver.ErrorCode.None)
+                return ServiceResult<Model3DRequestResponse>.Failure(ApiStatusCodes.BadRequest, MapImageError(error));
+            sourceIds = ids;
+        }
 
-        // Đã có model Succeeded trước đó → Regenerate (thủ công qua staff sàn). Ngược lại → Initial (tự động).
-        var currentModel = await _uow.Products.GetModel3DAsync(productId, ct);
+        var targetImageId = request.ProductImageId ?? sourceIds.FirstOrDefault();
+        if (targetImageId == Guid.Empty)
+        {
+            var primary = (await _uow.Products.ListImagesAsync(productId, ct))
+                .OrderBy(i => i.SortOrder).FirstOrDefault();
+            if (primary is null)
+                return ServiceResult<Model3DRequestResponse>.Failure(
+                    ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DSourceImageRequired);
+            targetImageId = primary.Id;
+        }
+
+        // ResolveAsync already validated existing source images and can also add a new ProductImage
+        // which is not queryable from the database until this unit of work is saved.
+        if (!sourceIds.Contains(targetImageId))
+        {
+            var targetImage = await _uow.Products.GetImageAsync(productId, targetImageId, ct);
+            if (targetImage is null)
+                return ServiceResult<Model3DRequestResponse>.Failure(
+                    ApiStatusCodes.BadRequest, ApiStatusMessages.Product.Model3DSourceImageNotFound);
+        }
+
+        // Mỗi ảnh/kiểu dáng có request và model độc lập.
+        var open = await _uow.Products.GetOpenModel3DRequestAsync(productId, targetImageId, ct);
+        if (open is not null)
+            return ServiceResult<Model3DRequestResponse>.Failure(
+                ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DRequestOpenConflict);
+
+        var currentModel = await _uow.Products.GetModel3DAsync(productId, targetImageId, ct);
         var isRegenerate = currentModel is { Status: Model3DStatus.Succeeded };
 
         var entity = new Model3DRequest
         {
             ProductId = productId,
+            ProductImageId = targetImageId,
             RequestedBy = userId,
         };
 
-        if (isRegenerate)
-        {
-            // Regenerate: KHÔNG chọn ảnh ở bước này — staff sàn tự chọn ảnh khi xử lý (mục 6/7 ADR).
-            entity.RequestType = Model3DRequestType.Regenerate;
-            entity.Status = Model3DRequestStatus.AwaitingStaff;
-        }
-        else
-        {
-            var (ids, _, error) = await Model3DImageResolver.ResolveAsync(
-                _uow, _storage, productId, request, defaultToPrimaryIfEmpty: true, ct);
-            if (error != Model3DImageResolver.ErrorCode.None)
-                return ServiceResult<Model3DRequestResponse>.Failure(ApiStatusCodes.BadRequest, MapImageError(error));
-
-            entity.RequestType = Model3DRequestType.Initial;
-            entity.Status = Model3DRequestStatus.Queued;
-            entity.SourceImageIds = ids;
-        }
+        // Cả tạo mới và tạo lại đều đi qua một hàng chờ thủ công. Điều này giúp staff kiểm tra
+        // đúng ảnh/biến thể trước khi tiêu credit Meshy và tránh hai luồng trạng thái khác nhau.
+        entity.RequestType = isRegenerate
+            ? Model3DRequestType.Regenerate
+            : Model3DRequestType.Initial;
+        entity.Status = Model3DRequestStatus.AwaitingStaff;
+        entity.SourceImageIds = sourceIds.Count > 0 ? sourceIds : [targetImageId];
 
         await _uow.Products.AddModel3DRequestAsync(entity, ct);
         await _uow.SaveChangesAsync(ct);
 
-        var message = isRegenerate ? ApiStatusMessages.Product.Model3DRequestAwaitingStaff : ApiStatusMessages.Product.Model3DRequestQueued;
         return ServiceResult<Model3DRequestResponse>.Success(
-            _mapper.Map<Model3DRequestResponse>(entity), message, ApiStatusCodes.Accepted);
+            _mapper.Map<Model3DRequestResponse>(entity), ApiStatusMessages.Product.Model3DRequestAwaitingStaff,
+            ApiStatusCodes.Accepted);
     }
 
     public async Task<IServiceResult<List<Model3DRequestResponse>>> ListRequestsAsync(
@@ -108,14 +130,15 @@ public class ProductModel3DService : IProductModel3DService
         return ServiceResult<List<Model3DRequestResponse>>.Success(_mapper.Map<List<Model3DRequestResponse>>(list));
     }
 
-    public async Task<IServiceResult> ToggleAsync(Guid productId, Guid userId, bool isAdmin, bool isEnabled, CancellationToken ct = default)
+    public async Task<IServiceResult> ToggleAsync(
+        Guid productId, Guid modelId, Guid userId, bool isAdmin, bool isEnabled, CancellationToken ct = default)
     {
         var product = await _uow.Products.GetByIdAsync(productId, ct);
         if (product is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
         if (!await CanManageStoreAsync(product.GardenStoreId, userId, isAdmin, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.ManageForbidden);
 
-        var model = await _uow.Products.GetModel3DAsync(productId, ct);
+        var model = await _uow.Products.GetModel3DByIdAsync(productId, modelId, ct);
         if (model is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DNotFound);
 
         model.IsEnabled = isEnabled;
@@ -123,14 +146,15 @@ public class ProductModel3DService : IProductModel3DService
         return ServiceResult.Success(ApiStatusMessages.Product.Model3DToggled);
     }
 
-    public async Task<IServiceResult> DeleteAsync(Guid productId, Guid userId, bool isAdmin, CancellationToken ct = default)
+    public async Task<IServiceResult> DeleteAsync(
+        Guid productId, Guid modelId, Guid userId, bool isAdmin, CancellationToken ct = default)
     {
         var product = await _uow.Products.GetByIdAsync(productId, ct);
         if (product is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
         if (!await CanManageStoreAsync(product.GardenStoreId, userId, isAdmin, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.ManageForbidden);
 
-        var model = await _uow.Products.GetModel3DAsync(productId, ct);
+        var model = await _uow.Products.GetModel3DByIdAsync(productId, modelId, ct);
         if (model is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.Model3DNotFound);
 
         var modelUrl = model.ModelUrl;
@@ -244,19 +268,28 @@ public class ProductModel3DService : IProductModel3DService
             return null;
         }
 
-        var existing = await _uow.Products.GetModel3DIncludingDeletedAsync(req.ProductId, ct);
+        if (req.ProductImageId is not { } targetImageId)
+        {
+            req.Status = Model3DRequestStatus.Failed;
+            req.InternalFailureReason = Model3DFailureReason.InvalidImage;
+            return null;
+        }
+
+        var existing = await _uow.Products.GetModel3DIncludingDeletedAsync(
+            req.ProductId, targetImageId, ct);
         var oldModelUrl = existing?.ModelUrl;
 
         ProductModel3D model;
         if (existing is null)
         {
-            model = new ProductModel3D { ProductId = req.ProductId };
+            model = new ProductModel3D { ProductId = req.ProductId, ProductImageId = targetImageId };
             await _uow.Products.AddModel3DAsync(model, ct);
         }
         else
         {
             model = existing;
             model.IsDeleted = false;
+            model.ProductImageId = targetImageId;
         }
 
         var sourceUrls = await Model3DImageResolver.GetUrlsForIdsAsync(_uow, req.ProductId, req.SourceImageIds, ct);

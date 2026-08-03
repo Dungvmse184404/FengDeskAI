@@ -219,6 +219,10 @@ public class ProductService : IProductService
         var image = await _uow.Products.GetImageAsync(productId, imageId, ct);
         if (image is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.ImageNotFound);
 
+        var linkedModel = await _uow.Products.GetModel3DAsync(productId, imageId, ct);
+        if (linkedModel is not null)
+            return ServiceResult.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.Model3DImageHasModel);
+
         _uow.Products.RemoveImage(image);
         await _uow.SaveChangesAsync(ct);
         // Xoá file trên storage best-effort sau khi DB đã commit (không chặn nghiệp vụ nếu lỗi).

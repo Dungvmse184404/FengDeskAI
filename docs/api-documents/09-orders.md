@@ -21,6 +21,7 @@ Controller: `OrdersController` · Route gốc: `/api/orders` · Mặc định `[
 | GET | `/api/orders/{id}` | Authenticated* | Chi tiết đơn |
 | POST | `/api/orders/{id}/cancel` | Authenticated | Hủy đơn |
 | GET | `/api/orders/stores/{storeId}/deliveries` | Owner/Staff/Admin | Delivery của 1 store (paged) |
+| GET | `/api/orders/deliveries/{deliveryId}/detail` | Customer sở hữu order / Owner/assigned Staff/Admin | Chi tiết delivery, gồm delivery đổi hàng |
 | PATCH | `/api/orders/deliveries/{deliveryId}/status` | Owner/Staff/Admin | Cập nhật trạng thái delivery |
 
 > *`GET /{id}`: customer chỉ xem đơn của mình; Staff trở lên xem được mọi đơn.

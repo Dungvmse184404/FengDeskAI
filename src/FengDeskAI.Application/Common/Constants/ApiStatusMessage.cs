@@ -141,18 +141,26 @@ public static class ApiStatusMessages
         // Model 3D — request/hàng chờ (Model3DRequest). Xem docs/adr/refactor-model3d-request-flow.md.
         public const string Model3DImageRequired = "Cần chọn ít nhất 1 ảnh (ảnh có sẵn hoặc ảnh mới upload).";
         public const string Model3DImageLimitExceeded = "Chỉ được chọn tối đa 4 ảnh cho 1 lần sinh model 3D.";
-        public const string Model3DRequestOpenConflict = "Sản phẩm đang có yêu cầu tạo model 3D chưa xử lý xong.";
+        public const string Model3DRequestOpenConflict = "Ảnh sản phẩm này đang có yêu cầu tạo model 3D chưa xử lý xong.";
+        public const string Model3DRequestTargetImageRequired = "Yêu cầu chưa xác định ảnh đại diện cho model 3D.";
         public const string Model3DRequestNotFound = "Không tìm thấy yêu cầu tạo model 3D.";
         public const string Model3DRequestQueued = "Đã gửi yêu cầu, hệ thống đang tự động tạo model 3D.";
-        public const string Model3DRequestAwaitingStaff = "Đã gửi yêu cầu tạo lại model 3D, đang chờ nhân viên xử lý.";
+        public const string Model3DRequestAwaitingStaff = "Đã gửi yêu cầu tạo model 3D, đang chờ nhân viên xử lý.";
         public const string Model3DRequestNotActionableByStaff = "Yêu cầu này không ở trạng thái chờ nhân viên xử lý.";
         public const string Model3DRequestNoTaskToAccept = "Yêu cầu chưa có kết quả Meshy để chấp nhận — hãy gọi tạo model trước.";
         public const string Model3DRequestTaskNotSucceeded = "Task Meshy của yêu cầu này chưa hoàn tất (Succeeded).";
-        public const string Model3DRequestAccepted = "Đã chấp nhận model 3D mới cho sản phẩm.";
+        public const string Model3DRequestAccepted = "Đã chấp nhận model 3D cho ảnh sản phẩm đã chọn.";
+        public const string Model3DImageHasModel = "Ảnh đang có model 3D; hãy xóa model trước khi xóa ảnh.";
         public const string Model3DRequestRejected = "Đã từ chối yêu cầu tạo model 3D.";
+        public const string Model3DRejectReasonRequired = "Vui lòng nhập lý do từ chối.";
+        public const string Model3DRejectReasonTooLong = "Lý do từ chối không được vượt quá 1000 ký tự.";
+        public const string Model3DStorageError = "Không thể lưu file model 3D vào kho lưu trữ; vui lòng thử lại.";
         public const string Model3DProviderError = "Dịch vụ sinh 3D gặp lỗi, vui lòng thử lại sau.";
         /// <summary>Chỉ dùng cho response staff sàn (mục generate/retry) — KHÔNG dùng cho owner/garden staff.</summary>
         public const string Model3DProviderInsufficientCredits = "Meshy hết credit — vui lòng nạp thêm rồi thử lại.";
+        public const string Model3DProviderInvalidRequest = "Meshy từ chối ảnh hoặc tham số đầu vào.";
+        public const string Model3DProviderUnauthorized = "Backend không xác thực được với Meshy — vui lòng kiểm tra API key.";
+        public const string Model3DProviderRateLimited = "Meshy đang giới hạn tần suất — vui lòng đợi một lúc rồi thử lại.";
     }
 
     public static class Cart
@@ -376,6 +384,9 @@ public static class ApiStatusMessages
         public const string ManualEvidenceRequired = "Xác nhận thủ công cần đủ lý do và URL bằng chứng.";
         public const string WebhookInvalid = "Webhook hoàn tiền không hợp lệ.";
         public const string WebhookProcessed = "Đã xử lý webhook hoàn tiền.";
+        public const string ReturnTrackingRequired = "Vui lòng cung cấp mã vận đơn trả hàng.";
+        public const string ReturnShipmentNotSubmitted = "Khách hàng chưa khai báo mã vận đơn trả hàng.";
+        public const string VendorResponseExpired = "Đã hết thời hạn phản hồi của cửa hàng.";
         public const string LiabilityForbidden = "Bạn không có quyền xem/thao tác công nợ của garden này.";
         public const string LiabilityNotFound = "Không tìm thấy khoản công nợ.";
         public const string LiabilityDisputeExpired = "Đã quá hạn phản đối khoản công nợ.";

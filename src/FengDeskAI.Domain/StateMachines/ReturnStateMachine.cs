@@ -42,7 +42,8 @@ public static class ReturnStateMachine
                 or ReturnRequestStatus.Refunding, // fallback hết hàng thay thế
 
         ReturnRequestStatus.Refunding =>
-            to is ReturnRequestStatus.Completed,
+            to is ReturnRequestStatus.Completed
+                or ReturnRequestStatus.Rejected, // Manager hủy refund Pending do phát hiện gian lận
 
         _ => false, // Completed / Cancelled / Rejected là terminal
     };

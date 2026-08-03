@@ -20,7 +20,7 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Elements)
             .Include(p => p.Vibes)
             .Include(p => p.Styles)
-            .Include(p => p.Model3D)
+            .Include(p => p.Models3D)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
     public Task<Product?> GetForUpdateAsync(Guid id, CancellationToken ct = default)
@@ -151,13 +151,28 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
 
     public void RemoveImage(ProductImage image) => _context.Set<ProductImage>().Remove(image);
 
-    // ----- Model 3D (1–1 với product). Tracked để service/worker cập nhật trạng thái. -----
+    // ----- Model 3D (mỗi ảnh sản phẩm tối đa một model). Tracked để service/worker cập nhật trạng thái. -----
 
-    public Task<ProductModel3D?> GetModel3DAsync(Guid productId, CancellationToken ct = default)
-        => _context.Set<ProductModel3D>().FirstOrDefaultAsync(m => m.ProductId == productId, ct);
+    public Task<List<ProductModel3D>> ListModel3DsAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<ProductModel3D>().AsNoTracking()
+            .Where(m => m.ProductId == productId)
+            .OrderBy(m => m.CreatedAt)
+            .ToListAsync(ct);
 
-    public Task<ProductModel3D?> GetModel3DIncludingDeletedAsync(Guid productId, CancellationToken ct = default)
-        => _context.Set<ProductModel3D>().IgnoreQueryFilters().FirstOrDefaultAsync(m => m.ProductId == productId, ct);
+    public Task<ProductModel3D?> GetModel3DAsync(
+        Guid productId, Guid productImageId, CancellationToken ct = default)
+        => _context.Set<ProductModel3D>()
+            .FirstOrDefaultAsync(m => m.ProductId == productId && m.ProductImageId == productImageId, ct);
+
+    public Task<ProductModel3D?> GetModel3DByIdAsync(
+        Guid productId, Guid modelId, CancellationToken ct = default)
+        => _context.Set<ProductModel3D>()
+            .FirstOrDefaultAsync(m => m.ProductId == productId && m.Id == modelId, ct);
+
+    public Task<ProductModel3D?> GetModel3DIncludingDeletedAsync(
+        Guid productId, Guid productImageId, CancellationToken ct = default)
+        => _context.Set<ProductModel3D>().IgnoreQueryFilters()
+            .FirstOrDefaultAsync(m => m.ProductId == productId && m.ProductImageId == productImageId, ct);
 
     public async Task AddModel3DAsync(ProductModel3D model, CancellationToken ct = default)
         => await _context.Set<ProductModel3D>().AddAsync(model, ct);
@@ -175,11 +190,15 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
     {
         Model3DRequestStatus.Queued, Model3DRequestStatus.Processing,
         Model3DRequestStatus.AwaitingStaff, Model3DRequestStatus.InProgress,
+        Model3DRequestStatus.Failed,
     };
 
-    public Task<Model3DRequest?> GetOpenModel3DRequestAsync(Guid productId, CancellationToken ct = default)
+    public Task<Model3DRequest?> GetOpenModel3DRequestAsync(
+        Guid productId, Guid productImageId, CancellationToken ct = default)
         => _context.Set<Model3DRequest>()
-            .Where(r => r.ProductId == productId && OpenStatuses.Contains(r.Status))
+            .Where(r => r.ProductId == productId
+                        && (r.ProductImageId == productImageId || r.ProductImageId == null)
+                        && OpenStatuses.Contains(r.Status))
             .FirstOrDefaultAsync(ct);
 
     public async Task AddModel3DRequestAsync(Model3DRequest request, CancellationToken ct = default)
@@ -188,6 +207,7 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
     public Task<Model3DRequest?> GetModel3DRequestAsync(Guid requestId, CancellationToken ct = default)
         => _context.Set<Model3DRequest>()
             .Include(r => r.Product).ThenInclude(p => p.Store)
+            .Include(r => r.ProductImage)
             .FirstOrDefaultAsync(r => r.Id == requestId, ct);
 
     public Task<List<Model3DRequest>> ListModel3DRequestsAsync(Guid productId, CancellationToken ct = default)
@@ -196,23 +216,33 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .OrderByDescending(r => r.CreatedAt)
             .ToListAsync(ct);
 
-    public async Task<(List<Model3DRequest> Items, int Total)> GetStaffQueueAsync(
+    public async Task<(List<Model3DRequest> Items, int Total, Dictionary<Model3DRequestStatus, int> StatusCounts)> GetStaffQueueAsync(
         Model3DRequestStatus? status, Model3DFailureReason? reason,
         int skip, int take, CancellationToken ct = default)
     {
-        var query = _context.Set<Model3DRequest>().AsNoTracking()
+        var baseQuery = _context.Set<Model3DRequest>().AsNoTracking();
+        var statusCounts = await baseQuery
+            .GroupBy(r => r.Status)
+            .Select(group => new { Status = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(item => item.Status, item => item.Count, ct);
+
+        var query = baseQuery
             .Include(r => r.Product).ThenInclude(p => p.Store)
+            .Include(r => r.ProductImage)
             .AsQueryable();
 
         if (status is { } s) query = query.Where(r => r.Status == s);
         if (reason is { } rs) query = query.Where(r => r.InternalFailureReason == rs);
 
         var total = await query.CountAsync(ct);
-        var items = await query
-            .OrderBy(r => r.CreatedAt)
+        var oldestFirst = status is Model3DRequestStatus.AwaitingStaff or Model3DRequestStatus.InProgress;
+        var ordered = oldestFirst
+            ? query.OrderBy(r => r.CreatedAt)
+            : query.OrderByDescending(r => r.CreatedAt);
+        var items = await ordered
             .Skip(skip).Take(take)
             .ToListAsync(ct);
-        return (items, total);
+        return (items, total, statusCounts);
     }
 
     public Task<List<Model3DRequest>> GetDueInitialQueueAsync(DateTime now, CancellationToken ct = default)

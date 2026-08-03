@@ -13,6 +13,7 @@ public class ProductModel3DConfiguration : IEntityTypeConfiguration<ProductModel
         builder.HasKey(m => m.Id);
         builder.Property(m => m.Id).HasColumnName("id");
         builder.Property(m => m.ProductId).HasColumnName("product_id").IsRequired();
+        builder.Property(m => m.ProductImageId).HasColumnName("product_image_id");
         builder.Property(m => m.Status).HasColumnName("status").HasConversion<string>().IsRequired();
         builder.Property(m => m.SourceImageUrl).HasColumnName("source_image_url").IsRequired();
         builder.Property(m => m.MeshyTaskId).HasColumnName("meshy_task_id");
@@ -28,12 +29,17 @@ public class ProductModel3DConfiguration : IEntityTypeConfiguration<ProductModel
         builder.Property(m => m.UpdatedBy).HasColumnName("updated_by");
         builder.Property(m => m.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
 
-        // 1–1: mỗi product có tối đa một model 3D.
-        builder.HasIndex(m => m.ProductId).IsUnique();
+        // Một product có nhiều model; mỗi ảnh đại diện có tối đa một model (kể cả row soft-delete).
+        builder.HasIndex(m => m.ProductId);
+        builder.HasIndex(m => m.ProductImageId).IsUnique();
         builder.HasOne(m => m.Product)
-            .WithOne(p => p.Model3D)
-            .HasForeignKey<ProductModel3D>(m => m.ProductId)
+            .WithMany(p => p.Models3D)
+            .HasForeignKey(m => m.ProductId)
             .OnDelete(DeleteBehavior.Cascade);
+        builder.HasOne(m => m.ProductImage)
+            .WithOne(i => i.Model3D)
+            .HasForeignKey<ProductModel3D>(m => m.ProductImageId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasQueryFilter(m => !m.IsDeleted);
     }

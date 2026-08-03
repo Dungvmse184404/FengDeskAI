@@ -138,7 +138,6 @@ builder.Services.AddSettings<OrderExpirationOptions>(builder.Configuration);
 builder.Services.AddHostedService<OrderExpirationWorker>();
 
 // Worker poll job sinh model 3D (Meshy) đang xử lý → hoàn tất / đánh dấu lỗi.
-builder.Services.AddHostedService<Model3DPollingWorker>();
 
 // Worker cấp mã shop nhà vận chuyển cho store cũ chưa có (mỗi store = 1 điểm lấy hàng riêng).
 builder.Services.AddSettings<CarrierShopSyncOptions>(builder.Configuration);

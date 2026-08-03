@@ -10,4 +10,5 @@ public class ProductImage : BaseEntity
     public int SortOrder { get; set; }
 
     public Product Product { get; set; } = null!;
+    public ProductModel3D? Model3D { get; set; }
 }

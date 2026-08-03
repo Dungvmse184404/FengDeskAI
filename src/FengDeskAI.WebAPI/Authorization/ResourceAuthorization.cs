@@ -44,9 +44,9 @@ public sealed class ResourceAccessHandler : AuthorizationHandler<ResourceAccessR
             ResourceOperation.AssignDelivery =>
                 await CanAssignDeliveryAsync(resource.Id, userId),
             ResourceOperation.ViewDelivery =>
-                await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: true),
+                await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: true, allowCustomer: true),
             ResourceOperation.UpdateDelivery =>
-                await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: true),
+                await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: true, allowCustomer: false),
             _ => false,
         };
         if (allowed) context.Succeed(requirement);
@@ -58,10 +58,12 @@ public sealed class ResourceAccessHandler : AuthorizationHandler<ResourceAccessR
         return product is not null && await _uow.Stores.CanManageAsync(product.GardenStoreId, userId);
     }
 
-    private async Task<bool> CanAccessDeliveryAsync(Guid deliveryId, Guid userId, bool requireAssignment)
+    private async Task<bool> CanAccessDeliveryAsync(
+        Guid deliveryId, Guid userId, bool requireAssignment, bool allowCustomer)
     {
         var delivery = await _uow.Orders.GetDeliveryWithOrderAsync(deliveryId);
         if (delivery is null) return false;
+        if (allowCustomer && delivery.Order.CustomerId == userId) return true;
         if (await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId)) return true;
         if (!await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId)) return false;
         return !requireAssignment || delivery.AssignedStaffId == userId;
