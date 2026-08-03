@@ -4,8 +4,14 @@ public class CartItemResponse
 {
     public Guid Id { get; set; }
     public Guid ProductItemId { get; set; }
+
+    /// <summary>Id sản phẩm gốc (Product) của biến thể — FE dùng để mở trang sản phẩm.</summary>
+    public Guid ProductId { get; set; }
     public string? ProductName { get; set; }
     public string? VariantName { get; set; }
+
+    /// <summary>Ảnh đại diện của sản phẩm (SortOrder nhỏ nhất). Null khi sản phẩm chưa có ảnh.</summary>
+    public string? ImageUrl { get; set; }
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; }
     public int Stock { get; set; }

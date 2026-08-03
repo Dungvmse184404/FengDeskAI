@@ -55,6 +55,12 @@ public class OrderItemResponse
     /// <summary>Null khi đơn online chưa thanh toán (delivery chưa được tạo).</summary>
     public Guid? DeliveryId { get; set; }
     public string ProductName { get; set; } = null!;
+
+    /// <summary>Tên biến thể tại thời điểm hiển thị (vd "Đỏ / Size L"). Null nếu sản phẩm không có biến thể đặt tên.</summary>
+    public string? VariantName { get; set; }
+
+    /// <summary>Ảnh đại diện của sản phẩm (SortOrder nhỏ nhất). Null khi sản phẩm chưa có ảnh.</summary>
+    public string? ImageUrl { get; set; }
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; }
     public decimal LineTotal { get; set; }
@@ -105,6 +111,9 @@ public class OrderListItemResponse
 
     /// <summary>Lấy từ delivery; đơn online chưa thanh toán (chưa có delivery) thì suy ra từ sản phẩm trong đơn.</summary>
     public List<OrderStoreResponse> Stores { get; set; } = new();
+
+    /// <summary>Sản phẩm trong đơn — FE hiển thị ngay trên thẻ đơn ở danh sách, khỏi gọi chi tiết từng đơn.</summary>
+    public List<OrderItemResponse> Items { get; set; } = new();
 }
 
 public class OrderDetailResponse

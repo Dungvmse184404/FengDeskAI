@@ -11,7 +11,8 @@ public class CartRepository : GenericRepository<Cart>, ICartRepository
     public CartRepository(AppDbContext context) : base(context) { }
 
     public Task<Cart?> GetByCustomerAsync(Guid customerId, CancellationToken ct = default)
-        => _set.Include(c => c.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product)
+        => _set.Include(c => c.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product).ThenInclude(p => p.Images)
+               .AsSplitQuery()
                .FirstOrDefaultAsync(c => c.CustomerId == customerId, ct);
 
     public async Task<Cart> GetOrCreateAsync(Guid customerId, CancellationToken ct = default)

@@ -18,6 +18,13 @@ public class EmailTemplateService : IEmailTemplateService
             otp: otp,
             expiryMinutes: expiryMinutes);
 
+    public string BuildChangeEmailOtpBody(string email, string otp, int expiryMinutes)
+        => BuildOtpBody(
+            title: "Xác nhận đổi email FengDeskAI",
+            intro: $"Bạn vừa yêu cầu đổi email đăng nhập của tài khoản FengDeskAI. Mã dưới đây xác nhận cho hòm thư <b>{email}</b>.",
+            otp: otp,
+            expiryMinutes: expiryMinutes);
+
     private static string BuildOtpBody(string title, string intro, string otp, int expiryMinutes) => $"""
         <!DOCTYPE html>
         <html>

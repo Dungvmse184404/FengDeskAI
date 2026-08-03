@@ -22,6 +22,25 @@ public static class ApiStatusMessages
         public const string GoogleLoginSuccess = "Đăng nhập bằng Google thành công.";
     }
 
+    /// <summary>Cập nhật hồ sơ cá nhân + luồng đổi email 2 bước OTP.</summary>
+    public static class Profile
+    {
+        public const string FullNameRequired = "Họ tên không được để trống.";
+        public const string PhoneInvalid = "Số điện thoại không hợp lệ (10 số, bắt đầu bằng 0).";
+        public const string PhoneInUse = "Số điện thoại đã được sử dụng bởi tài khoản khác.";
+        public const string DateOfBirthInvalid = "Ngày sinh không hợp lệ.";
+        public const string Updated = "Cập nhật thông tin thành công.";
+
+        public const string EmailInvalid = "Email không hợp lệ.";
+        public const string EmailInUse = "Email đã được sử dụng bởi tài khoản khác.";
+        public const string EmailUnchanged = "Email mới trùng với email hiện tại.";
+        public const string CurrentEmailOtpSent = "Đã gửi mã xác nhận tới email hiện tại.";
+        public const string NewEmailOtpSent = "Đã gửi mã xác nhận tới email mới.";
+        public const string ChangeEmailSessionInvalid = "Phiên đổi email không hợp lệ hoặc đã hết hạn. Vui lòng bắt đầu lại.";
+        public const string CurrentEmailVerified = "Đã xác nhận email hiện tại. Nhập email mới để tiếp tục.";
+        public const string EmailChanged = "Đổi email thành công. Vui lòng đăng nhập lại.";
+    }
+
     public static class Registration
     {
         public const string EmailInUse = "Email đã được sử dụng.";

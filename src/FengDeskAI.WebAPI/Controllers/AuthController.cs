@@ -74,4 +74,36 @@ public class AuthController : ApiControllerBase
         }
         return ToActionResult(await _authService.UpdateBirthTimeAsync(CurrentUserId, time, ct));
     }
+
+    /// <summary>Cập nhật họ tên / SĐT / giới tính / ngày sinh của chính mình.</summary>
+    [HttpPut("me")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request, CancellationToken ct)
+        => ToActionResult(await _authService.UpdateProfileAsync(CurrentUserId, request, ct));
+
+    // ===== Đổi email: 4 bước tuần tự, mỗi bước sau cần kết quả của bước trước =====
+
+    /// <summary>B1 — gửi OTP tới email hiện tại.</summary>
+    [HttpPost("me/email/initiate")]
+    [Authorize]
+    public async Task<IActionResult> InitiateEmailChange(CancellationToken ct)
+        => ToActionResult(await _authService.InitiateEmailChangeAsync(CurrentUserId, ct));
+
+    /// <summary>B2 — xác thực OTP email hiện tại, nhận changeEmailToken.</summary>
+    [HttpPost("me/email/verify-current")]
+    [Authorize]
+    public async Task<IActionResult> VerifyCurrentEmail([FromBody] VerifyCurrentEmailRequest request, CancellationToken ct)
+        => ToActionResult(await _authService.VerifyCurrentEmailAsync(CurrentUserId, request, ct));
+
+    /// <summary>B3 — khai email mới, gửi OTP tới hòm thư đó.</summary>
+    [HttpPost("me/email/request-new")]
+    [Authorize]
+    public async Task<IActionResult> RequestNewEmail([FromBody] RequestNewEmailRequest request, CancellationToken ct)
+        => ToActionResult(await _authService.RequestNewEmailAsync(CurrentUserId, request, ct));
+
+    /// <summary>B4 — xác thực OTP email mới, áp dụng đổi email và cấp lại token.</summary>
+    [HttpPost("me/email/confirm")]
+    [Authorize]
+    public async Task<IActionResult> ConfirmNewEmail([FromBody] ConfirmNewEmailRequest request, CancellationToken ct)
+        => ToActionResult(await _authService.ConfirmNewEmailAsync(CurrentUserId, request, ct));
 }

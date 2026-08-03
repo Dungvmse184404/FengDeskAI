@@ -121,6 +121,8 @@ public class OtpService : IOtpService
             _templates.BuildRegisterOtpBody(email, otp, _options.TtlMinutes)),
         OtpPurpose.ResetPassword => ("Đặt lại mật khẩu FengDeskAI",
             _templates.BuildResetPasswordOtpBody(email, otp, _options.TtlMinutes)),
+        OtpPurpose.ChangeEmail => ("Xác nhận đổi email FengDeskAI",
+            _templates.BuildChangeEmailOtpBody(email, otp, _options.TtlMinutes)),
         _ => ("Mã xác thực FengDeskAI",
             _templates.BuildRegisterOtpBody(email, otp, _options.TtlMinutes)),
     };

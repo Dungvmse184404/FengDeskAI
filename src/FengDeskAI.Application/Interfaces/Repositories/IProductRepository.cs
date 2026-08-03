@@ -12,6 +12,12 @@ public class ProductSearchFilter
 
     /// <summary>Lọc theo hành phong thủy — khớp cả hành chính lẫn hành phụ.</summary>
     public FengShuiElement? Element { get; set; }
+
+    /// <summary>
+    /// True → chỉ lấy sản phẩm có model 3D xem được (Succeeded + có ModelUrl + owner chưa tắt hiển thị).
+    /// Null/false = không lọc.
+    /// </summary>
+    public bool? HasModel3D { get; set; }
     public bool ActiveOnly { get; set; } = true;
     public int Skip { get; set; }
     public int Take { get; set; } = 20;

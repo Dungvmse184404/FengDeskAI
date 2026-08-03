@@ -31,6 +31,7 @@ public class ProductService : IProductService
             CategoryId = query.CategoryId,
             Search = query.Search,
             Element = query.Element,
+            HasModel3D = query.HasModel3D,
             ActiveOnly = true,
             Skip = query.Skip,
             Take = query.PageSize,

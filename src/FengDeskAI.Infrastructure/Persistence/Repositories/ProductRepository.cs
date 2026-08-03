@@ -40,6 +40,11 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             query = query.Where(p => p.ProductCategories.Any(pc => pc.CategoryId == categoryId));
         if (filter.Element is { } element)
             query = query.Where(p => p.Elements.Any(e => e.Element == element));
+        if (filter.HasModel3D == true)
+            query = query.Where(p => p.Model3D != null
+                                  && p.Model3D.IsEnabled
+                                  && p.Model3D.Status == Model3DStatus.Succeeded
+                                  && p.Model3D.ModelUrl != null);
         if (!string.IsNullOrWhiteSpace(filter.Search))
         {
             // Tách query thành từng từ, mỗi từ khớp ở: TÊN / MÔ TẢ / TÊN DANH MỤC ("Đèn trang trí") /
@@ -72,6 +77,7 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Skip(filter.Skip).Take(filter.Take)
             .Include(p => p.Items)
             .Include(p => p.Images)
+            .Include(p => p.Model3D)
             .ToListAsync(ct);
 
         return (items, total);

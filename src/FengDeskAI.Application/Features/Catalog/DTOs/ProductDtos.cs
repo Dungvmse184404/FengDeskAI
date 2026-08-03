@@ -62,6 +62,10 @@ public class ProductListItemResponse
     public decimal? MinPrice { get; set; }
     public string? PrimaryImageUrl { get; set; }
 
+    /// <summary>URL file GLB khi sản phẩm có model 3D xem được. Null nếu chưa có / owner đã tắt hiển thị.</summary>
+    public string? Model3DUrl { get; set; }
+    public string? Model3DThumbnailUrl { get; set; }
+
     /// <summary>Các biến thể (SKU) của sản phẩm — mỗi cái mang giá + tồn kho riêng.</summary>
     public List<ProductItemResponse> Items { get; set; } = new();
 }
@@ -171,4 +175,7 @@ public class ProductQueryParams : PageRequest
 
     /// <summary>Lọc theo hành phong thủy (Kim/Moc/Thuy/Hoa/Tho) — khớp cả hành chính lẫn hành phụ.</summary>
     public FengShuiElement? Element { get; set; }
+
+    /// <summary>true → chỉ trả sản phẩm có model 3D xem được. Trang chủ dùng để bốc ngẫu nhiên 1 model.</summary>
+    public bool? HasModel3D { get; set; }
 }

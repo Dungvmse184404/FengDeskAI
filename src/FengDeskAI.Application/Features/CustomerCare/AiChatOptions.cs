@@ -10,7 +10,7 @@ public sealed class AiChatOptions
     public const string SectionName = "Ai:Chat";
 
     /// <summary>Model mặc định khi request không chỉ định.</summary>
-    public string DefaultModel { get; set; } = "gemma3:4b";
+    public string DefaultModel { get; set; } = "qwen3.5:latest";
 
     /// <summary>Temperature cho hội thoại tự do. null = theo mặc định của model/provider.</summary>
     public double? Temperature { get; set; }

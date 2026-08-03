@@ -9,7 +9,7 @@ public sealed class WorkspaceIntakeOptions
     public const string SectionName = "Ai:Intake";
 
     /// <summary>Model dùng cho intake khi CHỈ có mô tả chữ (không ảnh) — có thể là model text nhanh.</summary>
-    public string Model { get; set; } = "gemma3:4b";
+    public string Model { get; set; } = "SimonPu/Qwen3-Coder:30B-Instruct_Q4_K_XL";
 
     /// <summary>
     /// Model dùng khi request CÓ đính kèm ảnh — BẮT BUỘC là model vision (vd qwen3-vl). Model text thuần

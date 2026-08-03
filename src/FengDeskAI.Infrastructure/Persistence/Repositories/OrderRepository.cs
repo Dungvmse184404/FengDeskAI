@@ -61,12 +61,13 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
         => query
             .Include(o => o.Deliveries).ThenInclude(d => d.Store)
             .Include(o => o.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product).ThenInclude(p => p.Store)
+            .Include(o => o.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product).ThenInclude(p => p.Images)
             .AsSplitQuery();
 
     public Task<Order?> GetDetailAsync(Guid id, Guid? customerId, CancellationToken ct = default)
     {
         var query = _set.AsNoTracking()
-            .Include(o => o.Items).ThenInclude(i => i.ProductItem)
+            .Include(o => o.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product).ThenInclude(p => p.Images)
             .Include(o => o.Deliveries).ThenInclude(d => d.Store)
             .Include(o => o.StatusLogs)
             .AsSplitQuery()
@@ -120,7 +121,8 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     public Task<Delivery?> GetDeliveryDetailAsync(Guid deliveryId, CancellationToken ct = default)
         => _context.Set<Delivery>().AsNoTracking()
             .Include(d => d.Store)
-            .Include(d => d.Items)
+            .Include(d => d.Items).ThenInclude(i => i.ProductItem).ThenInclude(pi => pi.Product).ThenInclude(p => p.Images)
             .Include(d => d.Order).ThenInclude(o => o.ShippingAddress).ThenInclude(a => a.Ward).ThenInclude(w => w.District).ThenInclude(dt => dt.Province)
+            .AsSplitQuery()
             .FirstOrDefaultAsync(d => d.Id == deliveryId, ct);
 }

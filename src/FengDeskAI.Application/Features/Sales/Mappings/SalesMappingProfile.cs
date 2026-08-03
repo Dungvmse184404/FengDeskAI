@@ -1,5 +1,6 @@
 using AutoMapper;
 using FengDeskAI.Application.Features.Sales.DTOs;
+using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Sales;
 
 namespace FengDeskAI.Application.Features.Sales.Mappings;
@@ -10,14 +11,18 @@ public class SalesMappingProfile : Profile
     public SalesMappingProfile()
     {
         CreateMap<CartItem, CartItemResponse>()
+            .ForMember(d => d.ProductId, o => o.MapFrom(s => s.ProductItem != null ? s.ProductItem.ProductId : Guid.Empty))
             .ForMember(d => d.ProductName, o => o.MapFrom(s => s.ProductItem.Product != null ? s.ProductItem.Product.Name : null))
             .ForMember(d => d.VariantName, o => o.MapFrom(s => s.ProductItem.Name))
+            .ForMember(d => d.ImageUrl, o => o.MapFrom(s => PrimaryImageUrl(s.ProductItem)))
             .ForMember(d => d.UnitPrice, o => o.MapFrom(s => s.ProductItem.Price))
             .ForMember(d => d.Stock, o => o.MapFrom(s => s.ProductItem.Stock))
             .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.ProductItem.Price * s.Quantity));
 
         CreateMap<OrderItem, OrderItemResponse>()
             .ForMember(d => d.ProductId, o => o.MapFrom(s => s.ProductItem != null ? s.ProductItem.ProductId : Guid.Empty))
+            .ForMember(d => d.VariantName, o => o.MapFrom(s => s.ProductItem != null ? s.ProductItem.Name : null))
+            .ForMember(d => d.ImageUrl, o => o.MapFrom(s => PrimaryImageUrl(s.ProductItem)))
             .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.UnitPrice * s.Quantity));
 
         CreateMap<Delivery, DeliveryResponse>()
@@ -33,6 +38,16 @@ public class SalesMappingProfile : Profile
 
         CreateMap<Order, OrderDetailResponse>();
     }
+
+    /// <summary>
+    /// Ảnh đại diện của sản phẩm chứa biến thể này (SortOrder nhỏ nhất). Null khi navigation chưa
+    /// được include hoặc sản phẩm chưa có ảnh — FE tự fallback về icon.
+    /// </summary>
+    private static string? PrimaryImageUrl(ProductItem? productItem)
+        => productItem?.Product?.Images
+            .OrderBy(i => i.SortOrder)
+            .Select(i => i.Url)
+            .FirstOrDefault();
 
     /// <summary>
     /// Cửa hàng của đơn: ưu tiên delivery (đã gom theo store). Đơn online chưa thanh toán chưa có
