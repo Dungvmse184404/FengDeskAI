@@ -48,7 +48,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivered")]
     public async Task<IActionResult> SimulateDelivered(Guid deliveryId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Delivered, ct));
     }
 
@@ -60,7 +60,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivery-failed")]
     public async Task<IActionResult> SimulateDeliveryFailed(Guid deliveryId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.DeliveryFailed, ct));
     }
 
@@ -94,7 +94,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("orders/{orderId:guid}/shipping/delivered")]
     public async Task<IActionResult> SimulateOrderDelivered(Guid orderId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusForOrderAsync(orderId, DeliveryStatus.Delivered, ct));
     }
 
