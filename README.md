@@ -24,14 +24,14 @@ WebAPI  ──►  Application  ──►  Domain
             Contracts  (DTOs shared with the AI recommendation microservice)
 ```
 
-- **Domain** — entities, enums, pure business rules.
-- **Application** — feature folders by bounded context (Identity, Workspace, Catalog,
+- **Domain**: entities, enums, pure business rules.
+- **Application**: feature folders by bounded context (Identity, Workspace, Catalog,
   Vendor, Geography, Sales, Payment, Shipping, Chat, CustomerCare, Announcement) +
   the feng-shui engine.
-- **Infrastructure** — EF Core/Npgsql, external integrations (PayOS, Supabase Storage,
+- **Infrastructure**: EF Core/Npgsql, external integrations (PayOS, Supabase Storage,
   Ollama, Meshy, SMTP).
-- **WebAPI** — controllers, SignalR hub, background workers, authorization policies.
-- **Contracts** — request/response contract for the Python AI recommendation service.
+- **WebAPI**: controllers, SignalR hub, background workers, authorization policies.
+- **Contracts**: request/response contract for the Python AI recommendation service.
 
 ## Tech stack
 
