@@ -1,4 +1,4 @@
-
+f
 
 |Cung Mệnh (Hành)|Sinh Khí (Bứt phá, dự án mới)|Diên Niên (Ổn định, tập trung)|Thiên Y (Bền bỉ, minh mẫn)|Phục Vị (Bình an, phong độ)|
 |-|-|-|-|-|
