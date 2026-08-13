@@ -81,6 +81,11 @@ public class RegistrationFlowService : IRegistrationFlowService
 
     public async Task<IServiceResult<AuthResponse>> FinalizeAsync(FinalizeRegisterRequest request, CancellationToken ct = default)
     {
+        // Validate mật khẩu TRƯỚC khi consume token: token dùng 1 lần, nếu tiêu thụ trước thì
+        // user gõ mật khẩu quá ngắn sẽ bị đá ngược về bước nhập OTP.
+        if (PasswordPolicy.Validate(request.Password) is { } passwordError)
+            return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.BadRequest, passwordError);
+
         var email = await _registrationTokenService.ConsumeAsync(request.RegistrationToken, ct);
         if (email is null)
             return ServiceResult<AuthResponse>.Failure(ApiStatusCodes.Unauthorized, ApiStatusMessages.Registration.InvalidSession);

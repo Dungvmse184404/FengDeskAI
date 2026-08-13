@@ -54,6 +54,26 @@ public static class ApiStatusMessages
         public const string RegisterSuccess = "Đăng ký thành công.";
     }
 
+    /// <summary>Lỗi ràng buộc mật khẩu — dùng chung cho đăng ký và quên mật khẩu (xem <see cref="PasswordPolicy"/>).</summary>
+    public static class Password
+    {
+        public const string Required = "Mật khẩu không được để trống.";
+        /// <summary>{0} = số ký tự tối thiểu.</summary>
+        public const string TooShortFormat = "Mật khẩu phải có ít nhất {0} ký tự.";
+    }
+
+    /// <summary>Luồng quên mật khẩu — 3 bước OTP (xem <c>PasswordResetService</c>).</summary>
+    public static class PasswordReset
+    {
+        public const string EmailInvalid = "Email không hợp lệ.";
+        public const string EmailNotFound = "Email chưa được đăng ký.";
+        public const string OtpSent = "Đã gửi mã xác thực đến email. Vui lòng kiểm tra hộp thư.";
+        public const string VerifySuccess = "Xác thực thành công. Vui lòng đặt mật khẩu mới.";
+        public const string SessionInvalid = "Phiên đặt lại mật khẩu không hợp lệ hoặc đã hết hạn. Vui lòng xác thực lại.";
+        public const string PasswordSameAsOld = "Mật khẩu mới trùng với mật khẩu hiện tại.";
+        public const string Success = "Đặt lại mật khẩu thành công. Vui lòng đăng nhập lại.";
+    }
+
     public static class Address
     {
         public const string Created = "Địa chỉ đã được tạo.";

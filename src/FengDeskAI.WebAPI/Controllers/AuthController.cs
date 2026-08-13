@@ -11,11 +11,16 @@ public class AuthController : ApiControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IRegistrationFlowService _registrationFlow;
+    private readonly IPasswordResetService _passwordReset;
 
-    public AuthController(IAuthService authService, IRegistrationFlowService registrationFlow)
+    public AuthController(
+        IAuthService authService,
+        IRegistrationFlowService registrationFlow,
+        IPasswordResetService passwordReset)
     {
         _authService = authService;
         _registrationFlow = registrationFlow;
+        _passwordReset = passwordReset;
     }
 
     [HttpPost("register/initiate")]
@@ -43,6 +48,26 @@ public class AuthController : ApiControllerBase
     [AllowAnonymous]
     public async Task<IActionResult> LoginWithGoogle([FromBody] GoogleLoginRequest request, CancellationToken ct)
         => ToActionResult(await _authService.LoginWithGoogleAsync(request, ct));
+
+    // ===== Quên mật khẩu: 3 bước tuần tự, mỗi bước sau cần kết quả của bước trước =====
+
+    /// <summary>B1 — gửi OTP tới email của tài khoản cần lấy lại mật khẩu.</summary>
+    [HttpPost("forgot-password/initiate")]
+    [AllowAnonymous]
+    public async Task<IActionResult> InitiateForgotPassword([FromBody] ForgotPasswordRequest request, CancellationToken ct)
+        => ToActionResult(await _passwordReset.InitiateAsync(request, ct));
+
+    /// <summary>B2 — xác thực OTP, nhận resetPasswordToken.</summary>
+    [HttpPost("forgot-password/verify")]
+    [AllowAnonymous]
+    public async Task<IActionResult> VerifyForgotPasswordOtp([FromBody] VerifyForgotPasswordOtpRequest request, CancellationToken ct)
+        => ToActionResult(await _passwordReset.VerifyOtpAsync(request, ct));
+
+    /// <summary>B3 — đặt mật khẩu mới; mọi phiên đăng nhập cũ bị thu hồi.</summary>
+    [HttpPost("forgot-password/reset")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request, CancellationToken ct)
+        => ToActionResult(await _passwordReset.ResetAsync(request, ct));
 
     [HttpPost("refresh")]
     [AllowAnonymous]

@@ -195,6 +195,7 @@ public static class DependencyInjection
         services.AddScoped<IOtpService, OtpService>();
         services.AddScoped<IRegistrationTokenService, RegistrationTokenService>();
         services.AddScoped<IChangeEmailTokenService, ChangeEmailTokenService>();
+        services.AddScoped<IPasswordResetTokenService, PasswordResetTokenService>();
 
         services.AddSettings<ShippingWebhookSettings>(configuration);
 

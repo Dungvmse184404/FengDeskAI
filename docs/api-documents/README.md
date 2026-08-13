@@ -11,7 +11,7 @@ Tài liệu API đầy đủ cho hệ thống **FengDeskAI** (BackEnd `.NET 8`).
 | # | Tài liệu | Controller | Số endpoint | Nội dung |
 |---|----------|-----------|:-----------:|----------|
 | 00 | [Tổng quan & Quy ước](./00-overview.md) | — | — | Base URL, Auth/JWT, envelope, lỗi, phân trang |
-| 01 | [Authentication](./01-authentication.md) | `AuthController` | 7 | Đăng ký (OTP), đăng nhập, refresh, logout, me |
+| 01 | [Authentication](./01-authentication.md) | `AuthController` | 17 | Đăng ký (OTP), đăng nhập (email + Google), quên mật khẩu (OTP), refresh, logout, hồ sơ `me`, đổi email (OTP) |
 | 02 | [Products](./02-products.md) | `ProductsController` | 18 | Sản phẩm, SKU, ảnh, model 3D (request), phong thủy |
 | 03 | [Categories](./03-categories.md) | `CategoriesController` | 5 | Danh mục sản phẩm |
 | 04 | [Tags](./04-tags.md) | `TagsController` | 4 | Tag sản phẩm |
