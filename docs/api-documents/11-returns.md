@@ -128,20 +128,8 @@ Pending
 | GET | `/api/refunds` | Manager / Admin | Danh sách `Failed/ManagerReview` |
 | GET | `/api/refunds/{id}` | Manager / Admin | Chi tiết refund |
 | POST | `/api/refunds/{id}/retry` | Manager / Admin | Retry `Failed/ManagerReview` |
-| POST | `/api/refunds/{id}/manager-confirm` | Manager / Admin | Hoàn thủ công từ `ManagerReview`; nhận `multipart/form-data` với `manualReason` và file `evidenceFile` |
+| POST | `/api/refunds/{id}/manager-confirm` | Manager / Admin | Hoàn thủ công từ `ManagerReview`, bắt buộc reason/evidence |
 | POST | `/api/refunds/{id}/manager-cancel` | Manager / Admin | Chỉ từ `Pending`, đồng thời reject ticket do fraud |
-
-Ví dụ xác nhận đã hoàn tiền thủ công:
-
-```http
-POST /api/refunds/{refundId}/manager-confirm
-Content-Type: multipart/form-data
-
-manualReason=Đã chuyển khoản thủ công
-evidenceFile=<refund-proof.png>
-```
-
-Backend upload `evidenceFile` lên object storage và lưu URL kết quả vào `refunds.evidence_url` để phục vụ audit trail.
 
 Development-only, ngoài Development trả `404`:
 

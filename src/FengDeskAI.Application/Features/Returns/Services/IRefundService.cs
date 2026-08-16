@@ -26,7 +26,7 @@ public interface IRefundService
     /// <summary>Manager retry thủ công một refund (Failed hoặc ManagerReview).</summary>
     Task<IServiceResult<RefundResponse>> RetryRefundAsync(Guid refundId, RmaActor actor, CancellationToken ct = default);
 
-    /// <summary>Manager xác nhận thủ công đã hoàn tiền (từ ManagerReview) — BẮT BUỘC manual_reason + ảnh bằng chứng.</summary>
+    /// <summary>Manager xác nhận thủ công đã hoàn tiền (từ ManagerReview) — BẮT BUỘC manual_reason + evidence_url.</summary>
     Task<IServiceResult<RefundResponse>> ManagerConfirmRefundAsync(Guid refundId, RmaActor actor, ManagerConfirmRefundRequest request, CancellationToken ct = default);
 
     /// <summary>Manager hủy refund khi phát hiện gian lận (chỉ khi còn Pending).</summary>
