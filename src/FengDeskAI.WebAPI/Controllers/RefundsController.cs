@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.ComponentModel.DataAnnotations;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Features.Returns.DTOs;
 using FengDeskAI.Application.Features.Returns.Services;
@@ -44,15 +45,50 @@ public class RefundsController : ApiControllerBase
     public async Task<IActionResult> Retry(Guid id, CancellationToken ct)
         => ToActionResult(await _service.RetryRefundAsync(id, RmaActor, ct));
 
-    /// <summary>Manager xác nhận thủ công đã hoàn tiền — BẮT BUỘC manual_reason + evidence_url.</summary>
+    /// <summary>Manager xác nhận thủ công đã hoàn tiền — multipart/form-data, bắt buộc manualReason + evidenceFile.</summary>
     [HttpPost("{id:guid}/manager-confirm")]
+    [Consumes("multipart/form-data")]
     [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
-    public async Task<IActionResult> ManagerConfirm(Guid id, [FromBody] ManagerConfirmRefundRequest request, CancellationToken ct)
-        => ToActionResult(await _service.ManagerConfirmRefundAsync(id, RmaActor, request, ct));
+    public async Task<IActionResult> ManagerConfirm(Guid id, [FromForm] ManagerConfirmRefundFormModel form, CancellationToken ct)
+    {
+        Stream? evidenceStream = null;
+        try
+        {
+            RefundEvidenceFile? evidenceFile = null;
+            if (form.EvidenceFile is not null)
+            {
+                evidenceStream = form.EvidenceFile.OpenReadStream();
+                evidenceFile = new RefundEvidenceFile(
+                    evidenceStream, form.EvidenceFile.FileName, form.EvidenceFile.ContentType);
+            }
+
+            var request = new ManagerConfirmRefundRequest
+            {
+                ManualReason = form.ManualReason,
+                EvidenceFile = evidenceFile,
+            };
+            return ToActionResult(await _service.ManagerConfirmRefundAsync(id, RmaActor, request, ct));
+        }
+        finally
+        {
+            if (evidenceStream is not null)
+                await evidenceStream.DisposeAsync();
+        }
+    }
 
     /// <summary>Manager hủy refund khi phát hiện gian lận (chỉ khi Pending).</summary>
     [HttpPost("{id:guid}/manager-cancel")]
     [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
     public async Task<IActionResult> ManagerCancel(Guid id, CancellationToken ct)
         => ToActionResult(await _service.ManagerCancelRefundAsync(id, RmaActor, ct));
+}
+
+/// <summary>Binding model upload ảnh bằng chứng khi Manager xác nhận đã hoàn tiền thủ công.</summary>
+public sealed class ManagerConfirmRefundFormModel
+{
+    [Required]
+    public string ManualReason { get; set; } = null!;
+
+    [Required]
+    public IFormFile? EvidenceFile { get; set; }
 }

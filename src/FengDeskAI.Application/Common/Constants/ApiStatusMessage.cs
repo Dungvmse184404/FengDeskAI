@@ -401,7 +401,7 @@ public static class ApiStatusMessages
         public const string RefundNotRetryable = "Lệnh hoàn tiền không ở trạng thái có thể retry.";
         public const string RefundNotManualConfirmable = "Chỉ xác nhận thủ công khi lệnh hoàn tiền đang chờ Manager (ManagerReview).";
         public const string RefundNotCancellable = "Chỉ hủy được lệnh hoàn tiền khi đang chờ xử lý (Pending).";
-        public const string ManualEvidenceRequired = "Xác nhận thủ công cần đủ lý do và URL bằng chứng.";
+        public const string ManualEvidenceRequired = "Xác nhận thủ công cần đủ lý do và ảnh bằng chứng.";
         public const string WebhookInvalid = "Webhook hoàn tiền không hợp lệ.";
         public const string WebhookProcessed = "Đã xử lý webhook hoàn tiền.";
         public const string ReturnTrackingRequired = "Vui lòng cung cấp mã vận đơn trả hàng.";

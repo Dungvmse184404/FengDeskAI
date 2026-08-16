@@ -1,5 +1,6 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
@@ -25,14 +26,22 @@ public class RefundService : IRefundService
     private readonly IPaymentGateway _gateway;
     private readonly IVendorLiabilityService _liability;
     private readonly IMapper _mapper;
+    private readonly IFileStorage _storage;
     private readonly ILogger<RefundService> _logger;
 
-    public RefundService(IUnitOfWork uow, IPaymentGateway gateway, IVendorLiabilityService liability, IMapper mapper, ILogger<RefundService> logger)
+    public RefundService(
+        IUnitOfWork uow,
+        IPaymentGateway gateway,
+        IVendorLiabilityService liability,
+        IMapper mapper,
+        IFileStorage storage,
+        ILogger<RefundService> logger)
     {
         _uow = uow;
         _gateway = gateway;
         _liability = liability;
         _mapper = mapper;
+        _storage = storage;
         _logger = logger;
     }
 
@@ -146,20 +155,37 @@ public class RefundService : IRefundService
     public async Task<IServiceResult<RefundResponse>> ManagerConfirmRefundAsync(Guid refundId, RmaActor actor, ManagerConfirmRefundRequest request, CancellationToken ct = default)
     {
         if (!actor.CanManageRefund) return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManagerOnly);
-        if (string.IsNullOrWhiteSpace(request.ManualReason) || string.IsNullOrWhiteSpace(request.EvidenceUrl))
+        if (string.IsNullOrWhiteSpace(request.ManualReason) || request.EvidenceFile is null
+            || !request.EvidenceFile.Content.CanRead
+            || (request.EvidenceFile.Content.CanSeek && request.EvidenceFile.Content.Length == 0))
             return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ManualEvidenceRequired);
+        if (!ImageUpload.IsAllowed(request.EvidenceFile.ContentType))
+            return Fail(ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.Returns.ImageTypeInvalid);
 
         var refund = await _uow.Returns.GetRefundByIdAsync(refundId, ct);
         if (refund is null) return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.RefundNotFound);
         if (refund.Status != RefundStatus.ManagerReview)
             return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.RefundNotManualConfirmable);
 
-        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        var extension = ImageUpload.ExtensionFor(request.EvidenceFile.ContentType);
+        var objectPath = $"Refund_evidence/{refundId}/{Guid.NewGuid():N}{extension}";
+        var stored = await _storage.UploadAsync(
+            objectPath, request.EvidenceFile.Content, request.EvidenceFile.ContentType, ct);
+
+        try
         {
-            refund.ManagerComplete(request.ManualReason, request.EvidenceUrl, actor.UserId, DateTime.UtcNow);
-            await CompleteTicketAndLiabilityAsync(refund, actor.UserId, ct);
-            return null;
-        }, ct);
+            await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+            {
+                refund.ManagerComplete(request.ManualReason, stored.Url, actor.UserId, DateTime.UtcNow);
+                await CompleteTicketAndLiabilityAsync(refund, actor.UserId, ct);
+                return null;
+            }, ct);
+        }
+        catch
+        {
+            await DeleteFailedEvidenceUploadAsync(stored.Url);
+            throw;
+        }
 
         return Ok(refund);
     }
@@ -406,6 +432,18 @@ public class RefundService : IRefundService
             ReferenceType = ReferenceType.Refund,
             IsRead = false,
         }, ct);
+    }
+
+    private async Task DeleteFailedEvidenceUploadAsync(string evidenceUrl)
+    {
+        try
+        {
+            await _storage.DeleteByUrlAsync(evidenceUrl, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Không thể dọn ảnh bằng chứng của refund sau khi transaction thất bại: {EvidenceUrl}", evidenceUrl);
+        }
     }
 
     private IServiceResult<RefundResponse> Ok(Refund refund)

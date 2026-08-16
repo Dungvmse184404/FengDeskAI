@@ -91,9 +91,16 @@ public class ManagerConfirmRefundRequest
 {
     /// <summary>Lý do can thiệp thủ công — BẮT BUỘC (audit trail).</summary>
     public string ManualReason { get; set; } = null!;
-    /// <summary>URL bằng chứng đã chuyển tiền — BẮT BUỘC (audit trail).</summary>
-    public string EvidenceUrl { get; set; } = null!;
+
+    /// <summary>Ảnh bằng chứng đã chuyển tiền — BẮT BUỘC (audit trail).</summary>
+    public RefundEvidenceFile? EvidenceFile { get; set; }
 }
+
+/// <summary>
+/// File ảnh bằng chứng hoàn tiền đã được WebAPI chuyển từ IFormFile sang Stream.
+/// Application layer không phụ thuộc ASP.NET Core.
+/// </summary>
+public sealed record RefundEvidenceFile(Stream Content, string FileName, string ContentType);
 
 // ---------- Vendor liability (Manager) ----------
 
