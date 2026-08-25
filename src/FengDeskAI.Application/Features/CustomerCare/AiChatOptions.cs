@@ -9,24 +9,12 @@ public sealed class AiChatOptions
 {
     public const string SectionName = "Ai:Chat";
 
-    /// <summary>Model mặc định khi request không chỉ định.</summary>
     public string DefaultModel { get; set; } = "qwen3.5:latest";
 
-    /// <summary>Temperature cho hội thoại tự do. null = theo mặc định của model/provider.</summary>
     public double? Temperature { get; set; }
 
-    /// <summary>
-    /// Bật/tắt thinking của model (Ollama "think", model hỗ trợ như qwen3). null = theo mặc định model.
-    /// false → model trả lời thẳng vào content, hết bệnh "lạc" câu trả lời vào thinking block.
-    /// </summary>
     public bool? Think { get; set; } = true;
 
-    /// <summary>
-    /// Ollama "stream":true — đọc phản hồi theo từng chunk thay vì đợi 1 lần. KHÔNG lộ ra ngoài
-    /// (client vẫn nhận 1 câu trả lời đầy đủ như cũ); chỉ để giữ kết nối "sống" qua ngrok/proxy khi
-    /// câu trả lời dài (ảnh, nhiều vòng tool...) — stream=false từng khiến các tunnel free-tier ngắt
-    /// kết nối do im lặng quá lâu trong lúc model sinh chữ.
-    /// </summary>
     public bool Stream { get; set; } = true;
 
     /// <summary>Danh sách model được phép đổi. Rỗng → chấp nhận mọi model client gửi.</summary>
@@ -40,8 +28,6 @@ public sealed class AiChatOptions
 
     /// <summary>
     /// Số ảnh GẦN NHẤT (tính trên toàn cửa sổ lịch sử) được encode base64 đưa cho LLM mỗi lượt.
-    /// Trước đây chỉ encode ảnh của đúng tin cuối → khi user gửi ảnh rồi hỏi tiếp ở lượt sau, AI "mù" ảnh.
-    /// Giữ ảnh "dính" với hội thoại như Messenger, nhưng giới hạn để khỏi tràn <see cref="NumCtx"/>. 0 = không encode.
     /// </summary>
     public int VisionMaxImages { get; set; } = 1;
 
