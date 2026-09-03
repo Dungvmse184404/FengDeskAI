@@ -4,6 +4,12 @@
 > Trạng thái: **ĐÃ CODE** · Migration `20260707160422_RecommendationScoringV3`.
 > Tài liệu này mô tả engine chấm điểm gợi ý **đang chạy trong code** (không phải đề xuất).
 > API admin: xem [25-scoring-config](../api-documents/25-scoring-config.md).
+>
+> ⚠️ **§4 (ScoreOne) đã bị bổ sung/thay đổi sau khi tài liệu này viết** — đọc kèm:
+> - [`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md) — `ProductPlacement` + `PlacementPolicy`: `ScoreOne` nay đọc bảng luật theo placement, và có luồng thứ hai chấm theo dụng thần cá nhân.
+> - [`vibe-soft-scoring.md`](./vibe-soft-scoring.md) — bước 2a "Intent filter (hard)" đã mềm hóa thành `VIBE_MISMATCH_PENALTY` / `VIBE_UNKNOWN_PENALTY`, kèm lưới an toàn `MIN_SCORE_THRESHOLD`.
+>
+> Mô tả engine **hiện tại** gom ở [`ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md).
 
 ## 1. Ý tưởng cốt lõi
 

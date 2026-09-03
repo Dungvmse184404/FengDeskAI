@@ -13,7 +13,15 @@ namespace FengDeskAI.Domain.Entities.CustomerCare;
 public class Recommendation : BaseEntity
 {
     public Guid UserId { get; set; }
-    public Guid WorkspaceProfileId { get; set; }
+
+    /// <summary>
+    /// Hồ sơ không gian được chấm. NULL khi <see cref="Kind"/> = <see cref="RecommendationKind.PersonalCarry"/>
+    /// (vật phẩm mang theo người thì không gắn với phòng nào).
+    /// </summary>
+    public Guid? WorkspaceProfileId { get; set; }
+
+    /// <summary>Loại phiên — FE/thống kê dựa vào đây để biết phiên có workspace hay không.</summary>
+    public RecommendationKind Kind { get; set; } = RecommendationKind.Workspace;
 
     /// <summary>Snapshot loại không gian tại thời điểm gợi ý (loại có thể bị sửa sau).</summary>
     public Guid? WorkspaceTypeId { get; set; }
@@ -38,7 +46,7 @@ public class Recommendation : BaseEntity
     public string? Summary { get; set; }
 
     public User User { get; set; } = null!;
-    public WorkspaceProfile WorkspaceProfile { get; set; } = null!;
+    public WorkspaceProfile? WorkspaceProfile { get; set; }
     public ICollection<RecommendationItem> Items { get; set; } = new List<RecommendationItem>();
     public ICollection<RecommendationLog> Logs { get; set; } = new List<RecommendationLog>();
 }

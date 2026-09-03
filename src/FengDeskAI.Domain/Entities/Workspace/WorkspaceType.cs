@@ -14,12 +14,17 @@ public class WorkspaceType : BaseEntity
     public string Name { get; set; } = null!;
     public string? Description { get; set; }
 
-    /// <summary>Không gian dùng chung (phòng họp, khu co-working) hay riêng tư (bàn cá nhân).</summary>
+    /// <summary>
+    /// LEGACY — trùng vai trò với <see cref="Scope"/> (enum 3 bậc). Giữ cột cho dữ liệu &amp; DTO cũ,
+    /// KHÔNG dùng cho logic mới. Engine chỉ đọc <see cref="Scope"/>.
+    /// </summary>
     public bool IsPublic { get; set; }
 
     /// <summary>
-    /// Hệ số nhân áp lên phần điểm <b>cá nhân</b> (mệnh + hướng). 1.0 cho không gian riêng,
-    /// 0.5 cho không gian công cộng. Không ảnh hưởng phần điểm chức năng (mục đích, ánh sáng, kích thước).
+    /// LEGACY (engine v2) — không code nào đọc để chấm điểm; chỉ được ghi vào
+    /// <c>recommendations.personal_weight</c> cho dữ liệu cũ. Trọng số cá nhân của engine v3.1 lấy từ
+    /// <c>scoring_params</c> (<c>PERSONAL_WEIGHT_PRIVATE/SHARED/PUBLIC</c>) theo <see cref="Scope"/>.
+    /// Xem <c>docs/adr/personalized-recommendation-v3.1.md</c> §3.2.
     /// </summary>
     public decimal PersonalWeight { get; set; } = 1.0m;
 

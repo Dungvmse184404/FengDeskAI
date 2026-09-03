@@ -73,6 +73,9 @@ public static class DependencyInjection
 
         services.AddScoped<ICategoryService, CategoryService>();
         services.AddScoped<ITagService, TagService>();
+
+        // Product & 3D model
+        services.AddScoped<ISkuGenerator, SkuGenerator>();
         services.AddScoped<IProductService, ProductService>();
         services.AddScoped<IProductVectorService, ProductVectorService>();
         services.AddScoped<IProductModel3DService, ProductModel3DService>();
@@ -84,21 +87,19 @@ public static class DependencyInjection
         services.AddScoped<IOrderCancellationService, OrderCancellationService>();
         services.AddScoped<IOrderExpirationService, OrderExpirationService>();
 
+        // return/refund/liability
         services.AddScoped<IReturnService, ReturnService>();
         services.AddScoped<IRefundService, RefundService>();
         services.AddScoped<IVendorLiabilityService, VendorLiabilityService>();
 
+        // Shipping & Delivery
         services.AddScoped<IShippingService, ShippingService>();
-        // Tính phí ship — thuần logic, stateless.
         services.AddSingleton<IShippingFeeCalculator, ShippingFeeCalculator>();
-        // Ước tính phí ship lúc checkout: gọi nhà vận chuyển (GHN /fee), fallback calculator.
         services.AddScoped<IDeliveryFeeEstimator, DeliveryFeeEstimator>();
-        // Tự cấp mã shop nhà vận chuyển cho store chưa có (mỗi store = 1 điểm lấy hàng riêng).
         services.AddScoped<IStoreShopProvisioner, StoreShopProvisioner>();
 
         services.AddScoped<IPaymentService, PaymentService>();
 
-        // Upload ảnh dùng chung (FE đính URL vào sản phẩm lúc tạo).
         services.AddScoped<IUploadService, UploadService>();
 
         services.AddScoped<INotificationService, NotificationService>();
@@ -107,15 +108,15 @@ public static class DependencyInjection
 
         services.AddScoped<IReviewService, ReviewService>();
 
-        // Engine chấm điểm phong thủy — thuần logic, stateless.
         services.AddSingleton<IRecommendationScorer, RecommendationScorer>();
         services.AddScoped<IRecommendationService, RecommendationService>();
         services.AddScoped<IScoringConfigAdminService, ScoringConfigAdminService>();
 
-        // Tools cho AI (function calling) — đọc, scope theo user.
         services.AddScoped<IAiTool, SearchProductsTool>();
         services.AddScoped<IAiTool, GetProductTool>();
         services.AddScoped<IAiTool, RecommendProductsTool>();
+
+        services.AddScoped<IAiTool, RecommendPersonalItemsTool>();
         services.AddScoped<IAiTool, ListMyWorkspacesTool>();
         services.AddScoped<IAiTool, GetMyProfileTool>();
         services.AddScoped<IAiTool, ListMyOrdersTool>();
@@ -123,13 +124,12 @@ public static class DependencyInjection
         services.AddScoped<IAiTool, GetChatPartnerInfoTool>();
         services.AddScoped<IAiTool, ListMyAddressesTool>();
         services.AddScoped<IAiTool, GetShopInfoTool>();
-        // Xem mệnh cho người bất kỳ (stateless, không đụng DB) — nạp âm + Bát Trạch + Tứ Trụ.
+
         services.AddScoped<IAiTool, ComputeDestinyChartTool>();
         // Tool có tác dụng phụ (tạo đơn) — chỉ enable ở phòng riêng, xem AiChatService.PrivateRoomOnlyTools.
         services.AddScoped<IAiTool, PrepareOrderTool>();
         services.AddScoped<IAiTool, ConfirmOrderTool>();
 
-        // Trợ lý hội thoại AI — nhớ N lượt gần nhất, đổi model + gọi tool theo cấu hình "Ai:Chat".
         services.AddScoped<IAiChatService, AiChatService>();
 
         return services;

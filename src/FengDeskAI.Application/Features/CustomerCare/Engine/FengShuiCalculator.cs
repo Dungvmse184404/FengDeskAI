@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Enums;
+using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 
@@ -127,8 +128,7 @@ public static class FengShuiCalculator
             return null;
 
         // Năm ÂM lịch (không phải năm dương thô) — người sinh tháng 1–2 trước Tết thuộc năm âm TRƯỚC.
-        var (_, _, year, _) = LunarCalendarConverter.Solar2Lunar(
-            dateOfBirth.Value.Day, dateOfBirth.Value.Month, dateOfBirth.Value.Year);
+        int year = GetLunarYear(dateOfBirth.Value);
         var element = GetNapAmElement(year); // mệnh Nạp Âm: chỉ cần năm sinh
 
         // Kua + hướng tốt cần giới tính Nam/Nữ.
@@ -196,13 +196,46 @@ public static class FengShuiCalculator
         => DirectionElements.Where(kv => kv.Value == e).Select(kv => kv.Key).ToList();
 
     /// <summary>
-    /// Vector mệnh cá nhân theo năm sinh: bản mệnh (self) + hành sinh ra mệnh (supporter) +
-    /// hành mệnh sinh ra (child), theo tỉ lệ tham số (mặc định 0.6 / 0.3 / 0.1). Chuẩn hóa Σ=1.
+    /// Năm ÂM lịch ứng với một ngày DƯƠNG lịch — người sinh tháng 1–2 trước Tết thuộc năm âm TRƯỚC đó.
+    /// <b>Mọi phép tính Nạp Âm / Kua phải đi qua đây</b>, không dùng <c>DateTime.Year</c> thô:
+    /// hai đường tính khác nhau sẽ ra hai bản mệnh khác nhau cho cùng một người.
+    /// </summary>
+    public static int GetLunarYear(DateOnly solarDate)
+        => LunarCalendarConverter.Solar2Lunar(solarDate.Day, solarDate.Month, solarDate.Year).Year;
+
+    /// <inheritdoc cref="GetLunarYear(DateOnly)"/>
+    public static int GetLunarYear(DateTime solarDate)
+        => GetLunarYear(DateOnly.FromDateTime(solarDate));
+
+    /// <summary>Mệnh Nạp Âm từ ngày sinh DƯƠNG lịch — tự quy đổi năm âm, an toàn hơn overload nhận <c>int</c>.</summary>
+    public static FengShuiElement GetNapAmElement(DateOnly solarBirthDate)
+        => GetNapAmElement(GetLunarYear(solarBirthDate));
+
+    /// <summary>
+    /// Overload an toàn: nhận ngày sinh DƯƠNG lịch và tự quy đổi sang năm ÂM
+    /// (xem <see cref="GetLunarYear(DateOnly)"/>). Ưu tiên dùng overload này ở mọi call site.
     /// </summary>
     public static ElementVector BuildPersonalVector(
-        int birthYear, decimal selfShare, decimal supportShare, decimal childShare)
+        DateOnly solarBirthDate, decimal selfShare, decimal supportShare, decimal childShare)
+        => BuildPersonalVector(GetLunarYear(solarBirthDate), selfShare, supportShare, childShare);
+
+    /// <inheritdoc cref="BuildPersonalVector(DateOnly, decimal, decimal, decimal)"/>
+    public static ElementVector BuildPersonalVector(
+        DateTime solarBirthDate, decimal selfShare, decimal supportShare, decimal childShare)
+        => BuildPersonalVector(DateOnly.FromDateTime(solarBirthDate), selfShare, supportShare, childShare);
+
+    /// <summary>
+    /// Vector mệnh cá nhân theo năm sinh: bản mệnh (self) + hành sinh ra mệnh (supporter) +
+    /// hành mệnh sinh ra (child), theo tỉ lệ tham số (mặc định 0.6 / 0.3 / 0.1). Chuẩn hóa Σ=1.
+    /// <para>
+    /// ⚠️ <paramref name="lunarYear"/> phải là năm <b>ÂM</b> lịch. Có ngày sinh dương thì gọi overload
+    /// <see cref="BuildPersonalVector(DateOnly, decimal, decimal, decimal)"/> thay vì tự lấy <c>.Year</c>.
+    /// </para>
+    /// </summary>
+    public static ElementVector BuildPersonalVector(
+        int lunarYear, decimal selfShare, decimal supportShare, decimal childShare)
     {
-        var self = GetNapAmElement(birthYear);
+        var self = GetNapAmElement(lunarYear);
         var supporter = GetGeneratingElement(self);
         var child = GetGeneratedElement(self);
 
@@ -210,6 +243,51 @@ public static class FengShuiCalculator
             .Add(ElementVector.Single(supporter).Scale(supportShare))
             .Add(ElementVector.Single(child).Scale(childShare))
             .Normalize();
+    }
+
+    // ─────────────────────── v3.1 — mục tiêu người dùng ↔ cung Bát Trạch ───────────────────────
+
+    /// <summary>
+    /// Cung Bát Trạch ứng với mục tiêu người dùng nêu. Một người có 4 hướng tốt nhưng ý nghĩa khác nhau —
+    /// biết mục tiêu mới chọn được ĐÚNG hướng để gợi ý đặt vật phẩm, thay vì lấy hướng tốt đầu tiên.
+    /// Tên cung khớp <c>DestinyCalculator.GoodStars</c>.
+    /// </summary>
+    public static string GetCungForAspiration(Aspiration aspiration) => aspiration switch
+    {
+        Aspiration.Wealth or Aspiration.Career => "Sinh Khí",   // vượng khí, bứt phá
+        Aspiration.Health => "Thiên Y",                          // sức khỏe, minh mẫn
+        Aspiration.Relationship => "Diên Niên",                  // bền quan hệ
+        Aspiration.Study => "Phục Vị",                           // bình an, giữ phong độ
+        _ => "Sinh Khí",
+    };
+
+    private static readonly Dictionary<CompassDirection, string> DirectionNamesVi = new()
+    {
+        [CompassDirection.North] = "Bắc",
+        [CompassDirection.Northeast] = "Đông Bắc",
+        [CompassDirection.East] = "Đông",
+        [CompassDirection.Southeast] = "Đông Nam",
+        [CompassDirection.South] = "Nam",
+        [CompassDirection.Southwest] = "Tây Nam",
+        [CompassDirection.West] = "Tây",
+        [CompassDirection.Northwest] = "Tây Bắc",
+    };
+
+    /// <summary>Tên tiếng Việt của hướng la bàn — nguồn duy nhất, dùng chung cho hint và parse ngược.</summary>
+    public static string DirectionVi(CompassDirection d)
+        => DirectionNamesVi.TryGetValue(d, out var vi) ? vi : d.ToString();
+
+    /// <summary>
+    /// Đảo của <see cref="DirectionVi"/> — <c>DestinyCalculator</c> trả hướng dạng chuỗi tiếng Việt,
+    /// cần parse về enum để engine dùng. Null nếu không khớp tên nào.
+    /// </summary>
+    public static CompassDirection? ParseDirectionVi(string? vi)
+    {
+        if (string.IsNullOrWhiteSpace(vi)) return null;
+        foreach (var kv in DirectionNamesVi)
+            if (string.Equals(kv.Value, vi.Trim(), StringComparison.OrdinalIgnoreCase))
+                return kv.Key;
+        return null;
     }
 
     private static int ReduceToSingleDigit(int n)

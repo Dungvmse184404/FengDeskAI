@@ -103,12 +103,12 @@ public class AppDbContext : DbContext
         modelBuilder.HasDbFunction(typeof(AppDbContext).GetMethod(nameof(Unaccent), new[] { typeof(string) })!)
             .HasName("unaccent");
 
-        // Khoá chính do ỨNG DỤNG sinh (BaseEntity.Id = Guid.NewGuid()), không phải DB sinh.
-        // Nếu để mặc định (ValueGeneratedOnAdd), khi EF phát hiện một entity MỚI qua navigation
-        // (vd order.StatusLogs.Add(...) trên order đang tracked) nó suy trạng thái theo khoá:
-        // khoá khác Guid.Empty ⇒ coi như đã có trong DB ⇒ đánh Modified ⇒ sinh UPDATE trên dòng
-        // không tồn tại ⇒ DbUpdateConcurrencyException "affected 0 row(s)".
-        // Khai ValueGeneratedNever cho đúng bản chất thì entity đó được đánh Added như mong đợi.
+        // Khoá chính do ỨNG DỤNG sinh (BaseEntity.Id = Guid.NewGuid())
+        //public abstract class BaseEntity
+        //{
+        //    public Guid Id { get; set; } = Guid.NewGuid();
+        //    ...
+        //}
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
                      .Where(t => typeof(BaseEntity).IsAssignableFrom(t.ClrType)))
         {

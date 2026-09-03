@@ -31,7 +31,7 @@ public sealed class CarrierShopSyncWorker : BackgroundService
         var opts = _optionsMonitor.CurrentValue;
         var interval = TimeSpan.FromSeconds(opts.ScanIntervalSeconds);
         _logger.LogInformation(
-            "CarrierShopSyncWorker chạy: quét store thiếu mã shop mỗi {Interval}s, tối đa {BatchSize} store/lượt. IsActive={IsActive}",
+            "CarrierShopSyncWorker: quét store thiếu mã shop mỗi {Interval}s, tối đa {BatchSize} store/lượt. IsActive={IsActive}",
             interval.TotalSeconds, opts.BatchSize, opts.IsActive);
 
         using var timer = new PeriodicTimer(interval);

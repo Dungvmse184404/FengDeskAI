@@ -11,6 +11,8 @@ public class ProductItemResponse
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+    /// <summary>Small/Medium/Large của CHÍNH biến thể này. Null nếu chưa khai báo.</summary>
+    public string? SizeClass { get; set; }
     public int WeightGram { get; set; }
     public int LengthCm { get; set; }
     public int WidthCm { get; set; }
@@ -87,10 +89,15 @@ public class ProductDetailResponse
     /// <summary>Hành chính (Kim/Moc/Thuy/Hoa/Tho). Null nếu chưa khai báo phong thủy.</summary>
     public string? PrimaryElement { get; set; }
     public List<string> SecondaryElements { get; set; } = new();
-    /// <summary>Small/Medium/Large. Null nếu chưa khai báo.</summary>
-    public string? SizeClass { get; set; }
+
+    /// <summary>Desk | Living | Carry | Consumable — quyết định engine chấm điểm thế nào.</summary>
+    public string Placement { get; set; } = null!;
+
     public List<string> Vibes { get; set; } = new();
     public List<string> Styles { get; set; } = new();
+
+    /// <summary>Mục tiêu phong thủy ĐÃ DUYỆT (Wealth/Career/Health/Relationship/Study) — thẻ chưa duyệt không lộ ra.</summary>
+    public List<string> Aspirations { get; set; } = new();
 
     /// <summary>Các model 3D theo từng ảnh của sản phẩm.</summary>
     public List<ProductModel3DResponse> Models3D { get; set; } = new();
@@ -104,6 +111,8 @@ public class CreateProductItemRequest
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+    /// <summary>Small/Medium/Large của biến thể này (chậu mini vs chậu để sàn). Bỏ trống = chưa khai.</summary>
+    public SizeClass? SizeClass { get; set; }
     /// <summary>Cân nặng (gram). Bỏ trống → 500g.</summary>
     public int WeightGram { get; set; } = 500;
     /// <summary>Kích thước kiện (cm) cho GHN. Bỏ trống → 10cm.</summary>
@@ -118,6 +127,7 @@ public class UpdateProductItemRequest
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+    public SizeClass? SizeClass { get; set; }
     public int WeightGram { get; set; } = 500;
     public int LengthCm { get; set; } = 10;
     public int WidthCm { get; set; } = 10;
@@ -148,7 +158,13 @@ public class CreateProductRequest
     public FengShuiElement? PrimaryElement { get; set; }
     /// <summary>Các hành phụ (0..n) của đường advanced. Trùng hành chính sẽ bị bỏ qua.</summary>
     public List<FengShuiElement> SecondaryElements { get; set; } = new();
-    public SizeClass? SizeClass { get; set; }
+
+    /// <summary>
+    /// Vị trí/cách dùng — quyết định luồng gợi ý (đồ để bàn theo gap phòng, vật đeo theo bản mệnh,
+    /// hàng tiêu hao không gợi ý). Bỏ trống → <c>Desk</c>.
+    /// </summary>
+    public ProductPlacement? Placement { get; set; }
+
     /// <summary>Mã vibe (vibes.code), vd "Focus".</summary>
     public List<string> Vibes { get; set; } = new();
     /// <summary>Mã phong cách (styles.code), vd "Minimal".</summary>
@@ -176,6 +192,12 @@ public class ProductQueryParams : PageRequest
 
     /// <summary>Lọc theo hành phong thủy (Kim/Moc/Thuy/Hoa/Tho) — khớp cả hành chính lẫn hành phụ.</summary>
     public FengShuiElement? Element { get; set; }
+
+    /// <summary>
+    /// Lọc theo MỤC TIÊU phong thủy (Tài lộc / Sức khỏe…). Chỉ tính thẻ ĐÃ DUYỆT
+    /// (<c>product_aspirations.is_approved</c>) — vendor tự gắn không đủ để lên kết quả.
+    /// </summary>
+    public Aspiration? Aspiration { get; set; }
 
     /// <summary>true → chỉ trả sản phẩm có model 3D xem được. Trang chủ dùng để bốc ngẫu nhiên 1 model.</summary>
     public bool? HasModel3D { get; set; }

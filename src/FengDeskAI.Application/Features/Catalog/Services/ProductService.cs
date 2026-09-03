@@ -7,6 +7,7 @@ using FengDeskAI.Application.Features.Catalog.DTOs;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
+using FengDeskAI.Domain.Enums.Catalog;
 
 namespace FengDeskAI.Application.Features.Catalog.Services;
 
@@ -16,11 +17,14 @@ public class ProductService : IProductService
     private readonly IMapper _mapper;
     private readonly IFileStorage _storage;
 
-    public ProductService(IUnitOfWork uow, IMapper mapper, IFileStorage storage)
+    private readonly ISkuGenerator _skuGenerator;
+
+    public ProductService(IUnitOfWork uow, IMapper mapper, IFileStorage storage, ISkuGenerator skuGenerator)
     {
         _uow = uow;
         _mapper = mapper;
         _storage = storage;
+        _skuGenerator = skuGenerator;
     }
 
     public async Task<IServiceResult<PagedResult<ProductListItemResponse>>> SearchAsync(ProductQueryParams query, CancellationToken ct = default)
@@ -31,6 +35,7 @@ public class ProductService : IProductService
             CategoryId = query.CategoryId,
             Search = query.Search,
             Element = query.Element,
+            Aspiration = query.Aspiration,
             HasModel3D = query.HasModel3D,
             ActiveOnly = true,
             Skip = query.Skip,
@@ -73,7 +78,13 @@ public class ProductService : IProductService
             IsActive = true,
         };
         foreach (var i in request.Items)
-            product.Items.Add(new ProductItem { Name = i.Name, Price = i.Price, Stock = i.Stock, Sku = i.Sku, WeightGram = i.WeightGram, LengthCm = i.LengthCm, WidthCm = i.WidthCm, HeightCm = i.HeightCm });
+        {
+            var sku = await ResolveSkuAsync(i.Sku, null, ct);
+            if (sku.Error is not null)
+                return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, sku.Error);
+
+            product.Items.Add(new ProductItem { Name = i.Name, Price = i.Price, Stock = i.Stock, Sku = sku.Value, SizeClass = i.SizeClass, WeightGram = i.WeightGram, LengthCm = i.LengthCm, WidthCm = i.WidthCm, HeightCm = i.HeightCm });
+        }
         foreach (var img in request.Images)
             product.Images.Add(new ProductImage { Url = img.Url, SortOrder = img.SortOrder });
         foreach (var cid in request.CategoryIds.Distinct())
@@ -135,7 +146,11 @@ public class ProductService : IProductService
         if (request.Price < 0)
             return ServiceResult<ProductItemResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.PriceInvalid);
 
-        var item = new ProductItem { ProductId = productId, Name = request.Name, Price = request.Price, Stock = request.Stock, Sku = request.Sku, WeightGram = request.WeightGram, LengthCm = request.LengthCm, WidthCm = request.WidthCm, HeightCm = request.HeightCm };
+        var sku = await ResolveSkuAsync(request.Sku, null, ct);
+        if (sku.Error is not null)
+            return ServiceResult<ProductItemResponse>.Failure(ApiStatusCodes.BadRequest, sku.Error);
+
+        var item = new ProductItem { ProductId = productId, Name = request.Name, Price = request.Price, Stock = request.Stock, Sku = sku.Value, SizeClass = request.SizeClass, WeightGram = request.WeightGram, LengthCm = request.LengthCm, WidthCm = request.WidthCm, HeightCm = request.HeightCm };
         await _uow.Products.AddItemAsync(item, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult<ProductItemResponse>.Success(_mapper.Map<ProductItemResponse>(item), ApiStatusMessages.Product.ItemCreated, ApiStatusCodes.Created);
@@ -150,10 +165,15 @@ public class ProductService : IProductService
         if (item is null) return ServiceResult<ProductItemResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.ItemNotFound);
         if (request.Price < 0) return ServiceResult<ProductItemResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.PriceInvalid);
 
+        var sku = await ResolveSkuAsync(request.Sku, itemId, ct);
+        if (sku.Error is not null)
+            return ServiceResult<ProductItemResponse>.Failure(ApiStatusCodes.BadRequest, sku.Error);
+
         item.Name = request.Name;
         item.Price = request.Price;
         item.Stock = request.Stock;
-        item.Sku = request.Sku;
+        item.Sku = sku.Value;
+        item.SizeClass = request.SizeClass;
         item.WeightGram = request.WeightGram;
         item.LengthCm = request.LengthCm;
         item.WidthCm = request.WidthCm;
@@ -255,20 +275,56 @@ public class ProductService : IProductService
         if (!await AllCodesExistAsync(_uow.Vibes, request.Vibes, ct))
             return ServiceResult<ProductFengShuiResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.VibesNotExist);
 
-        await _uow.Products.SetFengShuiAsync(productId, request.PrimaryElement, request.SecondaryElements, request.SizeClass, ct);
+        var placement = request.Placement ?? ProductPlacement.Desk;
+        await _uow.Products.SetFengShuiAsync(
+            productId, request.PrimaryElement, request.SecondaryElements, placement, ct);
         await _uow.Products.ReplaceVibesAsync(productId, request.Vibes, ct);
         await _uow.Products.ReplaceStylesAsync(productId, request.Styles, ct);
+        // Vendor chỉ ĐỀ XUẤT thẻ mục tiêu; thẻ đã duyệt không bị hạ khi vendor sửa lại danh sách.
+        await _uow.Products.ReplaceProposedAspirationsAsync(productId, request.Aspirations, ct);
         await _uow.SaveChangesAsync(ct);
+
+        var aspirations = await _uow.Products.GetAspirationsAsync(productId, ct);
 
         return ServiceResult<ProductFengShuiResponse>.Success(new ProductFengShuiResponse
         {
             ProductId = productId,
             PrimaryElement = request.PrimaryElement,
             SecondaryElements = request.SecondaryElements.Distinct().Where(e => e != request.PrimaryElement).ToList(),
-            SizeClass = request.SizeClass,
+            Placement = placement,
+            ApprovedAspirations = aspirations.Where(a => a.IsApproved).Select(a => a.Aspiration).ToList(),
+            PendingAspirations = aspirations.Where(a => !a.IsApproved).Select(a => a.Aspiration).ToList(),
             Vibes = request.Vibes.Distinct().ToList(),
             Styles = request.Styles.Distinct().ToList(),
         }, "Cập nhật thuộc tính phong thủy thành công.");
+    }
+
+    /// <summary>
+    /// Admin/manager duyệt thẻ mục tiêu. Tách khỏi <see cref="SetFengShuiAsync"/> vì đây là quyền SÀN:
+    /// thẻ "Tài lộc" là lời hứa nghiệp vụ, để vendor tự bật thì ai cũng gắn hết để lên top.
+    /// </summary>
+    public async Task<IServiceResult<ProductFengShuiResponse>> ApproveAspirationsAsync(
+        Guid productId, Guid approverId, ApproveProductAspirationsRequest request, CancellationToken ct = default)
+    {
+        var product = await _uow.Products.GetDetailAsync(productId, ct);
+        if (product is null)
+            return ServiceResult<ProductFengShuiResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
+
+        var rows = await _uow.Products.ApproveAspirationsAsync(productId, request.Approved, approverId, ct);
+        await _uow.SaveChangesAsync(ct);
+
+        var primary = product.Elements.FirstOrDefault(e => e.IsPrimary);
+        return ServiceResult<ProductFengShuiResponse>.Success(new ProductFengShuiResponse
+        {
+            ProductId = productId,
+            PrimaryElement = primary?.Element ?? default,
+            SecondaryElements = product.Elements.Where(e => !e.IsPrimary).Select(e => e.Element).ToList(),
+            Placement = product.Placement,
+            ApprovedAspirations = rows.Where(a => a.IsApproved).Select(a => a.Aspiration).ToList(),
+            PendingAspirations = rows.Where(a => !a.IsApproved).Select(a => a.Aspiration).ToList(),
+            Vibes = product.Vibes.Select(v => v.VibeCode).ToList(),
+            Styles = product.Styles.Select(v => v.StyleCode).ToList(),
+        }, "Cập nhật duyệt thẻ mục tiêu thành công.");
     }
 
     /// <summary>True nếu mọi code (style/vibe...) đều tồn tại trong bảng tra cứu. Tập rỗng → true.</summary>
@@ -284,6 +340,22 @@ public class ProductService : IProductService
 
     // ---- helpers ----
 
+    /// <summary>
+    /// Vendor bỏ trống → sàn tự sinh mã; vendor tự nhập → kiểm trùng và trả lỗi 400 thân thiện
+    /// thay vì để unique index của Postgres ném exception thành 500.
+    /// </summary>
+    private async Task<(string? Value, string? Error)> ResolveSkuAsync(
+        string? requested, Guid? excludeItemId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(requested))
+            return (await _skuGenerator.GenerateAsync(ct), null);
+
+        var sku = requested.Trim();
+        return await _uow.Products.SkuExistsAsync(sku, excludeItemId, ct)
+            ? (null, ApiStatusMessages.Product.SkuDuplicated)
+            : (sku, null);
+    }
+
     private async Task<bool> CanManageStoreAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
         => isAdmin || await _uow.Stores.CanManageAsync(storeId, userId, ct);
 
@@ -293,7 +365,7 @@ public class ProductService : IProductService
     /// </summary>
     private static void ApplyFengShui(Product product, CreateProductRequest request)
     {
-        product.SizeClass = request.SizeClass;
+        product.Placement = request.Placement ?? ProductPlacement.Desk;
         if (request.PrimaryElement is { } primary)
         {
             product.Elements.Add(new ProductElement { Element = primary, IsPrimary = true });

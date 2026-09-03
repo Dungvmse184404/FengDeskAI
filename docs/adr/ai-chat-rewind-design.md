@@ -10,6 +10,8 @@
 
 AI không có "trí nhớ" riêng — mỗi lượt nó chỉ đọc `GetRecentAsync` từ `chat_messages`.
 Vì vậy rewind = **soft-delete phần đuôi lịch sử + gửi lại tin** → AI tự "quên" phần đã cắt.
+
+> **Cập nhật 28/08/2026 — nguyên tử hóa.** Bản đầu cắt lịch sử **trước** khi gọi LLM và không hoàn tác: LLM chết ⇒ đoạn hội thoại sau điểm rewind bị soft-delete vĩnh viễn mà tin mới chưa gửi được (mất dữ liệu). Nay hai bước chạy trong cùng transaction; `SendAsync` trả `Failure` ⇒ ném `RewindAbortedException` ⇒ rollback, và lỗi gốc được trả nguyên văn cho client.
 Không cần đổi gì trong pipeline LLM (nudge-retry, linkify, tools hoạt động nguyên vẹn).
 
 ```

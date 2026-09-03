@@ -30,6 +30,7 @@ Ghi (product, SKU, ảnh, danh mục, phong thủy) yêu cầu **owner/staff c�
 | DELETE | `/api/products/{id}/model-3d` | Owner/Admin | Xóa model 3D |
 | PUT | `/api/products/{id}/categories` | Owner/Admin | Gán danh mục |
 | PUT | `/api/products/{id}/feng-shui` | Owner/Admin | Khai báo thuộc tính phong thủy |
+| PUT | `/api/products/{id}/aspirations` | **Manager+** | Duyệt thẻ mục tiêu phong thủy |
 
 ---
 
@@ -70,7 +71,7 @@ Chi tiết sản phẩm. **Response `data`** = `ProductDetailResponse`:
   "images": [{ "id": "guid", "url": "...", "sortOrder": 0 }],
   "categories": [{ "id": "guid", "name": "..." }],
   "primaryElement": "Hoa", "secondaryElements": ["Tho"],
-  "sizeClass": "Medium", "vibes": ["Focus"], "styles": ["Minimal"],
+  "placement": "Desk", "vibes": ["Focus"], "styles": ["Minimal"],
   "model3D": { /* ProductModel3DResponse hoặc null */ },
   "createdAt": "...", "updatedAt": "..."
 }
@@ -89,17 +90,26 @@ Tạo sản phẩm (kèm SKU, ảnh, danh mục, phong thủy tùy chọn).
   "name": "Cây kim tiền để bàn",
   "description": "...",
   "items": [{ "name": "Chậu nhỏ", "price": 120000, "stock": 10, "sku": "KT-S",
+              "sizeClass": "Small",
               "weightGram": 500, "lengthCm": 10, "widthCm": 10, "heightCm": 10 }],
   "images": [{ "url": "https://...", "sortOrder": 0 }],
   "categoryIds": ["guid"],
+  "elementInputs": [{ "inputKind": "Material", "inputCode": "Wood" }],
   "primaryElement": "Moc",
   "secondaryElements": ["Tho"],
-  "sizeClass": "Small",
+  "placement": "Desk",
   "vibes": ["Focus"],
   "styles": ["Minimal"]
 }
 ```
-> Bỏ trống `primaryElement` → sản phẩm chưa có phong thủy (set sau qua `/feng-shui`). SKU mặc định `weightGram=500`, kích thước `10cm`.
+| Field phong thủy | Ghi chú |
+|---|---|
+| `elementInputs` | **Đường ưu tiên** — tín hiệu vật lý (vật liệu / màu / hình khối), engine tự tính vector ngũ hành |
+| `primaryElement` / `secondaryElements` | Đường advanced, **chỉ dùng khi không có `elementInputs`**. Bỏ trống cả hai → sản phẩm chưa có phong thủy (set sau qua `/feng-shui`) |
+| `placement` | Bỏ trống → `Desk`. Xem [bảng bên dưới](#productplacement--quyết-định-luồng-gợi-ý) |
+| `items[].sizeClass` | `Small/Medium/Large` **của từng SKU** — kích thước biến thiên theo biến thể nên nằm ở đây, không ở `Product` |
+
+> SKU mặc định `weightGram=500`, kích thước `10cm`.
 
 ---
 
@@ -188,6 +198,53 @@ chưa xử lý xong (chỉ 1 request "mở" tại 1 thời điểm).
 
 ---
 
+## `Aspiration` — mục tiêu phong thủy (vendor đề xuất, **admin duyệt**)
+
+`Wealth` · `Career` · `Health` · `Relationship` · `Study` — ứng với 4 cung tốt Bát Trạch.
+
+| Bước | Endpoint | Quyền | Tác dụng |
+|---|---|---|---|
+| Vendor **đề xuất** | `PUT /api/products/{id}/feng-shui` → `aspirations` | Owner/Admin | Ghi thẻ ở trạng thái **chưa duyệt** — engine BỎ QUA |
+| Admin **duyệt** | `PUT /api/products/{id}/aspirations` | **Manager trở lên** | Bật `is_approved`; thẻ không có trong danh sách bị **hạ về chưa duyệt** |
+
+```json
+// PUT /api/products/{id}/aspirations
+{ "approved": ["Wealth", "Career"] }
+```
+
+Response `ProductFengShuiResponse` tách rõ hai nhóm:
+```json
+{ "productId": "guid", "placement": "Desk",
+  "approvedAspirations": ["Wealth"], "pendingAspirations": ["Health"] }
+```
+
+- `GET /api/products/{id}` chỉ trả **`aspirations`** = nhóm **đã duyệt**; thẻ chờ duyệt không lộ ra công khai.
+- `GET /api/products?aspiration=Wealth` lọc theo thẻ **đã duyệt**.
+- Vendor sửa lại danh sách đề xuất **không hạ được** thẻ đã duyệt của chính mình.
+
+> Vì sao phải duyệt: thẻ "Tài lộc" là **lời hứa nghiệp vụ**. Để vendor tự bật thì ai cũng gắn hết 5 thẻ để lọt mọi bộ lọc.
+
+---
+
+## `ProductPlacement` — quyết định luồng gợi ý
+
+Không phải nhãn hiển thị: **enum này quyết định engine chấm điểm sản phẩm thế nào**.
+
+| Giá trị | Nghĩa | Vào luồng gợi ý nào | Hướng đặt |
+|---|---|---|---|
+| **`Desk`** *(mặc định)* | Đồ đặt trong không gian — tượng, đá, đồ trang trí bàn, **và vật trấn yểm gắn kiến trúc** | `recommend_products` | có `placementHint` theo la bàn |
+| **`Living`** | Cây / vật sống | `recommend_products` | **không** — đặt theo ánh sáng |
+| **`Carry`** | Mang theo người — vòng tay, mặt dây, charm ví, treo xe | [`/recommendations/personal`](./18-recommendations.md) — chấm theo **bản mệnh**, không theo phòng | **không** |
+| **`Consumable`** | Hàng tiêu hao — nhang, nến, muối | ❌ **không vào luồng nào** | — |
+
+> `Consumable` vẫn **tìm và mua bình thường** qua `GET /api/products`, chỉ không được engine gợi ý.
+
+⚠️ **`Category` và `Placement` là hai trục khác nhau, không phản chiếu nhau.** `Category` trả lời *"vật này LÀ gì"* (taxonomy để khách duyệt); `Placement` trả lời *"dùng ở đâu → engine chấm thế nào"*. **Không** tạo category kiểu "Vật phẩm mang theo người" — vòng tay vẫn thuộc category "Trang sức phong thủy" và có `placement = Carry`.
+
+Chi tiết: [product-placement-personal-recommendation.md](../adr/product-placement-personal-recommendation.md)
+
+---
+
 ## Liên kết khác
 
 **PUT `/api/products/{id}/categories`** — gán danh mục:
@@ -197,7 +254,8 @@ chưa xử lý xong (chỉ 1 request "mở" tại 1 thời điểm).
 **PUT `/api/products/{id}/feng-shui`** — khai báo phong thủy (biến sản phẩm thành ứng viên gợi ý), body `SetProductFengShuiRequest`:
 ```json
 { "primaryElement": "Hoa", "secondaryElements": ["Tho"],
-  "sizeClass": "Medium", "vibes": ["Focus"], "styles": ["Minimal"] }
+  "placement": "Desk", "vibes": ["Focus"], "styles": ["Minimal"],
+  "aspirations": ["Wealth"] }
 ```
 
 ---

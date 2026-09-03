@@ -82,11 +82,13 @@ Tổng hợp enum, envelope và mã trạng thái dùng chung. **Mọi enum seri
 
 | Enum | Giá trị |
 |------|---------|
-| `SizeClass` | `Small`, `Medium`, `Large` |
+| `SizeClass` | `Small`, `Medium`, `Large` — nằm trên **`ProductItem`** (mỗi SKU), không phải `Product`. Chưa tham gia chấm điểm |
+| `ProductPlacement` | `Desk` (mặc định), `Living`, `Carry`, `Consumable` — **quyết định engine chấm điểm thế nào**, xem [02-products](./02-products.md) |
 | `Model3DStatus` | `Pending` (0), `Processing` (1), `Succeeded` (2), `Failed` (3) — trạng thái model hiện tại (`ProductModel3D`) |
 | `Model3DRequestType` | `Initial` (0, tự động), `Regenerate` (1, thủ công qua staff sàn) |
 | `Model3DRequestStatus` | `Queued` (0), `Processing` (1), `AwaitingStaff` (2), `InProgress` (3), `Succeeded` (4), `Failed` (5), `Rejected` (6) — xem `docs/adr/refactor-model3d-request-flow.md` |
 | `Model3DFailureReason` | `InsufficientCredits` (0), `GenerationFailed` (1), `InvalidImage` (2) — **staff-only**, không map ra API cho garden owner/garden staff |
+| `RecommendationKind` | `Workspace`, `PersonalCarry` — loại phiên gợi ý (`recommendations.kind`) |
 
 ---
 

@@ -1,0 +1,113 @@
+{
+  "_comment": "Dữ liệu demo cho Catalog — MỘT nguồn duy nhất cho 3 seeder (CatalogDemo → ProductFengShuiDemo → ProductElementInputDemo). Tên sản phẩm chỉ khai ở đây; trước kia mỗi seeder giữ bảng riêng khớp theo chuỗi con trong tên nên đổi tên là 2 seeder kia âm thầm hỏng.",
+
+  "vendor": {
+    "email": "vendor@fengdesk.local",
+    "password": "Vendor@123",
+    "fullName": "Demo Vendor"
+  },
+
+  "store": {
+    "name": "Vườn Phong Thủy Demo",
+    "description": "Cửa hàng mẫu phục vụ test luồng đặt hàng.",
+    "hotline": "1900 1234",
+    "openingHours": "08:00 - 21:00",
+    "streetAddress": "123 Đường Phong Thủy"
+  },
+
+  "categories": ["Cây để bàn", "Đá phong thủy", "Đèn trang trí", "Tượng phong thủy"],
+
+  "_tagsNote": "Tag đã NGỪNG DÙNG cho phong thủy (thay bằng elements/vibes/styles). Giữ để test màn quản lý tag.",
+  "tags": ["Mộc", "Thủy", "Hỏa", "Thổ", "Kim", "Giảm căng thẳng", "Hút tài lộc"],
+
+  "imageUrlTemplate": "https://picsum.photos/seed/{slug}/600",
+
+  "_defaultsNote": "Áp cho sản phẩm KHÔNG có trong danh sách dưới (vd tạo tay lúc test) mà chưa khai phong thủy.",
+  "defaults": { "primaryElement": "Tho", "vibe": "Focus", "style": "Modern", "sizeClass": "Medium" },
+
+  "products": [
+    {
+      "name": "Cây Kim Tiền để bàn",
+      "description": "Cây phong thủy hút tài lộc, hợp mệnh Mộc.",
+      "category": "Cây để bàn",
+      "placement": "Living",
+      "primaryElement": "Moc",
+      "vibes": ["Focus"],
+      "styles": ["Scandinavian"],
+      "elementInputs": [
+        { "kind": "Material", "code": "Wood" },
+        { "kind": "Color", "code": "Green" }
+      ],
+      "items": [
+        { "name": "Chậu sứ trắng", "price": 250000, "stock": 30, "sku": "KT-WHITE", "sizeClass": "Small" },
+        { "name": "Chậu sứ xanh", "price": 280000, "stock": 20, "sku": "KT-BLUE", "sizeClass": "Small" }
+      ]
+    },
+    {
+      "name": "Cây Lưỡi Hổ mini",
+      "description": "Thanh lọc không khí, giảm căng thẳng.",
+      "category": "Cây để bàn",
+      "placement": "Living",
+      "primaryElement": "Moc",
+      "vibes": ["Calm"],
+      "styles": ["Minimal"],
+      "elementInputs": [
+        { "kind": "Material", "code": "Wood" },
+        { "kind": "Color", "code": "Green" }
+      ],
+      "items": [
+        { "name": "Size nhỏ", "price": 150000, "stock": 50, "sku": "LH-S", "sizeClass": "Small" }
+      ]
+    },
+    {
+      "name": "Cầu thạch anh tím",
+      "description": "Đá phong thủy ổn định năng lượng.",
+      "category": "Đá phong thủy",
+      "placement": "Desk",
+      "primaryElement": "Tho",
+      "vibes": ["Calm"],
+      "styles": ["Modern"],
+      "elementInputs": [
+        { "kind": "Material", "code": "Crystal" },
+        { "kind": "Color", "code": "White" }
+      ],
+      "items": [
+        { "name": "Đường kính 6cm", "price": 450000, "stock": 15, "sku": "TA-6", "sizeClass": "Small" },
+        { "name": "Đường kính 8cm", "price": 650000, "stock": 10, "sku": "TA-8", "sizeClass": "Medium" }
+      ]
+    },
+    {
+      "name": "Tượng Tỳ Hưu đồng",
+      "description": "Linh vật chiêu tài, hợp mệnh Kim.",
+      "category": "Tượng phong thủy",
+      "placement": "Desk",
+      "primaryElement": "Kim",
+      "vibes": ["Focus"],
+      "styles": ["Classic"],
+      "elementInputs": [
+        { "kind": "Material", "code": "Metal" },
+        { "kind": "Color", "code": "White" }
+      ],
+      "items": [
+        { "name": "Cao 10cm", "price": 890000, "stock": 8, "sku": "TH-10", "sizeClass": "Small" }
+      ]
+    },
+    {
+      "name": "Đèn muối Himalaya",
+      "description": "Ánh sáng ấm, thư giãn, hợp mệnh Hỏa.",
+      "category": "Đèn trang trí",
+      "placement": "Desk",
+      "primaryElement": "Hoa",
+      "vibes": ["Relax"],
+      "styles": ["Bohemian"],
+      "elementInputs": [
+        { "kind": "Material", "code": "SaltRock" },
+        { "kind": "Color", "code": "Orange" },
+        { "kind": "Shape", "code": "Round" }
+      ],
+      "items": [
+        { "name": "Loại 2-3kg", "price": 320000, "stock": 25, "sku": "DM-23", "sizeClass": "Medium" }
+      ]
+    }
+  ]
+}

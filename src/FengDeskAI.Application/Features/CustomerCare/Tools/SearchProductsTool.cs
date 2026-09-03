@@ -26,6 +26,10 @@ public sealed class SearchProductsTool : IAiTool
         ["query"] = new("string", "Search keyword (name or description; e.g. 'Hỏa', 'để bàn', 'kim loại').", Required: true),
         ["element"] = new("string", "Optional STRICT feng shui element filter (matches the product's primary or secondary element). " +
             "Use codes from compute_destiny_chart's favorableElementCodes.", Enum: new[] { "Kim", "Moc", "Thuy", "Hoa", "Tho" }),
+        ["aspiration"] = new("string", "Optional filter by the feng shui GOAL the user states (\"I want something for wealth\"). " +
+            "Only products an admin approved for that goal are returned. Omit when they don't mention a goal; " +
+            "if their goal seems relevant but unclear, ask them which one.",
+            Enum: new[] { "Wealth", "Career", "Health", "Relationship", "Study" }),
         ["limit"] = new("integer", $"Maximum number of results (default {MaxLimit})."),
     };
 
@@ -40,8 +44,22 @@ public sealed class SearchProductsTool : IAiTool
         if (Enum.TryParse<Domain.Enums.Workspace.FengShuiElement>(ToolArgs.GetString(arguments, "element"), true, out var parsed))
             element = parsed;
 
+        // Mục tiêu phong thủy user nêu — lọc cứng, chỉ thẻ đã được admin duyệt.
+        Domain.Enums.Catalog.Aspiration? aspiration = null;
+        if (Enum.TryParse<Domain.Enums.Catalog.Aspiration>(ToolArgs.GetString(arguments, "aspiration"), true, out var parsedAspiration))
+            aspiration = parsedAspiration;
+
         var limit = Math.Clamp(ToolArgs.GetInt(arguments, "limit") ?? MaxLimit, 1, MaxLimit);
-        var result = await _products.SearchAsync(new ProductQueryParams { Search = query, Element = element, Page = 1, PageSize = limit }, ct);
+        var result = await _products.SearchAsync(
+            new ProductQueryParams { Search = query, Element = element, Aspiration = aspiration, Page = 1, PageSize = limit }, ct);
+        if (result.IsSuccess && result.Data is { TotalCount: 0 } && aspiration is not null)
+            return ToolArgs.Json(new
+            {
+                total = 0,
+                items = Array.Empty<object>(),
+                note = $"No product is approved for the goal \"{aspiration}\" yet. Tell the user, then offer to search "
+                    + "without that filter instead of silently dropping it.",
+            });
         if (!result.IsSuccess || result.Data is null)
             return ToolArgs.Error(result.Message ?? "Search failed.");
 

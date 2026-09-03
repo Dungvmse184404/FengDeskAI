@@ -159,6 +159,16 @@ public class ProductsController : ApiControllerBase
     public async Task<IActionResult> SetFengShui(Guid id, [FromBody] SetProductFengShuiRequest request, CancellationToken ct)
         => ToActionResult(await _service.SetFengShuiAsync(id, CurrentUserId, IsAdmin, request, ct));
 
+    /// <summary>
+    /// Duyệt thẻ mục tiêu phong thủy (Tài lộc / Sức khỏe…) — quyền SÀN, manager trở lên.
+    /// Vendor chỉ ĐỀ XUẤT qua <c>PUT /feng-shui</c>; chỉ thẻ được duyệt ở đây mới tham gia lọc gợi ý.
+    /// </summary>
+    [HttpPut("{id:guid}/aspirations")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
+    public async Task<IActionResult> ApproveAspirations(
+        Guid id, [FromBody] ApproveProductAspirationsRequest request, CancellationToken ct)
+        => ToActionResult(await _service.ApproveAspirationsAsync(id, CurrentUserId, request, ct));
+
     // ----- Vector ngũ hành (engine v3) -----
 
     /// <summary>Trạng thái vector + input ngũ hành hiện tại của sản phẩm.</summary>

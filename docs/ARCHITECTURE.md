@@ -197,17 +197,29 @@ Access token 60′, refresh 14 ngày, rotation mỗi lần refresh (`httpClient`
 
 ### 5.2 Recommendation
 
-1. FE gửi `workspace_profile_id` + filter → `POST /api/recommendations`.
-2. BE `RecommendationScorer` (deterministic engine ở `Application/Features/CustomerCare/Engine/`) load candidate products → chấm điểm phong thủy → rank.
-3. Tùy chọn: rerank/giải thích bằng Ollama qua `AiChatService` (chỉ giải thích, **KHÔNG** đổi rank).
+**Hai luồng**, chọn theo `ProductPlacement` của sản phẩm:
+
+| Luồng | Endpoint | Chấm theo | Placement |
+|---|---|---|---|
+| Workspace | `POST /api/recommendations` | Gap ngũ hành của **phòng** | `Desk`, `Living` |
+| Cá nhân | `POST /api/recommendations/personal` | Dụng thần / bản mệnh của **người** | `Carry` |
+
+`Consumable` không vào luồng nào (vẫn tìm & mua bình thường).
+
+1. FE gửi `workspace_profile_id` (hoặc không gửi gì với `/personal`) → Controller.
+2. BE `RecommendationScorer` (deterministic, `Application/Features/CustomerCare/Engine/`) load candidate **lọc theo placement** → chấm điểm → rank. Luật theo placement khai báo dạng **bảng** ở `ScoringModels.PlacementPolicy`.
+3. Luồng workspace: gọi Ollama diễn giải. Luồng `/personal`: **không** gọi (contract AI bắt buộc có workspace) → dừng ở `Status = Scored`.
 4. Trả `RecommendationResponse` + log `recommendation_logs`.
 
-Engine **là source of truth về scoring** — không được để AI tự bịa rule.
+Engine **là source of truth về tập sản phẩm** — AI không được thêm/bớt (`ApplyAiResponse` loại `ProductId` lạ).
+⚠️ AI **vẫn hoán vị được `FinalRank`** trong topN — xem `docs/adr/personalized-recommendation-v3.1.md` §7.2.
+
+Chi tiết: `docs/ard/bounded-contexts/customer-care.md` · `docs/api-documents/18-recommendations.md`.
 
 ### 5.3 Chat (người ↔ AI + người ↔ người)
 
 - SignalR hub `/hubs/chat` gửi message realtime.
-- Người ↔ AI: `AiBotQueue` enqueue → `AiBotWorker` gọi Ollama (`AiChat` config), model dùng tool-calling; các tool ở `CustomerCare/Tools/*` (chỉ đọc dữ liệu đã có `ChatRoomDataConsent`).
+- Người ↔ AI: `AiBotQueue` enqueue → `AiBotWorker` gọi Ollama (`AiChat` config), model dùng tool-calling; 14 tool ở `CustomerCare/Tools/*`. Tool đọc dữ liệu chính chủ scope theo `context.UserId`; **`ChatRoomDataConsent` chỉ gate `get_chat_partner_info`**; tool có tác dụng phụ (`prepare_order`/`confirm_order`) chỉ bật ở phòng riêng.
 - Người ↔ người: routing trực tiếp qua hub.
 
 ### 5.4 Sales (multi-store checkout)
@@ -327,13 +339,16 @@ Không có global `GardenStaff`. Quyền trên 1 store cụ thể check qua:
 
 ## 11. Chưa làm (đừng giả định đã có)
 
+> ⚠️ **File này là bản tóm tắt cũ.** Danh sách được kiểm chứng lại và giữ cập nhật ở
+> [`docs/ard/architecture-core/05-open-items.md`](./ard/architecture-core/05-open-items.md) — khi hai bên lệch nhau, tin file kia.
+
 - Python AI recommendation microservice thực (contract có, service chưa).
-- Meshy image→3D thật (đang mock).
+- ~~Meshy image→3D thật (đang mock)~~ — **sai:** `MeshyModel3DGenerator` luôn gọi HTTP thật; cờ `MeshySettings:UseMock` không được đọc ở đâu cả.
 - SignalR hub cho notification (chỉ có ChatHub); realtime badge hiện qua polling 60s.
-- Automated tests (unit/integration) + CI/CD pipeline.
+- ~~Automated tests + CI/CD pipeline~~ — **đã có:** 2 project test (~46 file), workflow `test.yml` + `deploy.yml`.
 - Analytics dashboard (owner/admin).
 - Redis distributed cache (đang `AddDistributedMemoryCache`).
-- Tích hợp thực với đơn vị vận chuyển (GHN/Ahamove) — mới có schema + webhook shell.
+- ~~Tích hợp thực với đơn vị vận chuyển — mới có schema + webhook shell~~ — **sai:** `GhnShippingProvider`/`AhamoveShippingProvider` gọi HTTP API thật + webhook 2 chiều (môi trường sandbox).
 
 ---
 

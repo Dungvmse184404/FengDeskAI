@@ -17,6 +17,8 @@ public class ProductItemConfiguration : IEntityTypeConfiguration<ProductItem>
         builder.Property(i => i.Price).HasColumnName("price").HasPrecision(12, 2).IsRequired();
         builder.Property(i => i.Stock).HasColumnName("stock").HasDefaultValue(0).IsRequired();
         builder.Property(i => i.Sku).HasColumnName("sku").HasMaxLength(20);
+        // Kích thước biến thiên theo biến thể — chuyển từ products.size_class về đây.
+        builder.Property(i => i.SizeClass).HasColumnName("size_class").HasConversion<string>().HasMaxLength(10);
         builder.Property(i => i.WeightGram).HasColumnName("weight_gram").HasDefaultValue(500).IsRequired();
         builder.Property(i => i.LengthCm).HasColumnName("length_cm").HasDefaultValue(10).IsRequired();
         builder.Property(i => i.WidthCm).HasColumnName("width_cm").HasDefaultValue(10).IsRequired();

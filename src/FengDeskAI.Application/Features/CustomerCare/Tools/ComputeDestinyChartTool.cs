@@ -21,7 +21,8 @@ public sealed class ComputeDestinyChartTool : IAiTool
         "from birth info. Returns: can-chi year, zodiac animal, nạp âm element/mệnh with meaning; " +
         "PLUS (if gender given) Bát Trạch cung mệnh with 4 favorable directions (Sinh Khí/Diên Niên/Thiên Y/Phục Vị) " +
         "and 4 unfavorable ones; PLUS (if birthTime given) the full Tứ Trụ/Bát Tự four pillars with element distribution " +
-        "and 'favorableElementCodes' — use those codes with search_products/recommend_products element filter to suggest products. " +
+        "and 'favorableElementCodes' — use those codes as the element filter of search_products, or call " +
+        "recommend_personal_items for items the person wears/carries (it applies these elements itself). " +
         "The 'missing' field lists what extra info would unlock deeper reading — answer with what you have first, then ask for it. " +
         "NEVER calculate mệnh/cung/tứ trụ yourself — always call this tool. Results are for reference/entertainment; say so briefly.";
 

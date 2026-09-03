@@ -3,7 +3,7 @@ namespace FengDeskAI.Application.Common.Media;
 /// <summary>Quy ước chung cho upload ảnh (product, chat, avatar...).</summary>
 public static class ImageUpload
 {
-    // Chỉ các định dạng AI đọc được: JPG, PNG, BMP, GIF.
+    // Chỉ các định dạng AI đọc được (hiện tại là vậy): JPG, PNG, BMP, GIF.
     public static readonly string[] AllowedContentTypes =
         { "image/jpeg", "image/png", "image/bmp", "image/x-ms-bmp", "image/gif" };
 

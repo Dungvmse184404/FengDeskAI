@@ -1,0 +1,17 @@
+{
+  "name": "boundary",
+  "kind": "Boundary",
+  "description": "Giá trị ở rìa vùng hợp lệ nhưng VẪN thỏa ràng buộc route: GUID toàn số 0, chuỗi 1 ký tự, body có field rỗng. Vẫn phải dừng đúng ở 401/403 — phân quyền không được phụ thuộc nội dung dữ liệu.",
+  "appliesTo": [ "authorization", "smoke", "robustness" ],
+
+  "routeValues": {
+    "*": "a",
+    "id": "00000000-0000-0000-0000-000000000000",
+    "guid": "00000000-0000-0000-0000-000000000000",
+    "code": "A"
+  },
+
+  "bodies": {
+    "*": { "email": "", "name": "", "quantity": 0 }
+  }
+}

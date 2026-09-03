@@ -136,6 +136,8 @@ public static class ApiStatusMessages
         public const string CategoriesNotExist = "Có danh mục không tồn tại.";
         public const string CategoriesUpdated = "Cập nhật danh mục sản phẩm thành công.";
 
+        public const string SkuDuplicated = "Mã SKU đã được dùng cho một biến thể khác. Nhập mã khác hoặc để trống để hệ thống tự sinh.";
+
         public const string PriceInvalid = "Giá không hợp lệ.";
         public const string ItemNotFound = "Không tìm thấy biến thể.";
         public const string ItemCreated = "Thêm biến thể thành công.";

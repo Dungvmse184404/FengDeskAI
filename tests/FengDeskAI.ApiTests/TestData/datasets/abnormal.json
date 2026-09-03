@@ -1,0 +1,21 @@
+{
+  "name": "abnormal",
+  "kind": "Abnormal",
+  "description": "Dữ liệu rác: route param không phải GUID, JSON hỏng cú pháp, số âm. KHÔNG dùng cho ma trận phân quyền vì route constraint {id:guid} sẽ chặn ở khâu chọn action (404) trước cả middleware phân quyền — chỉ dùng để khẳng định hệ thống không trả 5xx.",
+  "appliesTo": [ "robustness" ],
+
+  "routeValues": {
+    "*": "'; DROP TABLE users;--",
+    "id": "khong-phai-guid",
+    "guid": "khong-phai-guid",
+    "code": "###"
+  },
+
+  "bodies": {
+    "*": { "quantity": -1, "email": "khong-phai-email" }
+  },
+
+  "rawBodies": {
+    "*": "{ \"unclosed\": "
+  }
+}

@@ -9,6 +9,13 @@ public interface IRecommendationService
     Task<IServiceResult<RecommendationResponse>> GenerateAsync(
         Guid userId, GenerateRecommendationRequest request, CancellationToken ct = default);
 
+    /// <summary>
+    /// Gợi ý vật phẩm MANG THEO NGƯỜI (đeo tay, mặt dây, để ví, treo xe) — chấm theo bản mệnh/dụng thần
+    /// của user, không cần workspace. Không gọi AI microservice (xem ADR product-placement §7).
+    /// </summary>
+    Task<IServiceResult<RecommendationResponse>> GeneratePersonalAsync(
+        Guid userId, GeneratePersonalRecommendationRequest request, CancellationToken ct = default);
+
     /// <summary>Lấy lại một phiên gợi ý đã lưu (theo chủ sở hữu).</summary>
     Task<IServiceResult<RecommendationResponse>> GetByIdAsync(Guid id, Guid userId, CancellationToken ct = default);
 

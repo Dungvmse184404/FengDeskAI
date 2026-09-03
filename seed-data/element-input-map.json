@@ -1,5 +1,5 @@
 {
-  "weightScale": 1.0,
+  "weightScale": 8.0,
   "rows": [
     { "kind": "Color", "code": "Red", "element": "Hoa", "weight": 1.0 },
     { "kind": "Color", "code": "Orange", "element": "Hoa", "weight": 0.7 },

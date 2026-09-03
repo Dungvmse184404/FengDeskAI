@@ -1,0 +1,119 @@
+{
+  "storeName": "Vườn Phong Thủy Demo",
+  "placement": "Carry",
+  "imageUrlTemplate": "https://picsum.photos/seed/{slug}/600",
+  "rows": [
+    {
+      "name": "Vòng tay thạch anh tím",
+      "category": "Trang sức phong thủy",
+      "description": "Vòng tay đá thạch anh tím, đeo tay trái. Ổn định tinh thần, hợp người cần bồi hành Thổ/Hỏa.",
+      "primaryElement": "Tho",
+      "secondaryElements": [ "Hoa" ],
+      "vibes": [ "Calm" ],
+      "elementInputs": [
+        { "kind": "Material", "code": "Crystal" },
+        { "kind": "Color", "code": "Purple" },
+        { "kind": "Shape", "code": "Round" }
+      ],
+      "items": [
+        { "name": "Hạt 8 ly", "price": 350000, "stock": 25, "sku": "VT-TAT-8", "sizeClass": "Small", "weightGram": 60 },
+        { "name": "Hạt 10 ly", "price": 450000, "stock": 15, "sku": "VT-TAT-10", "sizeClass": "Small", "weightGram": 80 }
+      ]
+    },
+    {
+      "name": "Vòng tay gỗ sưa đỏ",
+      "category": "Trang sức phong thủy",
+      "7c144ac2-64d2-4921-b29f-b414ece134f4": null,
+      "description": "Vòng gỗ tự nhiên, mộc mạc và ấm. Hợp người cần bồi hành Mộc.",
+      "primaryElement": "Moc",
+      "secondaryElements": [],
+      "vibes": [ "Focus" ],
+      "elementInputs": [
+        {
+          "kind": "Material",
+          "code": "Wood"
+        },
+        {
+          "kind": "Color",
+          "code": "Brown"
+        },
+        {
+          "kind": "Shape",
+          "code": "Round"
+        }
+      ],
+      "items": [
+        {
+          "name": "Hạt 10 ly",
+          "price": 290000,
+          "stock": 30,
+          "sku": "VT-GSD-10",
+          "sizeClass": "Small",
+          "weightGram": 70
+        }
+      ]
+    },
+    {
+      "name": "Mặt dây chuyền tỳ hưu bạc",
+      "category": "Trang sức phong thủy",
+      "description": "Mặt dây bạc ta chạm tỳ hưu, đeo sát người. Hợp người cần bồi hành Kim.",
+      "primaryElement": "Kim",
+      "secondaryElements": [ "Tho" ],
+      "vibes": [ "Focus" ],
+      "elementInputs": [
+        { "kind": "Material", "code": "Metal" },
+        { "kind": "Color", "code": "Silver" }
+      ],
+      "items": [
+        { "name": "Bạc 925", "price": 690000, "stock": 12, "sku": "MD-TH-925", "sizeClass": "Small", "weightGram": 40 }
+      ]
+    },
+    {
+      "name": "Charm treo xe hồ lô đồng",
+      "category": "Phụ kiện phong thủy",
+      "description": "Hồ lô đồng nhỏ treo gương chiếu hậu, hóa giải sát khí trên đường.",
+      "primaryElement": "Kim",
+      "secondaryElements": [],
+      "vibes": [ "Calm" ],
+      "elementInputs": [
+        { "kind": "Material", "code": "Brass" },
+        { "kind": "Color", "code": "Gold" },
+        { "kind": "Shape", "code": "Round" }
+      ],
+      "items": [
+        { "name": "Cao 6cm", "price": 250000, "stock": 40, "sku": "CX-HL-6", "sizeClass": "Small", "weightGram": 90 }
+      ]
+    },
+    {
+      "name": "Charm ví đá obsidian",
+      "category": "Đá phong thủy",
+      "description": "Miếng đá obsidian đen bỏ ngăn ví, giữ của. Hợp người cần bồi hành Thủy.",
+      "primaryElement": "Thuy",
+      "secondaryElements": [ "Tho" ],
+      "vibes": [ "Calm" ],
+      "elementInputs": [
+        { "kind": "Material", "code": "Stone" },
+        { "kind": "Color", "code": "Black" },
+        { "kind": "Shape", "code": "Flat" }
+      ],
+      "items": [
+        { "name": "Bản 3cm", "price": 180000, "stock": 50, "sku": "CV-OBS-3", "sizeClass": "Small", "weightGram": 30 }
+      ]
+    },
+    {
+      "name": "Móc khóa gỗ đàn hương khắc chữ",
+      "category": "Phụ kiện phong thủy",
+      "description": "Móc khóa gỗ đàn hương mang theo túi xách, hương dịu. Bồi hành Mộc.",
+      "primaryElement": "Moc",
+      "secondaryElements": [ "Hoa" ],
+      "vibes": [ "Relax" ],
+      "elementInputs": [
+        { "kind": "Material", "code": "Wood" },
+        { "kind": "Color", "code": "Beige" }
+      ],
+      "items": [
+        { "name": "Mặt tròn", "price": 120000, "stock": 60, "sku": "MK-DH-R", "sizeClass": "Small", "weightGram": 25 }
+      ]
+    }
+  ]
+}

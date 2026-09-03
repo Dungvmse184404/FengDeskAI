@@ -1,3 +1,5 @@
+using FengDeskAI.Domain.Enums.Catalog;
+
 namespace FengDeskAI.Application.Features.CustomerCare.DTOs;
 
 /// <summary>Yêu cầu tạo gợi ý cho một workspace đã lưu.</summary>
@@ -7,22 +9,73 @@ public sealed record GenerateRecommendationRequest
 
     /// <summary>Số sản phẩm muốn gợi ý (mặc định 8, kẹp 1..20).</summary>
     public int? TopN { get; init; }
+
+    /// <summary>
+    /// Mục tiêu người dùng nêu trong phiên này (Tài lộc / Sức khỏe…). Có giá trị → LỌC ứng viên theo thẻ
+    /// <c>product_aspirations</c> đã duyệt TRƯỚC khi chấm điểm, và chọn hướng đặt theo cung Bát Trạch
+    /// tương ứng. Null = không lọc. Không lưu trên <c>User</c> — xem ADR personalized-recommendation-v3.1 §4.
+    /// </summary>
+    public Aspiration? Aspiration { get; init; }
+}
+
+/// <summary>
+/// Yêu cầu gợi ý vật phẩm MANG THEO NGƯỜI (vòng tay, mặt dây, charm treo xe…) — chấm theo bản mệnh,
+/// không gắn workspace nên không có <c>WorkspaceProfileId</c>.
+/// </summary>
+public sealed record GeneratePersonalRecommendationRequest
+{
+    /// <summary>Số sản phẩm muốn gợi ý (mặc định 8, kẹp 1..20).</summary>
+    public int? TopN { get; init; }
+
+    /// <inheritdoc cref="GenerateRecommendationRequest.Aspiration"/>
+    public Aspiration? Aspiration { get; init; }
 }
 
 public sealed record RecommendationResponse
 {
     public Guid Id { get; init; }
+
+    /// <summary>Workspace | PersonalCarry — FE dựa vào đây để render đúng loại phiên.</summary>
+    public string Kind { get; init; } = null!;
+
     public string? CustomerElement { get; init; }
     public int? KuaNumber { get; init; }
     public string? KuaGroup { get; init; }
+
+    /// <summary>
+    /// LEGACY (engine v2) — engine v3 dùng <c>WorkspaceScope</c> thay cho trọng số này. Giữ trong response
+    /// REST để không phá FE; KHÔNG gửi cho LLM nữa (model đọc được sẽ diễn giải sai).
+    /// </summary>
     public decimal PersonalWeight { get; init; }
+
     public string Status { get; init; } = null!;
     public string? Summary { get; init; }
 
-    /// <summary>Chênh lệch ngũ hành lý tưởng vs hiện trạng phòng (engine v3). Null khi đọc lại phiên cũ.</summary>
+    /// <summary>Chênh lệch ngũ hành lý tưởng vs hiện trạng phòng (engine v3). Null với phiên PersonalCarry.</summary>
     public GapBreakdownResponse? Gap { get; init; }
 
+    /// <summary>Căn cứ ngũ hành cá nhân đã dùng để chấm. Chỉ có ở phiên PersonalCarry.</summary>
+    public PersonalTargetResponse? PersonalTarget { get; init; }
+
+    /// <summary>
+    /// Ghi chú của engine về cách danh sách được dựng — vd đã phải BỎ bộ lọc mục tiêu vì chưa sản phẩm nào
+    /// gắn thẻ đó. Null = không có gì bất thường. AI nên nhắc lại ý này cho người dùng.
+    /// </summary>
+    public string? Note { get; init; }
+
     public List<RecommendationItemResponse> Items { get; init; } = new();
+}
+
+/// <summary>Vector mục tiêu cá nhân + căn cứ (Tứ Trụ hay Nạp Âm) — để AI diễn giải đúng cơ sở, không đoán.</summary>
+public sealed record PersonalTargetResponse
+{
+    /// <summary>TuTru | NapAm.</summary>
+    public string Source { get; init; } = null!;
+
+    /// <summary>Các hành đang cần được bồi (tên tiếng Việt), theo thứ tự ưu tiên.</summary>
+    public List<string> Elements { get; init; } = new();
+
+    public string Note { get; init; } = null!;
 }
 
 /// <summary>Breakdown Gap = adjustedIdeal − current cho từng hành, để FE hiển thị phòng đang thiếu/thừa gì.</summary>

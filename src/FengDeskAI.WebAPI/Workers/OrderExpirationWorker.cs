@@ -29,9 +29,9 @@ public sealed class OrderExpirationWorker : BackgroundService
     {
         var opts = _optionsMonitor.CurrentValue;
         var interval = TimeSpan.FromSeconds(opts.ScanIntervalSeconds);
-        _logger.LogInformation(
-            "OrderExpirationWorker chạy: đơn quá {Timeout} phút chưa thanh toán sẽ hết hạn, quét mỗi {Interval}s. IsActive={IsActive}",
-            opts.PendingTimeoutMinutes, interval.TotalSeconds, opts.IsActive);
+        //_logger.LogInformation(
+        //    "OrderExpirationWorker chạy: đơn quá {Timeout} phút chưa thanh toán sẽ hết hạn, quét mỗi {Interval}s. IsActive={IsActive}",
+        //    opts.PendingTimeoutMinutes, interval.TotalSeconds, opts.IsActive);
 
         using var timer = new PeriodicTimer(interval);
         try

@@ -4,6 +4,7 @@ using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Vendor;
 using FengDeskAI.Domain.Enums;
+using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -11,21 +12,24 @@ using Microsoft.Extensions.Logging;
 namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
 /// <summary>
-/// Seed dữ liệu Catalog mẫu để test luồng cart/checkout: 1 vendor user + 1 store +
-/// categories + tags + products (kèm items/ảnh/liên kết). Idempotent: bỏ qua nếu đã có product.
+/// Seed dữ liệu Catalog mẫu để test luồng cart/checkout: 1 vendor user + 1 store + categories + tags
+/// + products (kèm items/ảnh/liên kết). Data đọc từ <c>catalog-demo.json</c> (xem <see cref="CatalogDemoFile"/>),
+/// không hardcode. Idempotent: bỏ qua nếu đã có product.
 /// </summary>
 public class CatalogDemoSeeder : IDataSeeder
 {
-    private const string VendorEmail = "vendor@fengdesk.local";
-    private const string VendorPassword = "Vendor@123";
+    private const string FileName = "catalog-demo.json";
 
     private readonly AppDbContext _context;
+    private readonly SeedDataLoader _loader;
     private readonly IPasswordService _passwords;
     private readonly ILogger<CatalogDemoSeeder> _logger;
 
-    public CatalogDemoSeeder(AppDbContext context, IPasswordService passwords, ILogger<CatalogDemoSeeder> logger)
+    public CatalogDemoSeeder(
+        AppDbContext context, SeedDataLoader loader, IPasswordService passwords, ILogger<CatalogDemoSeeder> logger)
     {
         _context = context;
+        _loader = loader;
         _passwords = passwords;
         _logger = logger;
     }
@@ -41,13 +45,21 @@ public class CatalogDemoSeeder : IDataSeeder
             return;
         }
 
-        var owner = await EnsureVendorAsync(ct);
+        var file = _loader.Load<CatalogDemoFile>(FileName);
+        if (file.Products.Count == 0)
+        {
+            _logger.LogWarning("{File} không có sản phẩm nào — bỏ qua.", FileName);
+            return;
+        }
+
+        var owner = await EnsureVendorAsync(file.Vendor, ct);
+
         var store = new GardenStore
         {
-            Name = "Vườn Phong Thủy Demo",
-            Description = "Cửa hàng mẫu phục vụ test luồng đặt hàng.",
-            Hotline = "1900 1234",
-            OpeningHours = "08:00 - 21:00",
+            Name = file.Store.Name,
+            Description = file.Store.Description,
+            Hotline = file.Store.Hotline,
+            OpeningHours = file.Store.OpeningHours,
             IsActive = true,
         };
         store.Owners.Add(new GardenStoreOwner
@@ -66,7 +78,7 @@ public class CatalogDemoSeeder : IDataSeeder
             {
                 StoreId = store.Id,
                 WardId = ward.Id,
-                StreetAddress = "123 Đường Phong Thủy",
+                StreetAddress = file.Store.StreetAddress ?? "",
                 IsActive = true,
             }, ct);
         }
@@ -75,94 +87,98 @@ public class CatalogDemoSeeder : IDataSeeder
             _logger.LogWarning("Chưa có dữ liệu Ward — bỏ qua seed địa chỉ cho store demo.");
         }
 
-        var categories = new Dictionary<string, Category>();
-        foreach (var name in new[] { "Cây để bàn", "Đá phong thủy", "Đèn trang trí", "Tượng phong thủy" })
+        var categories = new Dictionary<string, Category>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in file.Categories)
         {
             var cat = new Category { Name = name, IsActive = true };
             categories[name] = cat;
             await _context.Set<Category>().AddAsync(cat, ct);
         }
 
-        var tags = new Dictionary<string, Tag>();
-        foreach (var name in new[] { "Mộc", "Thủy", "Hỏa", "Thổ", "Kim", "Giảm căng thẳng", "Hút tài lộc" })
+        foreach (var name in file.Tags)
+            await _context.Set<Tag>().AddAsync(new Tag { Name = name }, ct);
+
+        var products = new List<Product>();
+        foreach (var row in file.Products)
         {
-            var tag = new Tag { Name = name };
-            tags[name] = tag;
-            await _context.Set<Tag>().AddAsync(tag, ct);
+            if (string.IsNullOrWhiteSpace(row.Name)) continue;
+
+            // Placement quyết định sản phẩm đi luồng gợi ý nào — khai sai/bỏ trống thì về Desk (mặc định an toàn).
+            if (!Enum.TryParse<ProductPlacement>(row.Placement, ignoreCase: true, out var placement))
+            {
+                if (!string.IsNullOrWhiteSpace(row.Placement))
+                    _logger.LogWarning("{File}: placement '{P}' của '{Name}' không hợp lệ — dùng Desk.",
+                        FileName, row.Placement, row.Name);
+                placement = ProductPlacement.Desk;
+            }
+
+            var product = new Product
+            {
+                GardenStoreId = store.Id,
+                Name = row.Name,
+                Description = row.Description,
+                Placement = placement,
+                IsActive = true,
+            };
+
+            var slug = Uri.EscapeDataString(row.Name);
+            if (!string.IsNullOrWhiteSpace(file.ImageUrlTemplate))
+            {
+                product.Images.Add(new ProductImage
+                {
+                    Url = file.ImageUrlTemplate.Replace("{slug}", slug),
+                    SortOrder = 0,
+                });
+            }
+
+            // SizeClass nằm ở TỪNG SKU (migration MoveSizeClassToProductItem) — mỗi biến thể một giá trị,
+            // không còn gán chung ở product cha nữa.
+            foreach (var it in row.Items)
+            {
+                var item = new ProductItem
+                {
+                    Name = it.Name,
+                    Price = it.Price,
+                    Stock = it.Stock,
+                    Sku = it.Sku,
+                };
+                if (Enum.TryParse<SizeClass>(it.SizeClass, ignoreCase: true, out var size))
+                    item.SizeClass = size;
+                product.Items.Add(item);
+            }
+
+            if (!string.IsNullOrWhiteSpace(row.Category) && categories.TryGetValue(row.Category, out var cat))
+                product.ProductCategories.Add(new ProductCategory { CategoryId = cat.Id });
+            else if (!string.IsNullOrWhiteSpace(row.Category))
+                _logger.LogWarning("{File}: category '{Cat}' của '{Name}' không có trong danh sách categories.",
+                    FileName, row.Category, row.Name);
+
+            products.Add(product);
         }
 
-        var products = new List<Product>
-        {
-            BuildProduct(store.Id, "Cây Kim Tiền để bàn", "Cây phong thủy hút tài lộc, hợp mệnh Mộc.",
-                categories["Cây để bàn"],
-                ("Chậu sứ trắng", 250_000m, 30, "KT-WHITE"),
-                ("Chậu sứ xanh", 280_000m, 20, "KT-BLUE")),
-
-            BuildProduct(store.Id, "Cây Lưỡi Hổ mini", "Thanh lọc không khí, giảm căng thẳng.",
-                categories["Cây để bàn"],
-                ("Size nhỏ", 150_000m, 50, "LH-S")),
-
-            BuildProduct(store.Id, "Cầu thạch anh tím", "Đá phong thủy ổn định năng lượng.",
-                categories["Đá phong thủy"],
-                ("Đường kính 6cm", 450_000m, 15, "TA-6"),
-                ("Đường kính 8cm", 650_000m, 10, "TA-8")),
-
-            BuildProduct(store.Id, "Tượng Tỳ Hưu đồng", "Linh vật chiêu tài, hợp mệnh Kim.",
-                categories["Tượng phong thủy"],
-                ("Cao 10cm", 890_000m, 8, "TH-10")),
-
-            BuildProduct(store.Id, "Đèn muối Himalaya", "Ánh sáng ấm, thư giãn, hợp mệnh Hỏa.",
-                categories["Đèn trang trí"],
-                ("Loại 2-3kg", 320_000m, 25, "DM-23")),
-        };
         await _context.Set<Product>().AddRangeAsync(products, ct);
-
         await _context.SaveChangesAsync(ct);
 
         _logger.LogInformation(
             "Seed catalog demo xong: vendor {Email} / {Password}, store '{Store}', {Cat} categories, {Tag} tags, {Prod} products.",
-            VendorEmail, VendorPassword, store.Name, categories.Count, tags.Count, products.Count);
+            file.Vendor.Email, file.Vendor.Password, store.Name, categories.Count, file.Tags.Count, products.Count);
     }
 
-    private async Task<User> EnsureVendorAsync(CancellationToken ct)
+    private async Task<User> EnsureVendorAsync(CatalogDemoFile.VendorRow vendor, CancellationToken ct)
     {
-        var existing = await _context.Set<User>().FirstOrDefaultAsync(u => u.Email == VendorEmail, ct);
+        var existing = await _context.Set<User>().FirstOrDefaultAsync(u => u.Email == vendor.Email, ct);
         if (existing is not null) return existing;
 
         var user = new User
         {
-            Email = VendorEmail,
-            PasswordHash = _passwords.Hash(VendorPassword),
-            FullName = "Demo Vendor",
+            Email = vendor.Email,
+            PasswordHash = _passwords.Hash(vendor.Password),
+            FullName = vendor.FullName,
             Gender = Gender.Unspecified,
             Role = UserRole.Manager | UserRole.GardenOwner,
             IsActive = true,
         };
         await _context.Set<User>().AddAsync(user, ct);
         return user;
-    }
-
-    private static Product BuildProduct(
-        Guid storeId, string name, string description,
-        Category category,
-        params (string? Name, decimal Price, int Stock, string Sku)[] items)
-    {
-        var product = new Product
-        {
-            GardenStoreId = storeId,
-            Name = name,
-            Description = description,
-            IsActive = true,
-        };
-
-        var slug = Uri.EscapeDataString(name);
-        product.Images.Add(new ProductImage { Url = $"https://picsum.photos/seed/{slug}/600", SortOrder = 0 });
-
-        foreach (var (itemName, price, stock, sku) in items)
-            product.Items.Add(new ProductItem { Name = itemName, Price = price, Stock = stock, Sku = sku });
-
-        product.ProductCategories.Add(new ProductCategory { CategoryId = category.Id });
-
-        return product;
     }
 }

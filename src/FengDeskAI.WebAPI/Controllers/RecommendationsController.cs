@@ -26,6 +26,12 @@ public class RecommendationsController : ApiControllerBase
     public async Task<IActionResult> Generate([FromBody] GenerateRecommendationRequest request, CancellationToken ct)
         => ToActionResult(await _service.GenerateAsync(CurrentUserId, request, ct));
 
+    /// <summary>Gợi ý vật phẩm mang theo người (đeo tay, mặt dây, treo xe) — chấm theo bản mệnh, không cần workspace.</summary>
+    [HttpPost("personal")]
+    public async Task<IActionResult> GeneratePersonal(
+        [FromBody] GeneratePersonalRecommendationRequest request, CancellationToken ct)
+        => ToActionResult(await _service.GeneratePersonalAsync(CurrentUserId, request, ct));
+
     /// <summary>Lấy lại một phiên gợi ý đã lưu.</summary>
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)

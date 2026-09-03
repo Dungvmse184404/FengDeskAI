@@ -16,8 +16,15 @@ public class RecommendationConfiguration : IEntityTypeConfiguration<Recommendati
         builder.Property(r => r.Id).HasColumnName("id");
 
         builder.Property(r => r.UserId).HasColumnName("user_id").IsRequired();
-        builder.Property(r => r.WorkspaceProfileId).HasColumnName("workspace_profile_id").IsRequired();
+        // Nullable: phiên PersonalCarry (vật phẩm mang theo người) không gắn với phòng nào.
+        builder.Property(r => r.WorkspaceProfileId).HasColumnName("workspace_profile_id");
         builder.Property(r => r.WorkspaceTypeId).HasColumnName("workspace_type_id");
+        builder.Property(r => r.Kind)
+            .HasColumnName("kind")
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(Domain.Enums.Recommendation.RecommendationKind.Workspace)
+            .IsRequired();
 
         builder.Property(r => r.CustomerElement).HasColumnName("customer_element").HasConversion<string>().HasMaxLength(10);
         builder.Property(r => r.KuaNumber).HasColumnName("kua_number");

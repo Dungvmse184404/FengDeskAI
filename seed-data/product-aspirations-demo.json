@@ -1,0 +1,17 @@
+{
+  "_comment": "Thẻ MỤC TIÊU phong thủy cho sản phẩm demo. Khớp sản phẩm theo 'match' (chuỗi con trong tên, không phân biệt hoa/thường) — cùng cách ProductFengShuiDemoSeeder làm. Giá trị hợp lệ: Wealth | Career | Health | Relationship | Study.",
+  "approveOnSeed": true,
+  "_approveOnSeedNote": "true = seed thẳng ở trạng thái ĐÃ DUYỆT để môi trường dev/demo lọc được ngay. Ở production để false rồi cho admin duyệt qua PUT /api/products/{id}/aspirations.",
+  "rows": [
+    { "match": "Kim Tiền",        "aspirations": ["Wealth", "Career"] },
+    { "match": "Lưỡi Hổ",         "aspirations": ["Health"] },
+    { "match": "thạch anh",       "aspirations": ["Health", "Relationship"] },
+    { "match": "Tỳ Hưu",          "aspirations": ["Wealth"] },
+    { "match": "muối Himalaya",   "aspirations": ["Health"] },
+
+    { "match": "gỗ sưa đỏ",       "aspirations": ["Career", "Study"] },
+    { "match": "hồ lô đồng",      "aspirations": ["Health"] },
+    { "match": "obsidian",        "aspirations": ["Health"] },
+    { "match": "đàn hương",       "aspirations": ["Study", "Relationship"] }
+  ]
+}

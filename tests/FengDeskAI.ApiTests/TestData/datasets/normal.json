@@ -1,0 +1,17 @@
+{
+  "name": "normal",
+  "kind": "Normal",
+  "description": "Giá trị hợp lệ về mặt định dạng: GUID đúng chuẩn, mã ngắn dạng chữ, body JSON rỗng hợp lệ. Đây là bộ tái lập đúng hành vi trước khi tách dữ liệu ra file.",
+  "appliesTo": [ "authorization", "smoke", "robustness" ],
+
+  "routeValues": {
+    "*": "test",
+    "id": "00000000-0000-0000-0000-000000000001",
+    "guid": "00000000-0000-0000-0000-000000000001",
+    "code": "TEST"
+  },
+
+  "bodies": {
+    "*": {}
+  }
+}

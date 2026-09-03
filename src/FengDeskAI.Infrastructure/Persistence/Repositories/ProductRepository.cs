@@ -20,6 +20,7 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Elements)
             .Include(p => p.Vibes)
             .Include(p => p.Styles)
+            .Include(p => p.Aspirations)
             .Include(p => p.Models3D)
             .FirstOrDefaultAsync(p => p.Id == id, ct);
 
@@ -40,6 +41,8 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             query = query.Where(p => p.ProductCategories.Any(pc => pc.CategoryId == categoryId));
         if (filter.Element is { } element)
             query = query.Where(p => p.Elements.Any(e => e.Element == element));
+        if (filter.Aspiration is { } aspiration)
+            query = query.Where(p => p.Aspirations.Any(a => a.Aspiration == aspiration && a.IsApproved));
         if (filter.HasModel3D == true)
             query = query.Where(p => p.Models3D.Any(m =>
                 m.IsEnabled
@@ -119,15 +122,36 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         };
     }
 
-    public Task<List<Product>> GetScorableCandidatesAsync(CancellationToken ct = default)
-        => _set.AsNoTracking()
-            .Where(p => p.IsActive && p.Elements.Any())
+    public Task<List<Product>> GetScorableCandidatesAsync(
+        IReadOnlyCollection<ProductPlacement>? placements = null,
+        Aspiration? aspiration = null,
+        CancellationToken ct = default)
+    {
+        var query = _set.AsNoTracking().Where(p => p.IsActive && p.Elements.Any());
+
+        // placements = null → không lọc (dùng khi đọc lại phiên cũ, cần đủ tên sản phẩm mọi loại).
+        if (placements is { Count: > 0 })
+        {
+            var list = placements.ToList();
+            query = query.Where(p => list.Contains(p.Placement));
+        }
+
+        // Mục tiêu người dùng nêu (v3.1): chỉ thẻ ĐÃ DUYỆT mới được tính — vendor tự gắn không đủ để lên top.
+        if (aspiration is { } asp)
+            query = query.Where(p => p.Aspirations.Any(a => a.Aspiration == asp && a.IsApproved));
+
+        return query
             .Include(p => p.Elements)
             .Include(p => p.Vibes)
-            .Include(p => p.Styles)
             .Include(p => p.Images)
             .Include(p => p.Items)
             .ToListAsync(ct);
+    }
+
+    public Task<bool> SkuExistsAsync(string sku, Guid? excludeItemId, CancellationToken ct = default)
+        => _context.Set<ProductItem>()
+            .AsNoTracking()
+            .AnyAsync(i => i.Sku == sku && (excludeItemId == null || i.Id != excludeItemId), ct);
 
     public Task<ProductItem?> GetItemAsync(Guid productId, Guid itemId, CancellationToken ct = default)
         => _context.Set<ProductItem>().FirstOrDefaultAsync(i => i.Id == itemId && i.ProductId == productId, ct);
@@ -266,11 +290,64 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             await set.AddAsync(new ProductCategory { ProductId = productId, CategoryId = cid }, ct);
     }
 
-    public async Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, SizeClass size, CancellationToken ct = default)
+    public async Task ReplaceProposedAspirationsAsync(
+        Guid productId, IEnumerable<Aspiration> aspirations, CancellationToken ct = default)
     {
-        // size_class nằm trên products.
+        var set = _context.Set<ProductAspiration>();
+        var existing = await set.Where(a => a.ProductId == productId).ToListAsync(ct);
+
+        var wanted = aspirations.Distinct().ToHashSet();
+
+        // Chỉ xoá các dòng CHƯA duyệt và không còn được đề xuất — thẻ đã duyệt giữ nguyên.
+        set.RemoveRange(existing.Where(a => !a.IsApproved && !wanted.Contains(a.Aspiration)));
+
+        var present = existing.Select(a => a.Aspiration).ToHashSet();
+        foreach (var asp in wanted.Where(a => !present.Contains(a)))
+            await set.AddAsync(new ProductAspiration { ProductId = productId, Aspiration = asp, IsApproved = false }, ct);
+    }
+
+    public async Task<List<ProductAspiration>> ApproveAspirationsAsync(
+        Guid productId, IEnumerable<Aspiration> approved, Guid approvedBy, CancellationToken ct = default)
+    {
+        var set = _context.Set<ProductAspiration>();
+        var existing = await set.Where(a => a.ProductId == productId).ToListAsync(ct);
+        var wanted = approved.Distinct().ToHashSet();
+
+        foreach (var row in existing.Where(a => a.IsApproved && !wanted.Contains(a.Aspiration)))
+        {
+            row.IsApproved = false;
+            row.ApprovedBy = null;
+            row.ApprovedAt = null;
+        }
+
+        foreach (var asp in wanted)
+        {
+            var row = existing.FirstOrDefault(a => a.Aspiration == asp);
+            if (row is null)
+            {
+                row = new ProductAspiration { ProductId = productId, Aspiration = asp };
+                existing.Add(row);
+                await set.AddAsync(row, ct);
+            }
+
+            row.IsApproved = true;
+            row.ApprovedBy = approvedBy;
+            row.ApprovedAt = DateTime.UtcNow;
+        }
+
+        return existing;
+    }
+
+    public Task<List<ProductAspiration>> GetAspirationsAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<ProductAspiration>().AsNoTracking()
+            .Where(a => a.ProductId == productId)
+            .ToListAsync(ct);
+
+    public async Task SetFengShuiAsync(Guid productId, FengShuiElement primary, IEnumerable<FengShuiElement> secondaries, ProductPlacement placement, CancellationToken ct = default)
+    {
+        // placement nằm trên products; size_class đã chuyển về từng product_item.
         var product = await _set.FirstOrDefaultAsync(p => p.Id == productId, ct);
-        if (product is not null) product.SizeClass = size;
+        if (product is not null) product.Placement = placement;
 
         // Thay toàn bộ hành: 1 hành chính (IsPrimary) + các hành phụ (khác hành chính).
         var set = _context.Set<ProductElement>();

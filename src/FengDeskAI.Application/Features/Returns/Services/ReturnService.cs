@@ -558,6 +558,20 @@ public class ReturnService : IReturnService
             var from = rr.Status;
             rr.Reject(actor.UserId, DateTime.UtcNow, request.Reason);
             LogTransition(rr, from, $"Từ chối: {request.Reason}", actor.UserId);
+
+            // Máy trạng thái cho phép Refunding → Rejected, nên staff có thể từ chối một ticket đã
+            // duyệt hoàn tiền (vd phát hiện gian lận sau khi duyệt). Lệnh hoàn tiền lúc đó vẫn đang
+            // Pending, và lượt quét SLA (ProcessPendingRefundsAsync) chỉ lọc theo Status == Pending —
+            // nó sẽ CHI TIỀN cho một ticket đã bị từ chối. Phải hủy lệnh cùng lúc.
+            //
+            // Chỉ hủy khi còn Pending: lệnh đã Processing/Completed thì tiền đã rời đi, hủy ở đây là
+            // nói dối sổ sách — ca đó phải đi đường hoàn tiền ngược, không thuộc phạm vi từ chối.
+            if (rr.Refund is { Status: RefundStatus.Pending } refund)
+            {
+                refund.Cancel(actor.UserId);
+                LogTransition(rr, from, $"Hủy lệnh hoàn tiền đang chờ do ticket bị từ chối: {request.Reason}", actor.UserId);
+            }
+
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu trả hàng bị từ chối",
                 $"Yêu cầu của bạn đã bị từ chối. Lý do: {request.Reason}", rr.Id, ReferenceType.Return, ct);
             return null;

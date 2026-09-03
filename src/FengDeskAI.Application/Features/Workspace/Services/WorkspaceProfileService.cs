@@ -136,7 +136,9 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var previewCompatibilityPercent = (int)Math.Round(100m * (1m - previewGap.L1() / 2m), MidpointRounding.AwayFromZero);
 
         var user = await _uow.Users.GetByIdAsync(userId, ct);
-        var insights = SpaceInsightBuilder.Build(rows, profile.WorkPurpose, ctx.Modifiers, user?.DateOfBirth?.Year);
+        // Năm ÂM lịch — dùng .Year (dương) sẽ ra bản mệnh khác với hồ sơ mệnh & engine chấm điểm.
+        int? lunarBirthYear = user?.DateOfBirth is { } dob ? FengShuiCalculator.GetLunarYear(dob) : null;
+        var insights = SpaceInsightBuilder.Build(rows, profile.WorkPurpose, ctx.Modifiers, lunarBirthYear);
 
         var response = new WorkspaceElementAnalysisResponse
         {

@@ -2,18 +2,22 @@
 
 [← Mục lục](./README.md)
 
-Controller: `WorkspaceProfilesController` · Route gốc: `/api/workspace` · **Toàn bộ `[Authorize]`** — user chỉ thao tác trên profile của chính mình.
+Controller: **`WorkspaceController`** · Route gốc: `/api/workspace` · **Toàn bộ `[Authorize]`** — user chỉ thao tác trên profile của chính mình.
 
 Hồ sơ không gian làm việc — mô tả bàn/phòng/hướng/phong cách... dùng làm input cho engine gợi ý phong thủy. Profile mặc định được dùng khi user không chỉ định.
 
-> **Engine v3 — lưu ý field:**
-> - `fengShuiElement` (mệnh nhập tay) là **legacy**, engine v3 **không dùng** (mệnh phòng nay tính bằng vector ngũ hành từ loại phòng + màu/vật liệu).
-> - DB đã có thêm các cột phục vụ v3: `entrance_direction`, `toilet_direction`, `dark_directions` (hướng bị chắn → Directional Validation) và bảng phụ `workspace_profile_inputs` (màu/vật liệu/hình khối thực tế của phòng → dựng `currentVector`).
-> - ⚠️ Các field/bảng mới này **hiện chưa được lộ ra** trong request/response bên dưới — mới tồn tại ở tầng DB/engine.
+Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / ảnh / giọng nói → tự điền form) và **luồng đặt sản phẩm đã mua vào phòng**.
+
+> **Lưu ý field engine:**
+> - `fengShuiElement` (mệnh nhập tay) là **legacy**, engine **không dùng** — mệnh phòng tính bằng vector ngũ hành từ loại phòng + màu/vật liệu.
+> - `inputs` (màu/vật liệu/hình khối thực tế của phòng → dựng `currentVector`) **ĐÃ lộ ra** ở cả request lẫn response. Quy ước null-vs-rỗng: `inputs = null` → **giữ nguyên**; `inputs = []` → **xoá hết**.
+> - ⚠️ `entrance_direction`, `toilet_direction`, `dark_directions` (hướng bị chắn → Directional Validation) **vẫn CHƯA có ô nhập** ở request/UI — chỉ tồn tại ở tầng DB/engine, nên `DIRECTION_PENALTY` gần như không bao giờ kích hoạt. Xem `docs/ard/architecture-core/06-doc-debt.md`.
 
 ---
 
-## 📋 Bảng endpoint
+## 📋 Bảng endpoint — **18 endpoint**
+
+### CRUD hồ sơ
 
 | Method | Path | Quyền | Mô tả |
 |--------|------|-------|-------|
@@ -26,6 +30,31 @@ Hồ sơ không gian làm việc — mô tả bàn/phòng/hướng/phong cách..
 | PATCH | `/api/workspace/{id}/set-default` | Authenticated | Đặt làm mặc định |
 | DELETE | `/api/workspace/{id}` | Authenticated | Xóa profile |
 
+### AI intake (mô tả tự do / ảnh / giọng nói)
+
+| Method | Path | Quyền | Mô tả |
+|--------|------|-------|-------|
+| POST | `/api/workspace/parse-description` | **CustomerOnly** | Bắt đầu job parse — trả `operationId` **ngay**, không chờ LLM |
+| GET | `/api/workspace/parse-description/{operationId}` | **CustomerOnly** | Poll kết quả job (fallback khi lỡ mất event realtime; hết hạn → `404`) |
+| GET | `/api/workspace/speech-config` | **CustomerOnly** | Cấu hình STT (tắt → FE fallback Web Speech) |
+| POST | `/api/workspace/transcriptions` | **CustomerOnly** | Ghi âm → text (multipart, field `file`) |
+| POST | `/api/workspace/images` | Authenticated | Upload ảnh phòng để đính kèm vào intake |
+| GET | `/api/workspace/element-inputs` | Authenticated | Vocabulary màu/vật liệu/hình khối/vật trang trí |
+| POST | `/api/workspace/element-inputs/classify` | **CustomerOnly** | Tag tự đặt tên → hành + weight (AI, có chuẩn hoá deterministic) |
+
+> Job chạy nền qua `WorkspaceIntakeQueue` → `WorkspaceIntakeWorker`; tiến độ phát realtime qua SignalR group `ai-op-{operationId}`.
+> Rate-limit policy `workspace-intake` áp cho `parse-description`, `transcriptions`, `element-inputs/classify`.
+
+### Đặt sản phẩm đã mua vào phòng
+
+| Method | Path | Quyền | Mô tả |
+|--------|------|-------|-------|
+| GET | `/api/workspace/placements/purchasable` | Authenticated | Sản phẩm đã mua đủ điều kiện đặt phòng |
+| PUT | `/api/workspace/{id}/placements` | Authenticated | Đặt / chuyển sản phẩm sang phòng này (idempotent) |
+| DELETE | `/api/workspace/{id}/placements/{orderItemId}` | Authenticated | Gỡ sản phẩm khỏi phòng |
+
+> `element-analysis` tính **lúc đọc**, không lưu DB: `current`/`gap` chỉ tính hàng **đã giao**; `previewCurrent`/`previewGap` tính cả hàng **đang giao**.
+
 ---
 
 ## GET `/api/workspace` · `/default` · `/{id}`
@@ -37,7 +66,11 @@ Hồ sơ không gian làm việc — mô tả bàn/phòng/hướng/phong cách..
   "lighting": "Natural", "deskType": "Sitting",
   "deskOrientation": "East", "roomFacingDirection": "South",
   "workPurpose": "Office", "fengShuiElement": "Moc", "deskArea": 120,
-  "isDefault": true, "createdAt": "...", "updatedAt": "..."
+  "isDefault": true,
+  "completenessPercent": 75,
+  "missingFieldHints": ["Thêm diện tích mặt bàn để lọc vật phẩm vừa kích thước"],
+  "inputs": [{ "inputKind": "Material", "inputCode": "Wood" }],
+  "createdAt": "...", "updatedAt": "..."
 }
 ```
 

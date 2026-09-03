@@ -5,21 +5,27 @@ namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
 /// <summary>
 /// Tra cứu <c>element_input_map</c>: một tín hiệu (kind, code) → các đóng góp (hành, trọng số).
-/// Dựng 1 lần từ toàn bộ bảng map rồi dùng chung cho phòng &amp; sản phẩm.
+/// Dựng 1 lần từ toàn bộ bảng map rồi dùng chung cho phòng &amp; sản phẩm. Kèm nhãn tiếng Việt
+/// (<c>LabelVi</c>) của từng code để FE/insight diễn giải "nguyên do" bằng chính tag user đã khai.
 /// </summary>
 public sealed class ElementInputResolver
 {
     private readonly Dictionary<(ElementInputKind, string), List<KeyValuePair<FengShuiElement, decimal>>> _map;
+    private readonly Dictionary<(ElementInputKind, string), string> _labels;
 
     public ElementInputResolver(IEnumerable<ElementInputMap> rows)
     {
         _map = new();
+        _labels = new();
         foreach (var r in rows)
         {
             var key = (r.InputKind, r.InputCode);
             if (!_map.TryGetValue(key, out var list))
                 _map[key] = list = new();
             list.Add(new(r.Element, r.Weight));
+
+            if (!string.IsNullOrWhiteSpace(r.LabelVi) && !_labels.ContainsKey(key))
+                _labels[key] = r.LabelVi.Trim();
         }
     }
 
@@ -31,7 +37,48 @@ public sealed class ElementInputResolver
     public IEnumerable<KeyValuePair<FengShuiElement, decimal>> ResolveMany(
         IEnumerable<(ElementInputKind Kind, string Code)> inputs)
         => inputs.SelectMany(i => Resolve(i.Kind, i.Code));
+
+    /// <summary>Nhãn tiếng Việt của tag; không có thì trả về chính code (FE vẫn hiển thị được).</summary>
+    public string Label(ElementInputKind kind, string code)
+        => _labels.TryGetValue((kind, code), out var label) ? label : code;
 }
+
+/// <summary>Nguồn đóng góp vào vector hiện trạng phòng.</summary>
+public enum CurrentSourceKind
+{
+    /// <summary>Nền phòng theo loại (vector Interior) — luôn có mặt như "kiến thức nền".</summary>
+    Interior,
+    /// <summary>Tag user khai (màu / vật liệu / hình khối / vật trang trí).</summary>
+    Tag,
+    /// <summary>Sản phẩm đã mua đặt trong phòng.</summary>
+    Product,
+}
+
+/// <summary>
+/// Một nguồn đóng góp vào Current: <see cref="Votes"/> phiếu, phân bổ theo <see cref="Vector"/> (Σ=1).
+/// Phần của nguồn này trong Current[e] = Vector[e] × Votes / TotalVotes.
+/// </summary>
+public sealed record CurrentContribution(
+    CurrentSourceKind Source,
+    string Label,
+    decimal Votes,
+    ElementVector Vector,
+    ElementInputKind? InputKind = null,
+    string? InputCode = null,
+    Guid? ProductId = null);
+
+/// <summary>Kết quả dựng Current kèm breakdown theo nguồn (để FE vẽ radar "tag nào chiếm bao nhiêu %").</summary>
+public sealed record CurrentBreakdown(
+    ElementVector Current,
+    decimal TotalVotes,
+    IReadOnlyList<CurrentContribution> Contributions)
+{
+    /// <summary>Số bằng chứng THẬT (tag + sản phẩm) — 0 nghĩa là Current hoàn toàn từ nền phòng.</summary>
+    public int EvidenceCount => Contributions.Count(c => c.Source != CurrentSourceKind.Interior);
+}
+
+/// <summary>Sản phẩm đặt trong phòng, đã quy ra vector + số phiếu (dùng cho breakdown có tên).</summary>
+public sealed record ProductContribution(Guid ProductId, string Name, ElementVector Vector, decimal VoteWeight);
 
 /// <summary>PHẦN C.2 — dựng vector phòng: ideal → bẻ theo intent → hiện trạng.</summary>
 public static class WorkspaceVectorBuilder
@@ -40,6 +87,12 @@ public static class WorkspaceVectorBuilder
     public static ElementVector BuildIdeal(IEnumerable<WorkspaceTypeElement> typeElements)
         => ElementVector.FromContributions(typeElements
             .Where(e => string.Equals(e.Source, WorkspaceElementSources.Ideal, StringComparison.OrdinalIgnoreCase))
+            .Select(e => new KeyValuePair<FengShuiElement, decimal>(e.Element, e.Weight)));
+
+    /// <summary>Vector nền phòng từ các row <c>Source == "Interior"</c> (chuẩn hóa Σ=1; Zero nếu loại phòng chưa seed).</summary>
+    public static ElementVector BuildInterior(IEnumerable<WorkspaceTypeElement> typeElements)
+        => ElementVector.FromContributions(typeElements
+            .Where(e => string.Equals(e.Source, WorkspaceElementSources.Interior, StringComparison.OrdinalIgnoreCase))
             .Select(e => new KeyValuePair<FengShuiElement, decimal>(e.Element, e.Weight)));
 
     /// <summary>Bẻ ideal theo Intent (delta có thể âm) rồi chuẩn hóa lại.</summary>
@@ -51,10 +104,7 @@ public static class WorkspaceVectorBuilder
         return adjusted.Normalize();
     }
 
-    /// <summary>
-    /// Hiện trạng phòng: nếu user khai màu/vật liệu → cộng theo map; nếu không → fallback vector
-    /// Interior mặc định theo loại phòng.
-    /// </summary>
+    /// <summary>Hiện trạng phòng (không sản phẩm) — xem <see cref="BuildCurrentBreakdown"/>.</summary>
     public static ElementVector BuildCurrent(
         IReadOnlyCollection<WorkspaceProfileInput> inputs,
         ElementInputResolver resolver,
@@ -63,49 +113,95 @@ public static class WorkspaceVectorBuilder
             Array.Empty<(ElementVector, decimal)>());
 
     /// <summary>
-    /// Số "phiếu" quy ước cho vector Interior fallback khi phòng KHÔNG khai input nào —
-    /// coi nội thất mặc định như phòng trung bình 5 món đồ, để 1 sản phẩm đặt vào không chiếm 50%.
+    /// Số "phiếu" quy ước của nền phòng (vector Interior) — prior kiểu Dirichlet: nền phòng LUÔN có mặt,
+    /// tương đương k tag thật. Tag/sản phẩm user khai cộng thêm vào và dần lấn át nền khi đủ nhiều
+    /// (3 tag = 50/50 với nền). Tránh hoàn toàn trường hợp một hành = 0 chỉ vì user khai ít tag.
     /// </summary>
-    public const decimal InteriorFallbackVotes = 5m;
+    public const decimal InteriorPriorVotes = 3m;
+
+    /// <summary>Nhãn hiển thị của nguồn nền phòng.</summary>
+    public const string InteriorLabel = "Nền phòng theo loại";
+
+    /// <summary>Tương thích ngược — tên cũ của <see cref="InteriorPriorVotes"/>.</summary>
+    public const decimal InteriorFallbackVotes = InteriorPriorVotes;
 
     /// <summary>
-    /// Hiện trạng phòng + SẢN PHẨM ĐÃ MUA đặt vào (tính lúc đọc, không lưu):
-    /// mỗi input user khai = 1 phiếu; mỗi sản phẩm = vector chuẩn hóa × voteWeight
-    /// (mặc định 1.0, scale theo DecorItem code trong element_input_map).
-    /// Phòng không khai input → Interior fallback được scale thành <see cref="InteriorFallbackVotes"/> phiếu.
+    /// Hiện trạng phòng + sản phẩm (không cần tên) — dùng cho engine chấm điểm / preview 1 sản phẩm.
+    /// Cùng công thức với <see cref="BuildCurrentBreakdown"/>.
     /// </summary>
     public static ElementVector BuildCurrentWithProducts(
         IReadOnlyCollection<WorkspaceProfileInput> inputs,
         ElementInputResolver resolver,
         IEnumerable<WorkspaceTypeElement> interiorFallback,
         IReadOnlyCollection<(ElementVector Vector, decimal VoteWeight)> productContributions)
+        => BuildCurrentBreakdown(inputs, resolver, interiorFallback,
+                productContributions.Select(p => new ProductContribution(Guid.Empty, string.Empty, p.Vector, p.VoteWeight)).ToList())
+            .Current;
+
+    /// <summary>
+    /// Hiện trạng phòng = nền phòng (Interior × <see cref="InteriorPriorVotes"/> phiếu)
+    /// + mỗi tag user khai (≈ 1 phiếu — Σ weight của code trong element_input_map)
+    /// + mỗi sản phẩm đặt vào (vector chuẩn hóa × voteWeight), rồi chuẩn hóa Σ=1.
+    /// Trả kèm breakdown từng nguồn để FE hiển thị "tag nào chiếm bao nhiêu %" và insight nêu nguyên do.
+    /// Loại phòng chưa seed Interior → nền = phân bố đều 0.2 (vẫn không có hành = 0).
+    /// </summary>
+    public static CurrentBreakdown BuildCurrentBreakdown(
+        IReadOnlyCollection<WorkspaceProfileInput> inputs,
+        ElementInputResolver resolver,
+        IEnumerable<WorkspaceTypeElement> interiorFallback,
+        IReadOnlyCollection<ProductContribution> productContributions)
     {
-        // Vector nền cộng THÔ (không chuẩn hóa vội) — giữ nguyên tổng "phiếu" để sản phẩm
-        // cộng vào đúng tỉ lệ. Lưu ý FromContributions tự Normalize nên KHÔNG dùng ở đây.
-        ElementVector baseVector;
-        if (inputs.Count > 0)
+        var contributions = new List<CurrentContribution>();
+
+        // 1) Nền phòng — prior k phiếu.
+        var interior = BuildInterior(interiorFallback);
+        var interiorLabel = InteriorLabel;
+        if (interior.L1() <= 0m)
         {
-            // Mỗi input ≈ 1 phiếu (mỗi code trong element_input_map có Σ weight ≈ 1;
-            // nếu admin giảm weight của code thì phiếu của input đó tự giảm theo — chủ đích).
-            baseVector = RawSum(resolver.ResolveMany(inputs.Select(i => (i.InputKind, i.InputCode))));
+            interior = new ElementVector(0.2m, 0.2m, 0.2m, 0.2m, 0.2m);
+            interiorLabel = "Nền phòng (mặc định)";
         }
-        else
+        contributions.Add(new CurrentContribution(CurrentSourceKind.Interior, interiorLabel, InteriorPriorVotes, interior));
+
+        // 2) Tag user khai — mỗi tag = Σ weight của code (≈ 1 phiếu; admin giảm weight thì phiếu giảm theo — chủ đích).
+        foreach (var input in inputs)
         {
-            // Interior fallback (Σ=1) scale thành N phiếu quy ước.
-            baseVector = RawSum(interiorFallback
-                    .Where(e => string.Equals(e.Source, WorkspaceElementSources.Interior, StringComparison.OrdinalIgnoreCase))
-                    .Select(e => new KeyValuePair<FengShuiElement, decimal>(e.Element, e.Weight)))
-                .Normalize()
-                .Scale(InteriorFallbackVotes);
+            var raw = RawSum(resolver.Resolve(input.InputKind, input.InputCode));
+            var votes = raw.L1();
+            if (votes <= 0m) continue; // code không có trong map → không phải bằng chứng
+            contributions.Add(new CurrentContribution(
+                CurrentSourceKind.Tag,
+                resolver.Label(input.InputKind, input.InputCode),
+                votes,
+                raw.Normalize(),
+                InputKind: input.InputKind,
+                InputCode: input.InputCode));
         }
 
-        foreach (var (vector, voteWeight) in productContributions)
+        // 3) Sản phẩm đặt trong phòng.
+        foreach (var p in productContributions)
         {
-            if (voteWeight <= 0m) continue;
-            baseVector = baseVector.Add(vector.Normalize().Scale(voteWeight));
+            if (p.VoteWeight <= 0m) continue;
+            var v = p.Vector.Normalize();
+            if (v.L1() <= 0m) continue;
+            contributions.Add(new CurrentContribution(
+                CurrentSourceKind.Product,
+                p.Name,
+                p.VoteWeight,
+                v,
+                ProductId: p.ProductId == Guid.Empty ? null : p.ProductId));
         }
 
-        return baseVector.Normalize();
+        // Cộng THÔ theo phiếu rồi chuẩn hóa 1 lần — giữ đúng tỉ lệ giữa các nguồn.
+        var total = ElementVector.Zero;
+        decimal totalVotes = 0m;
+        foreach (var c in contributions)
+        {
+            total = total.Add(c.Vector.Scale(c.Votes));
+            totalVotes += c.Votes;
+        }
+
+        return new CurrentBreakdown(total.Normalize(), totalVotes, contributions);
     }
 
     /// <summary>Cộng dồn contributions KHÔNG chuẩn hóa (khác <see cref="ElementVector.FromContributions"/>).</summary>
@@ -117,7 +213,6 @@ public static class WorkspaceVectorBuilder
         return v;
     }
 }
-
 /// <summary>Hằng cho cột <c>workspace_type_elements.source</c>.</summary>
 public static class WorkspaceElementSources
 {

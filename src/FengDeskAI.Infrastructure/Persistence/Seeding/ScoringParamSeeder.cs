@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
 /// <summary>
-/// Seed 9 tham số engine chấm điểm v3 (PHẦN F). Data đọc từ <c>seed-data/scoring-params.json</c>.
+/// Seed tham số engine chấm điểm v3 (PHẦN F). Data đọc từ <c>seed-data/scoring-params.json</c>.
 /// Idempotent theo code. LƯU Ý: các cặp *Share cần giữ tổng = 1.0 — chỉ chỉnh scale khi hiểu rõ engine.
 /// </summary>
 public class ScoringParamSeeder : IDataSeeder

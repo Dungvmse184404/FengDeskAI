@@ -7,6 +7,7 @@
     <Project Path="src/FengDeskAI.WebAPI/FengDeskAI.WebAPI.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FengDeskAI.ApiTests/FengDeskAI.ApiTests.csproj" />
     <Project Path="tests/FengDeskAI.UnitTests/FengDeskAI.UnitTests.csproj" />
   </Folder>
 </Solution>

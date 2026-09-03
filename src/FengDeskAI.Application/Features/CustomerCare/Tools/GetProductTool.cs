@@ -12,7 +12,11 @@ public sealed class GetProductTool : IAiTool
     public GetProductTool(IProductService products) => _products = products;
 
     public string Name => "get_product";
-    public string Description => "Get a product's details by id: name, description, variants/price, images, category.";
+
+    public string Description =>
+        "Get one product's details by id: name, description, variants (price/stock/size), images, " +
+        "categories, and its feng shui attributes (elements, vibes, placement, approved goals). " +
+        "Use after search_products / recommend_products when the user asks about a specific item.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
@@ -29,6 +33,43 @@ public sealed class GetProductTool : IAiTool
         if (!result.IsSuccess || result.Data is null)
             return ToolArgs.Error(result.Message ?? "Product not found.");
 
-        return ToolArgs.Json(result.Data);
+        var p = result.Data;
+
+        // Đăng ký vào registry của lượt để AiChatService.LinkifyProducts tự chèn link nếu model quên.
+        // Thiếu bước này thì model chỉ có GUID trần → AiTextSanitizer(UserMessage) cắt còn "xxxxxxxx-..."
+        // và user không bấm được vào đâu cả.
+        context.Products.Add(new AiProductRef(p.Id, p.Name));
+
+        // Chiếu lại payload thay vì ToolArgs.Json(result.Data): DTO đầy đủ mang theo gardenStoreId,
+        // createdAt/updatedAt, id của từng ảnh/model3D — toàn GUID nhiễu, model dễ chép nhầm vào câu
+        // trả lời rồi bị censor. Chỉ đưa thứ model thật sự cần để tư vấn.
+        return ToolArgs.Json(new
+        {
+            p.Id,
+            p.Name,
+            Link = $"[{p.Name}](/products/{p.Id})",
+            p.Description,
+            p.StoreName,
+            Categories = p.Categories.Select(c => c.Name).ToList(),
+
+            // ── Phong thủy ──
+            p.PrimaryElement,
+            p.SecondaryElements,
+            p.Vibes,
+            // Desk | Living | Carry | Consumable — quyết định vật dùng ở đâu.
+            p.Placement,
+            // Mục tiêu ĐÃ được sàn duyệt (Wealth/Career/Health/Relationship/Study). Rỗng = chưa duyệt
+            // thẻ nào; ĐỪNG tự suy ra sản phẩm hợp mục tiêu gì khi danh sách này rỗng.
+            ApprovedGoals = p.Aspirations,
+
+            // ── Mua hàng ──
+            Items = p.Items.Select(i => new { i.Id, i.Name, i.Price, i.Stock, i.SizeClass }).ToList(),
+            ImageUrl = p.Images.OrderBy(i => i.SortOrder).FirstOrDefault()?.Url,
+            Has3DModel = p.Models3D.Count > 0,
+
+            Note = "When mentioning this product, write its name EXACTLY as the 'link' value (a markdown "
+                + "link). Never paste a raw id into your reply. 'placement' says where the item is used — "
+                + "do not give compass placement advice for Carry items.",
+        });
     }
 }

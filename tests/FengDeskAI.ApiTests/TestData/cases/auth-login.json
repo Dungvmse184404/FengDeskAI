@@ -1,0 +1,100 @@
+{
+  "feature": "Authentication - Login",
+  "requirement": "UC-01 Register / Login",
+
+  "cases": [
+    {
+      "id": "AUTH-LOGIN-01",
+      "kind": "Normal",
+      "description": "Sign in with a correct email and password",
+      "preCondition": "A Customer account exists and is active",
+      "procedure": "Send POST /api/Auth/login with the correct email and password of the Customer account",
+      "expectedResult": "Returns 200 with an access token, a refresh token and the user profile",
+      "method": "POST",
+      "path": "/api/Auth/login",
+      "role": "Anonymous",
+      "body": { "email": "{{email.Customer}}", "password": "{{password}}" },
+      "expectedStatus": 200,
+      "expectedMessageContains": "Đăng nhập thành công"
+    },
+    {
+      "id": "AUTH-LOGIN-02",
+      "kind": "Abnormal",
+      "description": "Sign in with a wrong password",
+      "preCondition": "A Customer account exists",
+      "procedure": "Send POST /api/Auth/login with the correct email but a wrong password",
+      "expectedResult": "Returns 401 with a generic message that does not reveal whether the email or the password was wrong",
+      "method": "POST",
+      "path": "/api/Auth/login",
+      "role": "Anonymous",
+      "body": { "email": "{{email.Customer}}", "password": "MatKhauSai@999" },
+      "expectedStatus": 401,
+      "expectedMessageContains": "Email hoặc mật khẩu không đúng"
+    },
+    {
+      "id": "AUTH-LOGIN-03",
+      "kind": "Abnormal",
+      "description": "Sign in with an email that is not registered",
+      "preCondition": "The email does not exist in the system",
+      "procedure": "Send POST /api/Auth/login with an email that was never registered",
+      "expectedResult": "Returns 401 with exactly the same message as the wrong-password case, so registered emails cannot be enumerated",
+      "method": "POST",
+      "path": "/api/Auth/login",
+      "role": "Anonymous",
+      "body": { "email": "{{newEmail}}", "password": "{{password}}" },
+      "expectedStatus": 401,
+      "expectedMessageContains": "Email hoặc mật khẩu không đúng"
+    },
+    {
+      "id": "AUTH-LOGIN-04",
+      "kind": "Boundary",
+      "description": "Sign in with an empty password",
+      "preCondition": "A Customer account exists",
+      "procedure": "Send POST /api/Auth/login with an empty password string",
+      "expectedResult": "Returns 401 without raising a server error",
+      "method": "POST",
+      "path": "/api/Auth/login",
+      "role": "Anonymous",
+      "body": { "email": "{{email.Customer}}", "password": "" },
+      "expectedStatus": 401
+    },
+    {
+      "id": "AUTH-LOGIN-05",
+      "kind": "Normal",
+      "description": "Sign in with the email in a different letter case",
+      "preCondition": "A Customer account exists with a lowercase email",
+      "procedure": "Send POST /api/Auth/login with the email written entirely in uppercase",
+      "expectedResult": "Returns 200 because the email is normalised to lowercase before lookup",
+      "method": "POST",
+      "path": "/api/Auth/login",
+      "role": "Anonymous",
+      "body": { "email": "CUSTOMER.TEST@FENGDESK.LOCAL", "password": "{{password}}" },
+      "expectedStatus": 200
+    },
+    {
+      "id": "AUTH-ME-01",
+      "kind": "Abnormal",
+      "description": "Call the current-user endpoint without signing in",
+      "preCondition": "No Authorization header is attached",
+      "procedure": "Send GET /api/Auth/me without a bearer token",
+      "expectedResult": "Returns 401",
+      "method": "GET",
+      "path": "/api/Auth/me",
+      "role": "Anonymous",
+      "expectedStatus": 401
+    },
+    {
+      "id": "AUTH-ME-02",
+      "kind": "Normal",
+      "description": "Call the current-user endpoint with a valid token",
+      "preCondition": "Signed in as the Customer account",
+      "procedure": "Send GET /api/Auth/me with the Customer bearer token",
+      "expectedResult": "Returns 200 with the profile of the signed-in account",
+      "method": "GET",
+      "path": "/api/Auth/me",
+      "role": "Customer",
+      "expectedStatus": 200,
+      "expectedMessageContains": null
+    }
+  ]
+}

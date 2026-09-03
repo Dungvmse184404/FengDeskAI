@@ -4,6 +4,13 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 
 > Khi đọc để hiểu kiến trúc hệ thống bây giờ, ưu tiên `docs/ard/architecture-core/` và `docs/ard/bounded-contexts/`. Chỉ mở file ở đây khi cần biết bối cảnh / lý do của một thay đổi cụ thể.
 
+## Hạ tầng & quy trình
+
+| File | Nội dung |
+|---|---|
+| [api-integration-testing.md](./api-integration-testing.md) | Bộ test API in-process + cổng chặn CI trước khi deploy VPS |
+| [authorization-hardening.md](./authorization-hardening.md) | Siết phân quyền: policy, resource-based authorization, audit log |
+
 ## Feature design (trước khi code)
 
 | File | Nội dung |
@@ -12,6 +19,14 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 | [feature-workspace-ai-intake.md](./feature-workspace-ai-intake.md) | AI parse mô tả không gian → điền workspace profile |
 | [ai-order-tool-design.md](./ai-order-tool-design.md) | Thiết kế tool AI thao tác đơn hàng qua chat |
 | [task-workspace-element-analysis.md](./task-workspace-element-analysis.md) | Phân tích ngũ hành từ input workspace |
+| [product-placement-personal-recommendation.md](./product-placement-personal-recommendation.md) | `ProductPlacement` + gợi ý vật phẩm mang theo người (tool `recommend_personal_items`) |
+| [product-template-shared-fengshui.md](./product-template-shared-fengshui.md) | **Proposal** — bản mẫu sản phẩm: nguồn phong thủy dùng chung giữa các shop |
+| [platform-sku-generation.md](./platform-sku-generation.md) | Sinh SKU ở backend (`FD-XXXXXXXX`), bỏ 2 generator trùng lặp bên FE |
+| [ai-chat-rewind-design.md](./ai-chat-rewind-design.md) | Rewind hội thoại AI: sửa & gửi lại tin của mình, cắt đuôi lịch sử |
+| [workspace-element-insights-design.md](./workspace-element-insights-design.md) | Diễn giải ngũ hành phòng thành lời khuyên đọc được |
+| [refactor-product-create-fengshui-flow.md](./refactor-product-create-fengshui-flow.md) | **Proposal** — luồng khai phong thủy khi tạo sản phẩm |
+| [refactor-ai-tool-handles.md](./refactor-ai-tool-handles.md) | **Proposal (chưa code)** — handle cho AI tool thay vì truyền GUID trần |
+| [product-item-size-class.md](./product-item-size-class.md) | `SizeClass` chuyển từ `Product` xuống `ProductItem` (kích thước biến thiên theo SKU) |
 
 ## Refactor
 
@@ -47,5 +62,9 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 |---|---|
 | [recommendation-scoring-v3.md](./recommendation-scoring-v3.md) | Engine chấm điểm phong thủy v3 |
 | [recommendation-scoring-v4-polarity.md](./recommendation-scoring-v4-polarity.md) | v4 — thêm polarity (tương sinh/tương khắc) |
+| [vibe-soft-scoring.md](./vibe-soft-scoring.md) | Vibe: bộ lọc cứng → tham số điểm (+ `MIN_SCORE_THRESHOLD`, kill-switch) |
+| [personalized-recommendation-v3.1.md](./personalized-recommendation-v3.1.md) | **Proposal** — v3.1: trục cá nhân (`personalScore` × `Wp` theo `Scope`) cho luồng workspace + lọc `Aspiration` |
 
 > v2 đã bị xóa (chỉ còn stub trỏ sang v3, không còn nội dung). Engine hiện tại: xem `docs/ard/bounded-contexts/customer-care.md`.
+
+> `note.md` là **sổ tay tra cứu phong thủy** (bảng Nạp Âm, Bát Trạch, Cung Mệnh) mà `DestinyCalculator` lấy dữ liệu — không phải ADR, cố ý không xếp vào nhóm nào.

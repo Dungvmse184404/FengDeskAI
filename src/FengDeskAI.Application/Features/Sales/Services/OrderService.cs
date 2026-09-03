@@ -275,6 +275,15 @@ public class OrderService : IOrderService
             if (delivery.IsExchange && request.Status == DeliveryStatus.Delivered)
                 await _returns.CompleteExchangeDeliveryAsync(delivery.Id, userId, ct);
 
+            // Hủy delivery phải hoàn kho, giống hủy cả đơn (OrderCancellationService). Thiếu bước
+            // này thì hàng của delivery bị hủy nằm luôn ngoài sổ: đã trừ lúc đặt, không ai cộng lại.
+            // Đơn nhiều vườn làm lộ rõ nhất — một vườn hủy phần của mình, phần đó thất thoát im lặng.
+            //
+            // Chỉ làm với Cancelled. KHÔNG làm với Returned: hàng trả về đi theo luồng RMA và
+            // ReturnService.RestockAsync đã cộng kho ở đó rồi, cộng thêm ở đây là cộng đúp.
+            if (request.Status == DeliveryStatus.Cancelled)
+                await RestockDeliveryAsync(delivery, ct);
+
             // Add tường minh qua repo (Added → INSERT). Add qua navigation vào delivery đã-tracked
             // bị EF đánh Modified (UPDATE 0 rows) vì BaseEntity set sẵn Id — xem ghi chú ở PaymentService.
             await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
@@ -331,6 +340,24 @@ public class OrderService : IOrderService
         }, ct);
 
         return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
+    }
+
+    /// <summary>
+    /// Cộng lại tồn kho cho đúng những dòng hàng thuộc delivery này (đơn nhiều vườn thì mỗi
+    /// delivery chỉ giữ phần của vườn mình).
+    /// </summary>
+    private async Task RestockDeliveryAsync(Delivery delivery, CancellationToken ct)
+    {
+        var lines = delivery.Order.Items.Where(i => i.DeliveryId == delivery.Id).ToList();
+        if (lines.Count == 0) return;
+
+        var productItems = await _uow.Orders.GetProductItemsAsync(
+            lines.Select(i => i.ProductItemId).Distinct(), ct);
+        var byId = productItems.ToDictionary(p => p.Id);
+
+        foreach (var line in lines)
+            if (byId.TryGetValue(line.ProductItemId, out var productItem))
+                productItem.Stock += line.Quantity;
     }
 
     public async Task<IServiceResult<DeliveryResponse>> AssignDeliveryStaffAsync(
@@ -449,17 +476,21 @@ public class OrderService : IOrderService
         List<(ProductItem Pi, int Quantity)> lines;
         if (request.Items is { Count: > 0 })
         {
+            // Cộng dồn bằng long: `Enumerable.Sum(int)` là phép cộng CHECKED, nên hai dòng cùng
+            // productItemId với số lượng lớn sẽ ném OverflowException NGAY TẠI ĐÂY — trước cả chốt
+            // `q <= 0` bên dưới — và thoát ra thành 500 thay vì 400.
             var qtyById = request.Items
                 .GroupBy(x => x.ProductItemId)
-                .ToDictionary(g => g.Key, g => g.Sum(x => x.Quantity));
-            if (qtyById.Values.Any(q => q <= 0))
+                .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.Quantity));
+            if (qtyById.Values.Any(q => q <= 0 || q > int.MaxValue))
                 return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.QuantityInvalid);
 
             var productItems = await _uow.Carts.GetProductItemsAsync(qtyById.Keys, ct);
             if (productItems.Count != qtyById.Count)
                 return ServiceResult<CheckoutContext>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.SomeProductsNotExist);
 
-            lines = productItems.Select(pi => (pi, qtyById[pi.Id])).ToList();
+            // An toàn vì đã chặn q > int.MaxValue ở trên.
+            lines = productItems.Select(pi => (pi, (int)qtyById[pi.Id])).ToList();
         }
         else
         {
