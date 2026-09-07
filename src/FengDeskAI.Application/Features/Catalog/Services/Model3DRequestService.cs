@@ -183,6 +183,37 @@ public class Model3DRequestService : IModel3DRequestService
         });
     }
 
+    public async Task<IServiceResult<Stream>> DownloadPreviewAsync(Guid requestId, CancellationToken ct = default)
+    {
+        // Resolve the current signed URL from the stored task, never from a caller-supplied URL.
+        var preview = await PreviewAsync(requestId, ct);
+        if (!preview.IsSuccess)
+            return ServiceResult<Stream>.Failure(preview.StatusCode,
+                preview.Message ?? ApiStatusMessages.Product.Model3DProviderError);
+
+        if (preview.Data?.State != Model3DGenerationState.Succeeded.ToString()
+            || string.IsNullOrWhiteSpace(preview.Data.GlbUrl))
+            return ServiceResult<Stream>.Failure(ApiStatusCodes.Conflict,
+                ApiStatusMessages.Product.Model3DRequestTaskNotSucceeded);
+
+        try
+        {
+            var stream = await _generator.DownloadAsync(preview.Data.GlbUrl, ct);
+            // Ownership passes to the controller's FileStreamResult.
+            return ServiceResult<Stream>.Success(stream);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Model3D] Preview download failed for request {RequestId}.", requestId);
+            return ServiceResult<Stream>.Failure(ApiStatusCodes.ServiceUnavailable,
+                ApiStatusMessages.Product.Model3DProviderError);
+        }
+    }
+
     public async Task<IServiceResult<ProductModel3DResponse>> AcceptAsync(Guid requestId, Guid staffUserId, CancellationToken ct = default)
     {
         var req = await _uow.Products.GetModel3DRequestAsync(requestId, ct);
