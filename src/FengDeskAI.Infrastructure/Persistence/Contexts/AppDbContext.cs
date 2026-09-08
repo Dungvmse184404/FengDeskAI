@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Interfaces.Security;
+﻿using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Common;
 using FengDeskAI.Domain.Entities.Chat;
 using FengDeskAI.Domain.Entities.Geography;
@@ -90,6 +90,10 @@ public class AppDbContext : DbContext
     public DbSet<ProductElementInput> ProductElementInputs => Set<ProductElementInput>();
     public DbSet<WorkPurposeElementModifier> WorkPurposeElementModifiers => Set<WorkPurposeElementModifier>();
     public DbSet<ScoringParam> ScoringParams => Set<ScoringParam>();
+
+    // P5 — nghề nghiệp bẻ vector điểm quan hệ `r` (ADR v3.2 §11)
+    public DbSet<Occupation> Occupations => Set<Occupation>();
+    public DbSet<OccupationElementModifier> OccupationElementModifiers => Set<OccupationElementModifier>();
 
     /// <summary>Map tới hàm Postgres <c>unaccent()</c> (extension unaccent) — chỉ dùng trong truy vấn EF
     /// để tìm kiếm không phân biệt dấu. Cần CREATE EXTENSION unaccent (đã bật trong migration).</summary>

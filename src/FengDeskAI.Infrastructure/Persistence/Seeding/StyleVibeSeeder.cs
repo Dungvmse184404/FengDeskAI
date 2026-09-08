@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Catalog;
+﻿using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -8,6 +8,17 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// <summary>
 /// Seed bảng tra cứu <c>styles</c> + <c>vibes</c> + <c>elements</c>. Data đọc từ
 /// <c>seed-data/styles-vibes.json</c>. Idempotent: chỉ thêm code còn thiếu.
+///
+/// <para>
+/// <b>⚠️ Cố ý CHỈ CHÈN, không đồng bộ giá trị row đã có.</b> Tên hiển thị sửa được qua <c>PUT /api/styles/{code}</c>,
+/// <c>/api/vibes/{code}</c>, <c>/api/elements/{code}</c>. Và khác các bảng khác, <c>Style</c>/
+/// <c>Vibe</c>/<c>Element</c> hiện thực <c>ILookup</c> chứ không kế thừa <c>BaseEntity</c> nên KHÔNG
+/// có cột <c>UpdatedBy</c> để phân biệt row admin đã sửa — không thể đồng bộ có chọn lọc như
+/// <c>WorkspaceTypeElementSeeder</c>.
+/// Muốn đổi giá trị nền của row đã tồn tại thì đi bằng <b>data migration</b> có mệnh đề <c>WHERE</c>
+/// canh đúng giá trị cũ — xem <c>ScoringPenaltiesV32</c>. Như vậy thay đổi nằm trong lịch sử
+/// migration: review được, rollback được, và không âm thầm đổi hành vi chấm điểm mỗi lần deploy.
+/// </para>
 /// Chạy SỚM (Order=1) vì product_styles/product_vibes/workspace_profiles có FK tới các code này.
 /// </summary>
 public class StyleVibeSeeder : IDataSeeder

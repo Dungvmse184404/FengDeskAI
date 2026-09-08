@@ -40,6 +40,19 @@ public class Recommendation : BaseEntity
     /// <summary>Trọng số cá nhân đã áp dụng (từ WorkspaceType): 1.0 riêng tư, 0.5 công cộng.</summary>
     public decimal PersonalWeight { get; set; }
 
+    /// <summary>
+    /// Phiên bản CÔNG THỨC đã sinh ra <c>RecommendationItem.Score</c> của phiên này —
+    /// <c>"3.1"</c> (gapScore chia <c>|gap|₁</c>, miền ±0.5) hoặc <c>"3.2"</c> (chia <c>|gap|₁/2</c>,
+    /// miền ±1.0 + penalty ×2 + <c>PersonalConflictMode.Scaled</c>).
+    /// <para>
+    /// Điểm của hai phiên bản KHÔNG so sánh được với nhau: cùng một sản phẩm × cùng một phòng cho hai
+    /// con số khác hẳn. FE phải ẩn mọi so sánh chéo phiên bản. Row cũ (sinh trước v3.2) mang
+    /// <c>"3.1"</c> nhờ default của cột.
+    /// </para>
+    /// Xem <c>docs/adr/score-explainability-v3.2.md</c> §8.4.
+    /// </summary>
+    public string FormulaVersion { get; set; } = ScoringFormulaVersions.Current;
+
     public RecommendationStatus Status { get; set; } = RecommendationStatus.Scored;
 
     /// <summary>Tổng kết do AI sinh cho cả phiên (optional).</summary>

@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Recommendation;
+﻿using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
@@ -10,7 +10,21 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// Seed <c>work_purpose_element_modifiers</c>: bẻ vector lý tưởng theo mục đích làm việc.
 /// Data đọc từ <c>seed-data/work-purpose-modifiers.json</c>. Idempotent theo (work_purpose, element).
 /// Delta (có thể âm) nhân với hệ số scale.
-/// </summary>
+///
+/// <para>
+/// <b>⚠️ Cố ý CHỈ CHÈN, không đồng bộ giá trị row đã có.</b> Delta theo mục đích phòng chỉnh được runtime qua
+/// <c>PUT /api/admin/scoring/purpose-modifiers</c> — cùng lý do với <c>scoring_params</c>.
+/// Muốn đổi giá trị nền của row đã tồn tại thì đi bằng <b>data migration</b> có mệnh đề <c>WHERE</c>
+/// canh đúng giá trị cũ — xem <c>ScoringPenaltiesV32</c>. Như vậy thay đổi nằm trong lịch sử
+/// migration: review được, rollback được, và không âm thầm đổi hành vi chấm điểm mỗi lần deploy.
+/// </para>
+/// <para>
+/// <b>⚠️ Cố ý CHỈ CHÈN, không đồng bộ giá trị row đã có.</b> Delta theo mục đích phòng chỉnh được runtime qua
+/// <c>PUT /api/admin/scoring/purpose-modifiers</c> — cùng lý do với <c>scoring_params</c>.
+/// Muốn đổi giá trị nền của row đã tồn tại thì đi bằng <b>data migration</b> có mệnh đề <c>WHERE</c>
+/// canh đúng giá trị cũ — xem <c>ScoringPenaltiesV32</c>. Như vậy thay đổi nằm trong lịch sử
+/// migration: review được, rollback được, và không âm thầm đổi hành vi chấm điểm mỗi lần deploy.
+/// </para>/// </summary>
 public class WorkPurposeModifierSeeder : IDataSeeder
 {
     private readonly AppDbContext _context;

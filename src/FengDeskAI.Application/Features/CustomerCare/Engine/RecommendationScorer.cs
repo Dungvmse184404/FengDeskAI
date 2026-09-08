@@ -1,3 +1,4 @@
+﻿using FengDeskAI.Domain.Entities.CustomerCare;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
@@ -46,8 +47,19 @@ public sealed class RecommendationScorer : IRecommendationScorer
         return ScoreOne(context, product, gap, gapL1, ScoreMode.Fit)!;
     }
 
-    /// <summary>Rank: chấm để xếp hạng &amp; lọc candidates. Fit: chấm 1×1 cho trang chi tiết — không loại, chỉ caution.</summary>
-    private enum ScoreMode { Rank, Fit }
+    public ScoredProduct ScoreSinglePersonal(ScoringContext context, ProductFacts product)
+    {
+        // Không có phòng: gap = Zero − Zero. Policy của Carry không đọc tới hai vector này.
+        var gap = context.AdjustedIdeal.Subtract(context.CurrentVector);
+        return ScoreOne(context, product, gap, gap.L1(), ScoreMode.PersonalFit)!;
+    }
+
+    /// <summary>
+    /// Rank: chấm để xếp hạng &amp; lọc candidates. Fit: chấm 1×1 theo phòng cho trang chi tiết — không
+    /// loại, chỉ caution. PersonalFit: chấm 1×1 theo bản mệnh (vật mang theo người) — cũng không loại.
+    /// <para>Chỉ <see cref="Rank"/> mới được loại sản phẩm; hai mode Fit giữ hợp đồng "luôn có kết quả".</para>
+    /// </summary>
+    private enum ScoreMode { Rank, Fit, PersonalFit }
 
     private static ScoredProduct? ScoreOne(ScoringContext ctx, ProductFacts product, ElementVector gap, decimal gapL1, ScoreMode mode)
     {
@@ -58,9 +70,14 @@ public sealed class RecommendationScorer : IRecommendationScorer
         // của ScoreSingle) — placement chỉ sinh caution để user hiểu vật phẩm không dành cho không gian.
         // Trục cá nhân (v3.1) chỉ bật khi có trọng số > 0 VÀ user có ngày sinh — tắt thì mọi luật giữ như trước.
         bool personalBlend = ctx.PersonalBlendActive;
-        var policy = mode == ScoreMode.Fit
-            ? PlacementPolicy.WorkspaceFit(personalBlend)
-            : PlacementPolicy.For(product.Placement, personalBlend);
+        var policy = mode switch
+        {
+            ScoreMode.Fit => PlacementPolicy.WorkspaceFit(personalBlend, ctx.Scope),
+            // Ép luật của Carry bất kể placement thật: endpoint fit/personal trả lời "vật này hợp bản
+            // mệnh bạn tới đâu", nên phải chấm theo dụng thần chứ không theo gap phòng.
+            ScoreMode.PersonalFit => PlacementPolicy.For(ProductPlacement.Carry, personalBlend, ctx.Scope),
+            _ => PlacementPolicy.For(product.Placement, personalBlend, ctx.Scope),
+        };
 
         if (!policy.IsRecommendable)
             return null; // vd hàng tiêu hao — không đưa vào bất kỳ danh sách gợi ý nào
@@ -71,6 +88,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
         // ── Bước 2a — Intent: phân biệt "lệch vibe" với "chưa khai vibe" (thiếu dữ liệu ≠ bằng chứng lệch).
         //    VIBE_FILTER_HARD ≥ 0.5 giữ nguyên hành vi v3 (loại cứng); < 0.5 chuyển sang trừ điểm.
         decimal vibePenalty = 0m;
+        string vibeCode = ScoringParamCodes.VibeMismatchPenalty;
+        string vibeReason = "Vibe sản phẩm hợp mục đích của phòng — không trừ điểm.";
         if (TargetVibe(ctx.Purpose) is { } vibe)
         {
             bool unknown = product.Vibes.Count == 0;
@@ -86,35 +105,73 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 if (!hard)
                     vibePenalty = unknown ? ctx.Params.VibeUnknownPenalty : ctx.Params.VibeMismatchPenalty;
 
+                vibeCode = unknown ? ScoringParamCodes.VibeUnknownPenalty : ScoringParamCodes.VibeMismatchPenalty;
+                vibeReason = unknown
+                    ? $"Sản phẩm chưa khai vibe nào — chưa xác minh được có hợp mục đích {ctx.Purpose} của phòng không."
+                    : $"Phòng dùng để {ctx.Purpose} nên cần vibe {vibe}; sản phẩm không khai vibe đó.";
+
                 cautions.Add(unknown
                     ? "Sản phẩm chưa khai báo vibe — chưa xác minh được có hợp mục đích phòng không."
                     : $"Vibe sản phẩm chưa khớp mục đích {ctx.Purpose} của phòng.");
             }
         }
+        else
+        {
+            vibeReason = "Phòng không nêu mục đích cụ thể — không xét vibe.";
+        }
 
         var productDominant = product.Vector.Dominant();
 
         // ── Bước 2b — User constraint (chỉ khi có personalVector VÀ policy còn dùng luật phạt/loại) ──
-        //    PersonalConflictMode.None = v3.1 đã tính xung khắc có dấu trong personalScore ở bước 2c.
+        //    PersonalConflictMode.None = không gian Public: không neo vào bản mệnh một người (§14.3 · Q12).
+        //    Scaled = L2 của v3.2: không loại, trừ USER_CONFLICT_PENALTY × Wp (§14.2).
         decimal userPenalty = 0m;
+        string userPenaltyReason = policy.Conflict switch
+        {
+            PersonalConflictMode.None when ctx.Scope == WorkspaceScope.Public =>
+                "Không gian chung — hệ thống không xét khắc bản mệnh của riêng ai.",
+            _ when ctx.PersonalVector is null =>
+                "Chưa có ngày sinh nên chưa xác định được bản mệnh để xét.",
+            _ => "Hành trội của sản phẩm không khắc bản mệnh của bạn.",
+        };
         if (ctx.PersonalVector is { } personal && policy.Conflict != PersonalConflictMode.None)
         {
+            bool scaled = policy.Conflict == PersonalConflictMode.Scaled;
             var personalDominant = personal.Dominant();
             // Hành trội sản phẩm KHẮC mệnh user → xét quan hệ từ mệnh: BiKhac = bị obj khắc.
+            // Nhị phân theo hành TRỘI, không theo tỉ trọng — nhất quán với luật v3 và với
+            // DescribePersonalAffinity (§14.6 #2).
             bool conflict = FengShuiCalculator.GetRelation(personalDominant, productDominant) == FengShuiRelation.BiKhac;
             if (conflict)
             {
-                bool hardFilter = policy.Conflict == PersonalConflictMode.AlwaysHard
-                    || ctx.Scope == WorkspaceScope.Private;
+                // Scaled không bao giờ loại: phần "bị khắc" đã thành một số hạng có tên trong điểm,
+                // giữ sản phẩm lại để còn giải thích được vì sao nó xếp thấp (R1).
+                bool hardFilter = !scaled
+                    && (policy.Conflict == PersonalConflictMode.AlwaysHard || ctx.Scope == WorkspaceScope.Private);
 
                 if (mode == ScoreMode.Rank && hardFilter)
                     return null; // hard: loại khỏi candidates
-                userPenalty = ctx.Params.UserConflictPenalty; // soft: trừ điểm
-                cautions.Add($"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ điểm"
-                    + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
+
+                userPenalty = scaled
+                    ? ctx.Params.UserConflictPenalty * ctx.PersonalWeight
+                    : ctx.Params.UserConflictPenalty;
+
+                userPenaltyReason = scaled
+                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant}. Mức phạt co giãn theo "
+                        + $"trọng số cá nhân của không gian: {ctx.Params.UserConflictPenalty:0.00} × "
+                        + $"{ctx.PersonalWeight:0.00} = {userPenalty:0.00}."
+                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} — trục cá nhân đang tắt "
+                        + $"nên áp mức phạt đầy đủ {userPenalty:0.00}.";
+
+                cautions.Add(scaled
+                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ {userPenalty:0.00} điểm."
+                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ điểm"
+                        + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
             }
-            else
+            else if (!scaled)
             {
+                // Ở chế độ Scaled, DescribePersonalAffinity (bước 2d) đã nói về quan hệ mệnh ↔ sản phẩm
+                // với nhiều thông tin hơn — thêm dòng này nữa là lặp.
                 facts.Add($"Hành {productDominant} không khắc bản mệnh {personalDominant}.");
             }
         }
@@ -124,18 +181,40 @@ public sealed class RecommendationScorer : IRecommendationScorer
             ? (ctx.PersonalNeedVector ?? ElementVector.Zero, (ctx.PersonalNeedVector ?? ElementVector.Zero).L1())
             : (gap, gapL1);
 
-        decimal gapScore = targetL1 == 0m ? 0m : target.Dot(product.Vector) / targetL1;
+        // v3.2 §8 — chuẩn hoá về ±1.0. Mẫu số phải theo NHÁNH, không chia đôi tất:
+        //   WorkspaceGap : target = gap, Σ = 0 ⇒ nửa dương = |gap|₁/2, tử số chỉ với tới nửa đó
+        //                  ⇒ chia |gap|₁ (cũ) kẹp trần ở ±0.5, tier "Rất hợp" (≥0.6) bất khả thi.
+        //   PersonalNeed : target Σ = 1 và KHÔNG âm ⇒ không có "hai nửa" để chia. Chia đôi ở đây thì
+        //                  mọi sản phẩm khớp ≥50% đều bão hoà 1.000 ⇒ luồng Carry mất khả năng xếp hạng.
+        // ĝ / r / d dựng bằng ElementDirection — CÙNG một hàm mà radar phân tích phòng dùng, nên đa giác
+        // trên hai màn hình không thể lệch nhau. Chuẩn hoá VECTOR trước rồi mới nhân (thay vì chia điểm
+        // vô hướng sau) để ĝ trở thành đại lượng có thật, trả được ra ngoài cho FE mô phỏng Wp (§10.3).
+        FengShuiElement? destiny = ctx.PersonalVector?.Dominant();
+        bool blendPersonal = personalBlend && policy.Target == ScoringTarget.WorkspaceGap;
+
+        var direction = policy.Target == ScoringTarget.PersonalNeed
+            ? ElementDirection.ForPersonalNeed(target)
+            : ElementDirection.ForWorkspaceGap(
+                target, blendPersonal ? destiny : null, ctx.PersonalWeight, ctx.RuleScoreOf,
+                ctx.OccupationDelta, ctx.Params.OccupationShare);
+
+        var normalizedGap = direction.NormalizedGap;
+        var ruleScoreVector = direction.RuleScoreVector;
+        var combinedDirection = direction.CombinedDirection;
+
+        decimal gapScore = Math.Clamp(normalizedGap.Dot(product.Vector), -1m, 1m);
         DescribeTarget(policy.Target, target, product.Vector, productDominant, gapScore, facts, cautions);
 
         // ── Bước 2d (v3.1) — trộn trục cá nhân, CHỈ cho nhánh chấm theo phòng ──
         //    Nhánh PersonalNeed (Carry) vốn đã 100% cá nhân nên không trộn thêm.
         decimal blended = gapScore;
-        if (personalBlend && policy.Target == ScoringTarget.WorkspaceGap && ctx.PersonalVector is { } personalVec)
+        decimal? personalScore = null;
+
+        if (ruleScoreVector is { } r && destiny is { } mine)
         {
-            var personalDominant = personalVec.Dominant();
-            decimal personalScore = PersonalAffinity(ctx, personalDominant, product.Vector);
-            blended = (1m - ctx.PersonalWeight) * gapScore + ctx.PersonalWeight * personalScore;
-            DescribePersonalAffinity(personalDominant, productDominant, personalScore, facts, cautions);
+            personalScore = Math.Clamp(r.Dot(product.Vector), -1m, 1m);
+            blended = (1m - ctx.PersonalWeight) * gapScore + ctx.PersonalWeight * personalScore.Value;
+            DescribePersonalAffinity(mine, productDominant, personalScore.Value, facts, cautions);
         }
 
         // ── Bước 3 — Directional Validation (bỏ qua với vật mang theo người / cây) ──
@@ -143,38 +222,149 @@ public sealed class RecommendationScorer : IRecommendationScorer
             ? ValidateDirection(ctx, productDominant)
             : (0m, PlacementHintWithoutDirection(product.Placement));
 
-        decimal score = Math.Round(Math.Clamp(blended - userPenalty - dirPenalty - vibePenalty, -1m, 1m), 3);
+        decimal rawScore = blended - userPenalty - dirPenalty - vibePenalty;
+        decimal clamped = Math.Clamp(rawScore, -1m, 1m);
+        decimal score = Math.Round(clamped, 3);
 
         // Lưới an toàn: loại theo ĐIỂM TỔNG thay vì theo từng thuộc tính đơn lẻ. Fit không cắt —
         // trang chi tiết sản phẩm luôn phải trả về kết quả kể cả khi điểm rất thấp.
         if (mode == ScoreMode.Rank && score < ctx.Params.MinScoreThreshold)
             return null;
 
-        return new ScoredProduct(product.ProductId, score, facts, cautions, placementHint);
+        var breakdown = new ScoreBreakdown(
+            FormulaVersion: ScoringFormulaVersions.Current,
+            Target: policy.Target,
+            Placement: product.Placement,
+            GapScore: gapScore,
+            PersonalScore: personalScore,
+            PersonalWeight: policy.Target == ScoringTarget.PersonalNeed ? 0m : ctx.PersonalWeight,
+            PersonalWeightCode: policy.Target == ScoringTarget.PersonalNeed ? null : ScoringParamCodes.PersonalWeightFor(ctx.Scope),
+            Blended: blended,
+            UserPenalty: userPenalty,
+            DirectionPenalty: dirPenalty,
+            VibePenalty: vibePenalty,
+            RawScore: rawScore,
+            Clamped: clamped != rawScore,
+            ProductVector: product.Vector,
+            NormalizedGap: normalizedGap,
+            RuleScoreVector: ruleScoreVector,
+            CombinedDirection: combinedDirection,
+            PersonalNeedVector: policy.Target == ScoringTarget.PersonalNeed ? ctx.PersonalNeedVector : null,
+            PersonalVector: policy.Target == ScoringTarget.PersonalNeed ? null : ctx.PersonalVector,
+            PersonalTarget: policy.Target == ScoringTarget.PersonalNeed || ctx.PersonalVector is not { } mine2
+                ? null
+                : ElementDirection.PersonalTargetOf(ctx.AdjustedIdeal, mine2, ctx.PersonalWeight),
+            Components: BuildComponents(ctx, policy, product, normalizedGap, gapScore, personalScore, destiny),
+            Penalties: BuildPenalties(
+                ctx, userPenalty, userPenaltyReason, dirPenalty, placementHint, vibePenalty, vibeCode, vibeReason),
+            ConflictResolution: direction.ConflictResolution,
+            DestinyElement: destiny,
+            // Chỉ khai báo nghề nghiệp khi nó THẬT SỰ dịch được `r`. Trả mã nghề kèm một shift toàn 0
+            // sẽ đẻ ra một lớp radar phẳng lì và một dòng breakdown vô nghĩa.
+            BaseRuleScoreVector: direction.OccupationShift is null ? null : direction.BaseRuleScoreVector,
+            OccupationCode: direction.OccupationShift is null ? null : ctx.OccupationCode,
+            OccupationNameVi: direction.OccupationShift is null ? null : ctx.OccupationNameVi,
+            OccupationShare: direction.OccupationShift is null ? 0m : ctx.Params.OccupationShare);
+
+        return new ScoredProduct(product.ProductId, score, facts, cautions, placementHint, breakdown);
     }
 
     /// <summary>
-    /// Điểm hợp mệnh của sản phẩm, ∈ [−1, +1] — v3.1. Tổng có TRỌNG SỐ theo vector sản phẩm của điểm
-    /// quan hệ ngũ hành từ <c>feng_shui_rules</c>:
-    /// <code>personalScore = Σ productVector[e] × RuleScore(mệnh user, e)</code>
-    /// <para>
-    /// Cố tình KHÔNG dùng tích vô hướng <c>personalVector · productVector</c>: hai vector đều không âm
-    /// nên kết quả luôn ≥ 0 — không bao giờ phạt được sản phẩm khắc mệnh, trục cá nhân sẽ vô nghĩa.
-    /// Bảng luật cho điểm CÓ DẤU (tỷ hòa +1.0 … bị khắc −1.0) nên diễn đạt được cả hai chiều.
-    /// </para>
+    /// Các số hạng CỘNG vào điểm, đúng thứ tự waterfall của FE. Σ <c>Contribution</c> = <c>Blended</c>.
     /// </summary>
-    private static decimal PersonalAffinity(
-        ScoringContext ctx, FengShuiElement personalDominant, ElementVector productVector)
+    private static IReadOnlyList<ScoreComponent> BuildComponents(
+        ScoringContext ctx, PlacementPolicy policy, ProductFacts product,
+        ElementVector normalizedGap, decimal gapScore, decimal? personalScore, FengShuiElement? destiny)
     {
-        decimal sum = 0m;
-        foreach (var (element, weight) in productVector.Enumerate())
+        if (policy.Target == ScoringTarget.PersonalNeed)
         {
-            if (weight == 0m) continue;
-            sum += weight * ctx.RuleScoreOf(personalDominant, element);
+            // Carry không có phòng ⇒ waterfall chỉ MỘT thành phần. FE phải dùng component khác, không
+            // dùng chung với luồng workspace (§PHẦN E #6).
+            return new[]
+            {
+                new ScoreComponent(
+                    ScoreComponentCodes.PersonalNeedScore, "Hợp dụng thần của bạn",
+                    Value: gapScore, Weight: 1m, Contribution: gapScore,
+                    ReasonVi: DescribeVectorMatch(
+                        normalizedGap, product.Vector, "hành bạn đang cần được bồi", "hành chưa phải thứ bạn cần")),
+            };
         }
 
-        return Math.Clamp(sum, -1m, 1m);
+        decimal wp = personalScore is null ? 0m : ctx.PersonalWeight;
+        var components = new List<ScoreComponent>
+        {
+            new(ScoreComponentCodes.GapScore, "Khớp nhu cầu của phòng",
+                Value: gapScore, Weight: 1m - wp, Contribution: (1m - wp) * gapScore,
+                ReasonVi: DescribeVectorMatch(
+                    normalizedGap, product.Vector, "hành phòng đang thiếu", "hành phòng đã thừa")),
+        };
+
+        if (personalScore is { } ps && destiny is { } mine)
+        {
+            var relation = FengShuiCalculator.GetRelation(mine, product.Vector.Dominant());
+            components.Add(new ScoreComponent(
+                ScoreComponentCodes.PersonalScore, "Hợp bản mệnh của bạn",
+                Value: ps, Weight: wp, Contribution: wp * ps,
+                ReasonVi: $"Hành trội {product.Vector.Dominant()} của sản phẩm {RelationVi(relation)} "
+                    + $"bản mệnh {mine} của bạn."));
+        }
+
+        return components;
     }
+
+    /// <summary>
+    /// Mọi loại penalty, KỂ CẢ loại không bị áp. "Đã xét và không trừ" khác hẳn "không tồn tại" —
+    /// accordion của FE liệt kê đủ để user không nghi ngờ có luật ẩn (§P4.6).
+    /// </summary>
+    private static IReadOnlyList<ScorePenalty> BuildPenalties(
+        ScoringContext ctx,
+        decimal userPenalty, string userPenaltyReason,
+        decimal dirPenalty, string? placementHint,
+        decimal vibePenalty, string vibeCode, string vibeReason)
+        => new[]
+        {
+            new ScorePenalty(ScoringParamCodes.UserConflictPenalty, "Khắc bản mệnh",
+                userPenalty, userPenalty > 0m, userPenaltyReason),
+
+            new ScorePenalty(ScoringParamCodes.DirectionPenalty, "Hướng hợp bị chắn",
+                dirPenalty, dirPenalty > 0m,
+                dirPenalty > 0m
+                    ? "Mọi hướng hợp với vật phẩm đều trùng cửa vào, nhà vệ sinh hoặc góc tối."
+                    : placementHint ?? "Còn hướng hợp để đặt vật phẩm — không trừ điểm."),
+
+            new ScorePenalty(vibeCode, "Lệch vibe mục đích", vibePenalty, vibePenalty > 0m, vibeReason),
+        };
+
+    /// <summary>Câu giải thích chung cho "vector mục tiêu × vector sản phẩm": nêu đúng hành đã khớp.</summary>
+    private static string DescribeVectorMatch(
+        ElementVector direction, ElementVector productVector, string wantedLabel, string unwantedLabel)
+    {
+        var hit = direction.Enumerate()
+            .Where(x => x.Value > 0m && productVector[x.Element] > 0m)
+            .OrderByDescending(x => x.Value * productVector[x.Element])
+            .Take(2).Select(x => $"{x.Element} ({x.Value:+0.00;-0.00})").ToList();
+
+        if (hit.Count > 0)
+            return $"Sản phẩm cấp {string.Join(" và ", hit)} — đúng {wantedLabel}.";
+
+        var miss = direction.Enumerate()
+            .Where(x => x.Value < 0m && productVector[x.Element] > 0m)
+            .OrderBy(x => x.Value)
+            .Take(2).Select(x => $"{x.Element} ({x.Value:+0.00;-0.00})").ToList();
+
+        return miss.Count > 0
+            ? $"Sản phẩm cấp {string.Join(" và ", miss)} — {unwantedLabel}."
+            : "Hành của sản phẩm trung tính với nhu cầu đang xét.";
+    }
+
+    private static string RelationVi(FengShuiRelation relation) => relation switch
+    {
+        FengShuiRelation.TuongHoa => "tỷ hòa với",
+        FengShuiRelation.TuongSinh => "tương sinh, nuôi dưỡng",
+        FengShuiRelation.TietKhi => "làm hao khí",
+        FengShuiRelation.TuongKhac => "bị khắc chế bởi",
+        _ => "khắc",
+    };
 
     /// <summary>Sự thật để AI diễn giải phần điểm cá nhân — thay cho caution "khắc bản mệnh" của luật cũ.</summary>
     private static void DescribePersonalAffinity(

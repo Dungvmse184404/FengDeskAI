@@ -55,6 +55,9 @@ public sealed class TaxonomyService : ITaxonomyService
         {
             var map = await _uow.ScoringConfig.GetElementInputMapAsync(ct);
             cached = map
+                // Vocabulary gắn tag SẢN PHẨM: chỉ tag công khai. Tag riêng của user bên intake
+                // workspace không được lọt sang form của vendor.
+                .Where(m => m.IsPublic)
                 .GroupBy(m => m.InputKind)
                 .Select(g => new ElementInputCodesResponse { Kind = g.Key, Codes = g.Select(m => m.InputCode).Distinct().ToList() })
                 .ToList();

@@ -30,6 +30,14 @@ public class RecommendationConfiguration : IEntityTypeConfiguration<Recommendati
         builder.Property(r => r.KuaNumber).HasColumnName("kua_number");
         builder.Property(r => r.KuaGroup).HasColumnName("kua_group").HasConversion<string>().HasMaxLength(10);
         builder.Property(r => r.PersonalWeight).HasColumnName("personal_weight").HasColumnType("numeric(4,2)");
+
+        // Default "3.1" ở tầng DB, KHÔNG phải "3.2": mọi row đã tồn tại được backfill đúng phiên bản
+        // công thức đã sinh ra điểm của chúng. Row mới do code ghi luôn giá trị Current (§8.4).
+        builder.Property(r => r.FormulaVersion)
+            .HasColumnName("formula_version")
+            .HasMaxLength(10)
+            .HasDefaultValue(ScoringFormulaVersions.V31)
+            .IsRequired();
         builder.Property(r => r.Status).HasColumnName("status").HasConversion<string>().HasMaxLength(20);
         builder.Property(r => r.Summary).HasColumnName("summary").HasColumnType("text");
 

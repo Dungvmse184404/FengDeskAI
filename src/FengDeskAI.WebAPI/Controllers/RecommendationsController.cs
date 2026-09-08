@@ -42,4 +42,12 @@ public class RecommendationsController : ApiControllerBase
     public async Task<IActionResult> GetProductFit(
         [FromQuery] Guid productId, [FromQuery] Guid workspaceProfileId, CancellationToken ct)
         => ToActionResult(await _service.GetProductFitAsync(productId, workspaceProfileId, CurrentUserId, ct));
+
+    /// <summary>
+    /// Độ phù hợp của 1 sản phẩm với BẢN MỆNH user — không cần workspace. Dành cho vật phẩm mang theo
+    /// người, thứ mà <c>GET fit</c> chấm sai bản chất vì nó luôn chấm theo gap của một phòng.
+    /// </summary>
+    [HttpGet("fit/personal")]
+    public async Task<IActionResult> GetPersonalFit([FromQuery] Guid productId, CancellationToken ct)
+        => ToActionResult(await _service.GetPersonalFitAsync(productId, CurrentUserId, ct));
 }

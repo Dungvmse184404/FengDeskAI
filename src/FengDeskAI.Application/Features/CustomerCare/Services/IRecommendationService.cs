@@ -22,4 +22,14 @@ public interface IRecommendationService
     /// <summary>Độ phù hợp của 1 sản phẩm × 1 workspace — không loại sản phẩm, cho trang chi tiết sản phẩm.</summary>
     Task<IServiceResult<ProductFitResponse>> GetProductFitAsync(
         Guid productId, Guid workspaceProfileId, Guid userId, CancellationToken ct = default);
+
+    /// <summary>
+    /// Độ phù hợp của 1 sản phẩm với BẢN MỆNH user — không cần workspace (v3.2 §10.6 · R3).
+    /// Dành cho trang chi tiết vật phẩm <see cref="Domain.Enums.Catalog.ProductPlacement.Carry"/>, nơi
+    /// <c>GetProductFitAsync</c> không dùng được vì nó bắt buộc <c>workspaceProfileId</c> và chấm theo gap
+    /// của phòng — sai bản chất với vật đeo trên người.
+    /// <para>Giữ hợp đồng "fit luôn có kết quả": không loại sản phẩm, xung khắc chỉ vào điểm + caution.</para>
+    /// </summary>
+    Task<IServiceResult<PersonalFitResponse>> GetPersonalFitAsync(
+        Guid productId, Guid userId, CancellationToken ct = default);
 }

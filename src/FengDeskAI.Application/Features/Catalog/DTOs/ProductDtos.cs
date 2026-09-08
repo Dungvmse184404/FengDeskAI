@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Common.Models;
+﻿using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Workspace;
 
@@ -198,6 +198,12 @@ public class ProductQueryParams : PageRequest
     /// (<c>product_aspirations.is_approved</c>) — vendor tự gắn không đủ để lên kết quả.
     /// </summary>
     public Aspiration? Aspiration { get; set; }
+
+    /// <summary>
+    /// Lọc theo nhóm CÁCH DÙNG. Hai luồng gợi ý tách theo cột này nên tìm kiếm cũng cần lọc được:
+    /// <c>Desk</c>/<c>Living</c> đặt trong phòng · <c>Carry</c> mang theo người · <c>Consumable</c> tiêu hao.
+    /// </summary>
+    public ProductPlacement? Placement { get; set; }
 
     /// <summary>true → chỉ trả sản phẩm có model 3D xem được. Trang chủ dùng để bốc ngẫu nhiên 1 model.</summary>
     public bool? HasModel3D { get; set; }

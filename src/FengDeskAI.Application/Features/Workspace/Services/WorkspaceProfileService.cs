@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
@@ -55,8 +55,8 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         // Delivered → vào Current thật; chưa giao → chỉ vào vector PREVIEW.
         var placements = await _uow.WorkspaceProfiles.GetPlacementsAsync(profile.Id, ct);
         var placed = new List<PlacedProductResponse>();
-        var deliveredContribs = new List<(ElementVector Vector, decimal VoteWeight)>();
-        var previewContribs = new List<(ElementVector Vector, decimal VoteWeight)>();
+        var deliveredContribs = new List<ProductContribution>();
+        var previewContribs = new List<ProductContribution>();
 
         if (placements.Count > 0)
         {
@@ -90,7 +90,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
                 if (voteWeight <= 0m) voteWeight = 0m; // admin cố tình cho code weight 0 → sản phẩm không ảnh hưởng
 
                 var isDelivered = pl.OrderItem.Delivery?.Status == Domain.Enums.Sales.DeliveryStatus.Delivered;
-                var contrib = (vector, voteWeight);
+                var contrib = new ProductContribution(pl.ProductId, pl.OrderItem.ProductName, vector, voteWeight);
                 previewContribs.Add(contrib);
                 if (isDelivered) deliveredContribs.Add(contrib);
 
@@ -111,8 +111,20 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         // ── 3 vector: ideal/adjusted như cũ; current = hiện trạng + sản phẩm ĐÃ GIAO; preview = + cả đang giao.
         var ideal = WorkspaceVectorBuilder.BuildIdeal(ctx.TypeElements);
         var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, ctx.Modifiers);
-        var current = WorkspaceVectorBuilder.BuildCurrentWithProducts(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, deliveredContribs);
-        var previewCurrent = WorkspaceVectorBuilder.BuildCurrentWithProducts(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, previewContribs);
+        // Chủ nhân phòng là một nguồn ngũ hành, cùng cơ chế phiếu với nền phòng và tag. Phải truyền vào
+        // CẢ current lẫn preview, nếu không hai lớp radar sẽ ở hai thang khác nhau.
+        var scoringParams = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+        var owner = await _uow.Users.GetByIdAsync(userId, ct);
+        var person = PersonPresenceBuilder.Build(owner?.DateOfBirth, ctx.Scope, scoringParams);
+
+        var breakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
+            ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, deliveredContribs,
+            person, scoringParams.InteriorPriorVotes);
+        var current = breakdown.Current;
+        var previewCurrent = WorkspaceVectorBuilder
+            .BuildCurrentBreakdown(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, previewContribs,
+                person, scoringParams.InteriorPriorVotes)
+            .Current;
         var gap = adjustedIdeal.Subtract(current);
         var previewGap = adjustedIdeal.Subtract(previewCurrent);
         var hasPreview = previewContribs.Count > deliveredContribs.Count;
@@ -135,10 +147,11 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var compatibilityPercent = (int)Math.Round(100m * (1m - gap.L1() / 2m), MidpointRounding.AwayFromZero);
         var previewCompatibilityPercent = (int)Math.Round(100m * (1m - previewGap.L1() / 2m), MidpointRounding.AwayFromZero);
 
-        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var user = owner;
         // Năm ÂM lịch — dùng .Year (dương) sẽ ra bản mệnh khác với hồ sơ mệnh & engine chấm điểm.
         int? lunarBirthYear = user?.DateOfBirth is { } dob ? FengShuiCalculator.GetLunarYear(dob) : null;
-        var insights = SpaceInsightBuilder.Build(rows, profile.WorkPurpose, ctx.Modifiers, lunarBirthYear);
+        var insights = SpaceInsightBuilder.Build(
+            rows, profile.WorkPurpose, ctx.Modifiers, lunarBirthYear, breakdown, ctx.WorkspaceTypeName);
 
         var response = new WorkspaceElementAnalysisResponse
         {
@@ -150,9 +163,72 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             HasPreview = hasPreview,
             PreviewCompatibilityPercent = previewCompatibilityPercent,
             PlacedProducts = placed,
+            Contributions = CurrentBreakdownMapping.ToContributionRows(breakdown),
+            EvidenceCount = breakdown.EvidenceCount,
+            TotalVotes = Math.Round(breakdown.TotalVotes, 3),
+            Confidence = CurrentBreakdownMapping.ConfidenceOf(breakdown),
+            PersonalDirection = await BuildPersonalDirectionAsync(
+                ctx.Scope, user?.DateOfBirth, adjustedIdeal, gap, ct),
         };
 
         return ServiceResult<WorkspaceElementAnalysisResponse>.Success(response);
+    }
+
+    /// <summary>
+    /// Lớp "Ưu tiên của bạn" cho radar phòng — v3.2 §10.3.
+    ///
+    /// <para>
+    /// Dùng đúng <see cref="ElementDirection"/> mà <c>RecommendationScorer</c> dùng để chấm sản phẩm,
+    /// nên đa giác trên màn hình phòng và đa giác trong <c>breakdown</c> của một sản phẩm không thể
+    /// lệch nhau. Trả <c>null</c> khi không có gì để vẽ — <c>Wp = 0</c> thì <c>d ≡ ĝ</c> và lớp vàng
+    /// sẽ trùng khít "Mức lý tưởng", vẽ ra chỉ làm rối biểu đồ.
+    /// </para>
+    /// </summary>
+    private async Task<PersonalDirectionResponse?> BuildPersonalDirectionAsync(
+        WorkspaceScope scope, DateTime? dateOfBirth, ElementVector adjustedIdeal, ElementVector gap,
+        CancellationToken ct)
+    {
+        if (dateOfBirth is not { } dob) return null;
+
+        var prms = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+        decimal wp = prms.PersonalWeightFor(scope, dateOfBirth);
+        if (wp <= 0m) return null;
+
+        var destiny = FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob));
+
+        // Bảng luật admin chỉnh được — không dùng thẳng hằng số trong code.
+        var rules = (await _uow.Recommendations.GetAllRulesAsync(ct))
+            .ToDictionary(r => (r.SubjectElement, r.ObjectElement), r => r.Score);
+        decimal RuleScoreOf(FengShuiElement subject, FengShuiElement obj)
+            => rules.TryGetValue((subject, obj), out var v)
+                ? v
+                : FengShuiCalculator.DefaultScore(FengShuiCalculator.GetRelation(subject, obj));
+
+        var direction = ElementDirection.ForWorkspaceGap(gap, destiny, wp, RuleScoreOf);
+        var personalVector = FengShuiCalculator.BuildPersonalVector(
+            dob, prms.SelfShare, prms.SupportShare, prms.ChildShare);
+
+        return new PersonalDirectionResponse
+        {
+            PersonalWeight = Math.Round(wp, 3),
+            PersonalWeightCode = ScoringParamCodes.PersonalWeightFor(scope),
+            Scope = scope.ToString(),
+            ReasonVi = ScoreBreakdownMapping.PersonalWeightReason(scope, wp, destiny),
+            DestinyElement = destiny.ToString(),
+            DestinyLabelVi = ScoreBreakdownMapping.DestinyLabel(destiny, dob)!,
+            NormalizedGap = ScoreBreakdownMapping.Rows(direction.NormalizedGap),
+            RuleScore = ScoreBreakdownMapping.Rows(direction.RuleScoreVector ?? ElementVector.Zero),
+            CombinedDirection = ScoreBreakdownMapping.Rows(direction.CombinedDirection),
+            PersonalVector = ScoreBreakdownMapping.Rows(personalVector),
+            PriorityVector = ScoreBreakdownMapping.Rows(direction.PriorityVector),
+            ConflictResolution = direction.ConflictResolution is { } c ? new ConflictResolutionResponse
+            {
+                RoomNeed = c.RoomNeed.ToString(),
+                Destiny = c.Destiny.ToString(),
+                Bridge = c.Bridge.ToString(),
+                ReasonVi = c.ReasonVi,
+            } : null,
+        };
     }
 
     /// <summary>Nạp dữ liệu cấu hình rồi dựng 4 vector ngũ hành cho workspace (dùng chung công thức với engine).</summary>
@@ -161,15 +237,23 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         List<WorkspaceTypeElement> TypeElements,
         ElementInputResolver Resolver,
         List<WorkPurposeElementModifier> Modifiers,
-        List<WorkspaceProfileInput> ProfileInputs);
+        List<WorkspaceProfileInput> ProfileInputs,
+        string? WorkspaceTypeName,
+        WorkspaceScope Scope);
 
     private async Task<AnalysisContext> LoadAnalysisContextAsync(
         Domain.Entities.Workspace.WorkspaceProfile profile, CancellationToken ct)
     {
         var typeElements = new List<WorkspaceTypeElement>();
+        string? typeName = null;
+        // Chưa chọn loại phòng ⇒ coi như riêng tư: giả định an toàn hơn, vì đoán nhầm thành Public sẽ
+        // âm thầm TẮT trục cá nhân của một phòng đáng lẽ có.
+        var scope = WorkspaceScope.Private;
         if (profile.WorkspaceTypeId is { } typeId
-            && await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct) is not null)
+            && await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct) is { } workspaceType)
         {
+            typeName = workspaceType.Name;
+            scope = workspaceType.Scope;
             typeElements = await _uow.ScoringConfig.GetWorkspaceTypeElementsAsync(typeId, ct);
         }
 
@@ -177,7 +261,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
 
-        return new AnalysisContext(typeElements, resolver, modifiers, profileInputs);
+        return new AnalysisContext(typeElements, resolver, modifiers, profileInputs, typeName, scope);
     }
 
     // ===== Đặt sản phẩm đã mua vào workspace =====
@@ -347,16 +431,33 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         return ServiceResult.Success(ApiStatusMessages.WorkspaceProfile.Deleted);
     }
 
-    public async Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(CancellationToken ct = default)
+    public async Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(
+        Guid userId, CancellationToken ct = default)
     {
         var map = await _uow.ScoringConfig.GetElementInputMapAsync(ct);
-        var byKind = map.GroupBy(m => m.InputKind)
-            .ToDictionary(g => g.Key, g => g.Select(m => m.InputCode).Distinct().OrderBy(c => c).ToList());
+
+        // CHỈ lọc ở tầng KHÁM PHÁ (picker + prompt AI): tag chưa duyệt của người khác không hiện ra,
+        // tránh 1 user gõ sai là cả cộng đồng học theo. Tầng SỬ DỤNG (resolver/chấm điểm/validate khi lưu)
+        // KHÔNG lọc — nếu lọc, tag riêng của user sẽ biến mất khỏi radar của chính họ.
+        var visible = map.Where(m => m.IsVisibleTo(userId)).ToList();
+
+        // 1 code có thể có nhiều row (mỗi hành 1 row) → gộp về 1 option, lấy nhãn Việt đầu tiên có giá trị.
+        var byKind = visible.GroupBy(m => m.InputKind)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(m => m.InputCode)
+                    .Select(codeGroup => new ElementInputOptionDto(
+                        codeGroup.Key,
+                        codeGroup.Select(m => m.LabelVi).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l))
+                            ?? codeGroup.Key))
+                    .OrderBy(o => o.LabelVi, StringComparer.CurrentCulture)
+                    .ToList());
 
         var response = new ElementInputVocabularyResponse(
-            byKind.GetValueOrDefault(ElementInputKind.Color, new List<string>()),
-            byKind.GetValueOrDefault(ElementInputKind.Material, new List<string>()),
-            byKind.GetValueOrDefault(ElementInputKind.DecorItem, new List<string>()));
+            byKind.GetValueOrDefault(ElementInputKind.Color, new List<ElementInputOptionDto>()),
+            byKind.GetValueOrDefault(ElementInputKind.Material, new List<ElementInputOptionDto>()),
+            byKind.GetValueOrDefault(ElementInputKind.Shape, new List<ElementInputOptionDto>()),
+            byKind.GetValueOrDefault(ElementInputKind.DecorItem, new List<ElementInputOptionDto>()));
 
         return ServiceResult<ElementInputVocabularyResponse>.Success(response);
     }

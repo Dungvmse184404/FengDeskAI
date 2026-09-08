@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Interfaces.Repositories;
+﻿using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Workspace;
@@ -43,6 +43,8 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             query = query.Where(p => p.Elements.Any(e => e.Element == element));
         if (filter.Aspiration is { } aspiration)
             query = query.Where(p => p.Aspirations.Any(a => a.Aspiration == aspiration && a.IsApproved));
+        if (filter.Placement is { } placement)
+            query = query.Where(p => p.Placement == placement);
         if (filter.HasModel3D == true)
             query = query.Where(p => p.Models3D.Any(m =>
                 m.IsEnabled

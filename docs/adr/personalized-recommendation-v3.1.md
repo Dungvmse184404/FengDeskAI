@@ -116,8 +116,8 @@ if (user.DateOfBirth is null) Wp = 0m;   // không có mệnh → dồn 100% v�
 | `Consumable` | — | ❌ vẫn `IsRecommendable = false` |
 
 ```
-// Desk / Living  (Wp > 0)
-score = clamp( (1 − Wp)·gapScore + Wp·personalScore − dirPenalty − vibePenalty , −1, +1 )
+// Desk / Living  (Wp > 0)                                    ⚠️ v3.2 sửa — xem ghi chú cuối §3.3
+score = clamp( (1 − Wp)·gapScore + Wp·personalScore − userPenalty − dirPenalty − vibePenalty , −1, +1 )
 
 // Wp == 0  → giữ nguyên 100% hành vi hiện tại (kill-switch, xem §5)
 score = clamp( gapScore − userPenalty − dirPenalty − vibePenalty , −1, +1 )
@@ -128,6 +128,24 @@ score = clamp( personalNeed·productVector/‖personalNeed‖₁ − userPenalty
 
 > `userPenalty` biến mất khỏi nhánh workspace **khi và chỉ khi `Wp > 0`** — nếu giữ cả hai thì xung khắc bị tính hai lần (một lần âm trong `personalScore`, một lần trừ thẳng).
 
+> ### 🔴 SUPERSEDED (một phần) — v3.2
+> Đoạn ngay trên **không còn đúng**. Xem
+> [`score-explainability-v3.2.md` §14](./score-explainability-v3.2.md) (phương án **L2**).
+>
+> **Vấn đề:** khi phòng cần đúng hành khắc mệnh, hai lực triệt tiêu nhau —
+> `d[Kim] = 0.5×(+1.0) + 0.5×(−1.0) = 0` ⇒ sản phẩm **khắc bản mệnh** hiển thị **"Trung tính" 50%**.
+>
+> **Sửa:** `PersonalConflictMode.None` → **`Scaled`**, giữ lại penalty nhưng **co giãn theo `Wp`**:
+> ```csharp
+> if (GetRelation(destiny, productDominant) == FengShuiRelation.BiKhac)
+>     userPenalty = ctx.Params.UserConflictPenalty * ctx.PersonalWeight;   // 0.60 × 0.50 = 0.30
+> ```
+> **Không phải tính hai lần:** `personalScore` đo *mức độ hợp* (liên tục), còn "bị khắc" là một
+> *phạm trù kiêng kỵ* — hai đại lượng khác loại nên tách hai số hạng.
+>
+> **Đứt gãy tại `Wp = 0`** (0.01 → phạt 0.006; 0.00 → loại cứng/phạt đủ 0.60) là **có chủ đích**:
+> `Wp = 0` nghĩa là tắt hẳn trục cá nhân v3.1, rơi trọn về luật v3.
+
 ### 3.4 `PersonalConflictMode` — thêm giá trị `None`
 
 ```csharp
@@ -135,9 +153,14 @@ public enum PersonalConflictMode
 {
     ByScope,      // luật v3: loại cứng khi Private, còn lại trừ điểm
     AlwaysHard,   // Carry — giữ nguyên
-    None,         // MỚI: xung khắc đã nằm trong personalScore, không loại & không trừ thêm
+    None,         // v3.1: xung khắc đã nằm trong personalScore, không loại & không trừ thêm
+    Scaled,       // v3.2 (L2): không loại, trừ USER_CONFLICT_PENALTY × Wp  ← THAY None cho Desk/Living
 }
 ```
+
+> **v3.2:** `Desk`/`Living`/`WorkspaceFit` chuyển `ByScope → **Scaled**` (không phải `None`) khi `Wp > 0`.
+> `None` giữ lại cho `Public` — không gian chung không lọc/phạt theo bản mệnh một người (§14.6 #9).
+> `Carry` giữ `AlwaysHard` không đổi.
 
 `PlacementPolicy.For` chỉ đổi khi `Wp > 0`: `Desk`/`Living`/`WorkspaceFit` chuyển `ByScope → None`. Vì `PlacementPolicy` là **bảng khai báo**, thay đổi gói gọn trong `ScoringModels.cs` — `ScoreOne` không mọc thêm nhánh `if`.
 
@@ -147,10 +170,10 @@ public enum PersonalConflictMode
 
 | Thành phần | Hiện tại | v3.1 (`Wp > 0`) |
 | --- | --- | --- |
-| `gapScore` | **1.00** | **1 − Wp** → 0.50 / 0.70 / 1.00 |
+| `gapScore` | **1.00** | **1 − Wp** → 0.50 / 0.70 / 1.00 · *v3.2: chia `\|gap\|₁/2`, miền ±1.0* |
 | `personalScore` | ❌ không có | **Wp** → 0.50 / 0.30 / 0.00 — *mới* |
-| hard-filter `BiKhac` (workspace) | ✅ khi `Private` | ❌ bỏ (`PersonalConflictMode.None`) |
-| `userPenalty` −0.30 (workspace) | ✅ | ❌ bỏ — đã nằm trong `personalScore` |
+| hard-filter `BiKhac` (workspace) | ✅ khi `Private` | ❌ bỏ (`PersonalConflictMode.Scaled`) |
+| `userPenalty` (workspace) | ✅ −0.30 | ~~bỏ~~ → **v3.2: `USER_CONFLICT_PENALTY × Wp` = 0.60×0.50 = −0.30** |
 | `dirPenalty`, `vibePenalty`, `MIN_SCORE_THRESHOLD` | ✅ | ✅ **giữ nguyên** |
 | nhánh `Carry` | ✅ | ✅ **không đụng** |
 | Aspiration filter | ❌ | **hard, ở tầng candidates** — *mới* |

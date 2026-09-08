@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums;
+﻿using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Application.Features.Identity.DTOs;
 
@@ -26,6 +26,12 @@ public class UserSummary
 
     /// <summary>Ngày sinh (để tính mệnh Nạp Âm theo năm). Null nếu user chưa khai.</summary>
     public DateTime? DateOfBirth { get; set; }
+
+    /// <summary>Mã nghề đang chọn, vd <c>"IT"</c>. Null = chưa khai.</summary>
+    public string? OccupationCode { get; set; }
+
+    /// <summary>Tên nghề tiếng Việt — để FE khỏi phải tra lại bảng nghề chỉ để hiện một dòng.</summary>
+    public string? OccupationNameVi { get; set; }
 
     /// <summary>Giờ sinh (HH:mm) — cần cho Tứ Trụ/Bát Tự đầy đủ. Null nếu chưa khai.</summary>
     public TimeOnly? BirthTime { get; set; }

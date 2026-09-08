@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Enums;
 using FengDeskAI.Application.Common.Results;
@@ -149,7 +149,7 @@ public class AuthService : IAuthService
 
     public async Task<IServiceResult<UserSummary>> GetMeAsync(Guid userId, CancellationToken ct = default)
     {
-        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var user = await _uow.Users.GetByIdWithOccupationAsync(userId, ct);
         if (user is null)
             return ServiceResult<UserSummary>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Auth.UserNotFound);
         if (!user.IsActive)
@@ -160,7 +160,7 @@ public class AuthService : IAuthService
 
     public async Task<IServiceResult<UserSummary>> UpdateBirthTimeAsync(Guid userId, TimeOnly? birthTime, CancellationToken ct = default)
     {
-        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var user = await _uow.Users.GetByIdWithOccupationAsync(userId, ct);
         if (user is null)
             return ServiceResult<UserSummary>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Auth.UserNotFound);
 
@@ -171,7 +171,7 @@ public class AuthService : IAuthService
 
     public async Task<IServiceResult<UserSummary>> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken ct = default)
     {
-        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var user = await _uow.Users.GetByIdWithOccupationAsync(userId, ct);
         if (user is null)
             return ServiceResult<UserSummary>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Auth.UserNotFound);
 
@@ -194,6 +194,25 @@ public class AuthService : IAuthService
         // Chặn ngày sinh tương lai / quá xa: engine phong thủy tra can-chi theo năm, dữ liệu rác sẽ ra mệnh sai.
         if (request.DateOfBirth is { } dob && (dob.Date > DateTime.UtcNow.Date || dob.Year < 1900))
             return ServiceResult<UserSummary>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Profile.DateOfBirthInvalid);
+
+        // null = giữ nguyên, "" = xóa, có mã = đổi. Xem chú thích trên UpdateProfileRequest.OccupationCode.
+        if (request.OccupationCode is { } occupationCode)
+        {
+            if (string.IsNullOrWhiteSpace(occupationCode))
+            {
+                user.OccupationId = null;
+                user.Occupation = null;
+            }
+            else
+            {
+                var occupation = await _uow.ScoringConfig.GetOccupationByCodeAsync(occupationCode.Trim(), ct);
+                if (occupation is null || !occupation.IsActive)
+                    return ServiceResult<UserSummary>.Failure(
+                        ApiStatusCodes.BadRequest, $"Nghề nghiệp '{occupationCode}' không hợp lệ.");
+                user.OccupationId = occupation.Id;
+                user.Occupation = occupation;
+            }
+        }
 
         user.FullName = fullName;
         user.Phone = phone;

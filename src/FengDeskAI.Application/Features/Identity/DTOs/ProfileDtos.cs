@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums;
+﻿using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Application.Features.Identity.DTOs;
 
@@ -20,6 +20,16 @@ public class UpdateProfileRequest
     /// với user trước khi gửi.
     /// </summary>
     public DateTime? DateOfBirth { get; set; }
+
+    /// <summary>
+    /// Mã nghề nghiệp, vd <c>"IT"</c>. <b>Tuỳ chọn</b> — không khai vẫn dùng được mọi tính năng
+    /// (ADR v3.2 Q8). Chuỗi rỗng = xóa nghề đang chọn; <c>null</c> = GIỮ NGUYÊN.
+    /// <para>
+    /// Phân biệt rỗng với null vì <c>PUT</c> này ghi đè cả hồ sơ: nếu null cũng xóa thì mọi client cũ
+    /// chưa biết field này sẽ âm thầm xóa nghề của user mỗi lần họ sửa số điện thoại.
+    /// </para>
+    /// </summary>
+    public string? OccupationCode { get; set; }
 }
 
 /// <summary>Bước 2 — xác thực OTP đã gửi tới email HIỆN TẠI, đổi lấy token cho các bước sau.</summary>

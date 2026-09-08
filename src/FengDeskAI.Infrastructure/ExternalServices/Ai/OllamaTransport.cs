@@ -113,11 +113,23 @@ internal sealed class OllamaTransport : IAiChatTransport
             .Select(tc => new AiToolCall(tc.Function!.Name, tc.Function.Arguments?.ToJsonString() ?? "{}"))
             .ToList();
 
+        // Bị cắt vì chạm num_predict: nguyên nhân thầm lặng hay gặp nhất khi bật think —
+        // model tiêu hết trần vào khối suy luận rồi không kịp viết câu trả lời.
+        if (string.Equals(body.DoneReason, "length", StringComparison.OrdinalIgnoreCase))
+        {
+            _logger.LogWarning(
+                "[Ollama] Phản hồi BỊ CẮT do chạm trần num_predict (num_predict={NumPredict}, think={Think}). " +
+                "Nới trần hoặc tắt think nếu lỗi lặp lại.",
+                payload.Options?.NumPredict, payload.Think);
+        }
+
         var content = body.Message.Content;
         if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content)
             && !string.IsNullOrWhiteSpace(body.Message.Thinking))
         {
-            _logger.LogWarning("[Ollama] Content rỗng nhưng thinking có nội dung — dùng thinking làm câu trả lời.");
+            _logger.LogWarning(
+                "[Ollama] Content rỗng nhưng thinking có nội dung — dùng thinking làm câu trả lời. " +
+                "Với tác vụ cần JSON, caller phải tự bóc JSON trong đó (hoặc chạy lại không-think).");
             content = body.Message.Thinking;
         }
 
@@ -207,10 +219,15 @@ internal sealed class OllamaTransport : IAiChatTransport
 
     private static OllamaOptions? BuildOllamaOptions(AiProviderConfig cfg, AiCompletionOptions? options)
     {
-        if (cfg.NumCtx <= 0 && options?.Temperature is null) return null;
+        // Caller được ưu tiên hơn cấu hình provider: mỗi tác vụ tự biết mình cần ctx bao nhiêu.
+        var numCtx = options?.NumCtx ?? (cfg.NumCtx > 0 ? cfg.NumCtx : (int?)null);
+        var numPredict = options?.MaxOutputTokens;
+
+        if (numCtx is null && numPredict is null && options?.Temperature is null) return null;
         return new OllamaOptions
         {
-            NumCtx = cfg.NumCtx > 0 ? cfg.NumCtx : null,
+            NumCtx = numCtx,
+            NumPredict = numPredict,
             Temperature = options?.Temperature,
         };
     }
@@ -264,6 +281,11 @@ internal sealed class OllamaTransport : IAiChatTransport
         [JsonPropertyName("num_ctx")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public int? NumCtx { get; init; }
+
+        /// <summary>Trần token sinh ra. Với model bật think, khối suy luận TÍNH VÀO trần này.</summary>
+        [JsonPropertyName("num_predict")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? NumPredict { get; init; }
 
         [JsonPropertyName("temperature")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -359,5 +381,9 @@ internal sealed class OllamaTransport : IAiChatTransport
 
         [JsonPropertyName("done")]
         public bool Done { get; init; }
+
+        /// <summary>"stop" = model tự kết thúc · "length" = BỊ CẮT vì chạm num_predict.</summary>
+        [JsonPropertyName("done_reason")]
+        public string? DoneReason { get; init; }
     }
 }

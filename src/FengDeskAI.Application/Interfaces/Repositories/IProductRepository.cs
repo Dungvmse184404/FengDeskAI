@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Catalog;
+﻿using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Workspace;
 
@@ -18,6 +18,12 @@ public class ProductSearchFilter
     /// (<c>product_aspirations.is_approved</c>).
     /// </summary>
     public Aspiration? Aspiration { get; set; }
+
+    /// <summary>
+    /// Lọc theo nhóm CÁCH DÙNG (<c>Desk</c>/<c>Living</c> đặt trong phòng · <c>Carry</c> mang theo người ·
+    /// <c>Consumable</c> hàng tiêu hao). Null = không lọc.
+    /// </summary>
+    public ProductPlacement? Placement { get; set; }
 
     /// <summary>
     /// True → chỉ lấy sản phẩm có model 3D xem được (Succeeded + có ModelUrl + owner chưa tắt hiển thị).

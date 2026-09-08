@@ -60,9 +60,33 @@ Phòng quá dương + sản phẩm âm → dương điểm; phòng cân bằng �
 score = (1 − POLARITY_SHARE) × gapScore + POLARITY_SHARE × polarityScore − userPenalty − dirPenalty
 ```
 
+> ### 🔴 XUNG ĐỘT với v3.1/v3.2 — hợp nhất theo kiểu **LỒNG**
+> Công thức trên và `personalized-recommendation-v3.1.md` §3.3 **giành cùng một slot `(1 − x)` trên
+> `gapScore`**. Nếu làm cả hai, dùng dạng **lồng** (đã chốt ở
+> [score-explainability-v3.2.md §14.5](./score-explainability-v3.2.md)):
+> ```
+> ĝ            = gap / (|gap|₁ / 2)                              // v3.2 — miền ±1.0
+> r[e]         = ruleScore(mệnh, e)                              // v3.1 — có dấu
+> elementScore = (1 − Wp)·(ĝ·p) + Wp·(r·p)                       // cân bằng phòng ↔ mệnh
+> score        = clamp( (1 − POLARITY_SHARE)·elementScore
+>                     + POLARITY_SHARE·polarityScore
+>                     − userPenalty − dirPenalty − vibePenalty , −1, +1 )
+> ```
+> **Vì sao lồng, không phẳng:** dạng phẳng (`w_room = 1 − Wp − POLARITY_SHARE`) bóp phần phòng xuống
+> 0.30 khi `Wp = 0.5, POLARITY_SHARE = 0.2`. Dạng lồng giữ nguyên cân bằng phòng↔mệnh **đã hiệu chỉnh
+> bằng golden set** (0.40 / 0.40) rồi mới trộn polarity ở lớp ngoài (0.20).
+
 ### 3.2 Khắc "hữu tình / vô tình" — tinh chỉnh bước 2b
 
 Luật cổ: khắc **đồng tính** (cùng âm/cùng dương) nặng — "vô tình"; khắc **dị tính** nhẹ — "hữu tình". Khi `BiKhac`:
+
+> **Thứ tự nhân khi có cả v3.2 (L2):** hệ số polarity nhân **vào chính penalty đã co giãn theo `Wp`** —
+> hai thiết kế tương thích, không chồng chéo:
+> ```csharp
+> userPenalty = USER_CONFLICT_PENALTY × Wp × khacPolarityFactor;
+> // khacPolarityFactor = 1.0 (polarity chưa xác định) | KHAC_SAME_POLARITY 1.2 | KHAC_DIFF_POLARITY 0.6
+> ```
+> Ở `Wp = 0` thì L2 không chạy (rơi về luật v3) nên §3.2 giữ nguyên hard-filter như mô tả dưới đây.
 
 ```csharp
 // |productPolarity| < POLARITY_KNOWN_THRESHOLD (0.1) → polarity KHÔNG XÁC ĐỊNH

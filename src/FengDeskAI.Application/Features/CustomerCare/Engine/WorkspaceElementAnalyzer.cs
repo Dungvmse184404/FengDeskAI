@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Recommendation;
+﻿using FengDeskAI.Domain.Entities.Recommendation;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
@@ -28,11 +28,18 @@ public static class WorkspaceElementAnalyzer
         IReadOnlyCollection<WorkspaceTypeElement> typeElements,
         IEnumerable<WorkPurposeElementModifier> modifiers,
         IReadOnlyCollection<WorkspaceProfileInput> profileInputs,
-        ElementInputResolver resolver)
+        ElementInputResolver resolver,
+        PersonPresence? person = null,
+        decimal? interiorVotes = null)
     {
         var ideal = WorkspaceVectorBuilder.BuildIdeal(typeElements);
         var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, modifiers);
-        var current = WorkspaceVectorBuilder.BuildCurrent(profileInputs, resolver, typeElements);
+        // Chủ nhân phòng vào LUÔN current dùng để chấm điểm, không chỉ để vẽ radar — nếu chỉ vẽ thì
+        // hình và điểm nói hai chuyện khác nhau về cùng một căn phòng.
+        var current = WorkspaceVectorBuilder.BuildCurrentBreakdown(
+                profileInputs, resolver, typeElements, Array.Empty<ProductContribution>(),
+                person, interiorVotes)
+            .Current;
         var gap = adjustedIdeal.Subtract(current);
         return new WorkspaceElementAnalysis(ideal, adjustedIdeal, current, gap);
     }

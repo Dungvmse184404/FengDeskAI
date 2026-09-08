@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Recommendation;
+﻿using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
@@ -52,6 +52,17 @@ public enum CurrentSourceKind
     Tag,
     /// <summary>Sản phẩm đã mua đặt trong phòng.</summary>
     Product,
+
+    /// <summary>
+    /// Chủ nhân căn phòng — bản mệnh của họ cũng là một nguồn ngũ hành trong không gian.
+    /// <para>
+    /// Xếp cùng nhóm PRIOR với <see cref="Interior"/>, KHÔNG phải bằng chứng: nó suy ra từ ngày sinh
+    /// chứ không phải thứ user quan sát được trong phòng. Vì thế nó không được tính vào
+    /// <c>EvidenceCount</c>/<c>Confidence</c> — nếu tính, một phòng chưa khai tag nào vẫn báo "độ tin
+    /// cậy cao" trong khi mọi con số vẫn là suy đoán.
+    /// </para>
+    /// </summary>
+    Person,
 }
 
 /// <summary>
@@ -73,8 +84,44 @@ public sealed record CurrentBreakdown(
     decimal TotalVotes,
     IReadOnlyList<CurrentContribution> Contributions)
 {
-    /// <summary>Số bằng chứng THẬT (tag + sản phẩm) — 0 nghĩa là Current hoàn toàn từ nền phòng.</summary>
-    public int EvidenceCount => Contributions.Count(c => c.Source != CurrentSourceKind.Interior);
+    /// <summary>
+    /// Số bằng chứng THẬT (tag + sản phẩm) — 0 nghĩa là Current hoàn toàn suy ra từ prior.
+    /// <para>Loại cả <see cref="CurrentSourceKind.Interior"/> lẫn <see cref="CurrentSourceKind.Person"/>:
+    /// hai nguồn đó là suy đoán, không phải quan sát.</para>
+    /// </summary>
+    public int EvidenceCount => Contributions.Count(c => !IsPrior(c.Source));
+
+    /// <summary>Nguồn suy đoán (nền loại phòng, bản mệnh chủ nhân) — đối lập với bằng chứng user khai.</summary>
+    public static bool IsPrior(CurrentSourceKind source)
+        => source is CurrentSourceKind.Interior or CurrentSourceKind.Person;
+}
+
+/// <summary>
+/// Chủ nhân căn phòng như một nguồn ngũ hành: <paramref name="Votes"/> phiếu, phân bổ theo bản mệnh.
+/// </summary>
+/// <param name="Votes">
+/// Số phiếu, cùng đơn vị với tag (1 tag ≈ 1 phiếu) và nền phòng (3 phiếu). Cố ý là SỐ PHIẾU chứ không
+/// phải tỉ trọng %, để chủ nhân bị bằng chứng làm loãng giống nền phòng.
+/// </param>
+public sealed record PersonPresence(string Label, decimal Votes, ElementVector Vector);
+
+/// <summary>Dựng nguồn "chủ nhân phòng" từ hồ sơ user — một chỗ duy nhất, để mọi màn hình dùng chung.</summary>
+public static class PersonPresenceBuilder
+{
+    /// <summary>
+    /// <c>null</c> khi user chưa có ngày sinh (không tính được bản mệnh) hoặc scope cho 0 phiếu
+    /// (<see cref="WorkspaceScope.Public"/> — không gian chung không có chủ nhân).
+    /// </summary>
+    public static PersonPresence? Build(
+        DateTime? dateOfBirth, WorkspaceScope scope, ScoringParameters p)
+    {
+        decimal votes = p.PersonPresenceVotesFor(scope, dateOfBirth);
+        if (votes <= 0m || dateOfBirth is not { } dob) return null;
+
+        var destiny = FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob));
+        var vector = FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare);
+        return new PersonPresence($"Bạn — mệnh {destiny}", votes, vector);
+    }
 }
 
 /// <summary>Sản phẩm đặt trong phòng, đã quy ra vector + số phiếu (dùng cho breakdown có tên).</summary>
@@ -149,7 +196,9 @@ public static class WorkspaceVectorBuilder
         IReadOnlyCollection<WorkspaceProfileInput> inputs,
         ElementInputResolver resolver,
         IEnumerable<WorkspaceTypeElement> interiorFallback,
-        IReadOnlyCollection<ProductContribution> productContributions)
+        IReadOnlyCollection<ProductContribution> productContributions,
+        PersonPresence? person = null,
+        decimal? interiorVotes = null)
     {
         var contributions = new List<CurrentContribution>();
 
@@ -161,7 +210,8 @@ public static class WorkspaceVectorBuilder
             interior = new ElementVector(0.2m, 0.2m, 0.2m, 0.2m, 0.2m);
             interiorLabel = "Nền phòng (mặc định)";
         }
-        contributions.Add(new CurrentContribution(CurrentSourceKind.Interior, interiorLabel, InteriorPriorVotes, interior));
+        contributions.Add(new CurrentContribution(
+            CurrentSourceKind.Interior, interiorLabel, interiorVotes ?? InteriorPriorVotes, interior));
 
         // 2) Tag user khai — mỗi tag = Σ weight của code (≈ 1 phiếu; admin giảm weight thì phiếu giảm theo — chủ đích).
         foreach (var input in inputs)
@@ -176,6 +226,17 @@ public static class WorkspaceVectorBuilder
                 raw.Normalize(),
                 InputKind: input.InputKind,
                 InputCode: input.InputCode));
+        }
+
+        // 2b) Chủ nhân phòng — cùng cơ chế phiếu, PRIOR chứ không phải bằng chứng.
+        //     Vì là số phiếu cố định (không phải tỉ trọng cố định), ảnh hưởng của chủ nhân LOÃNG DẦN
+        //     khi user khai thêm tag — đúng cách nền phòng đang cư xử. Tỉ trọng cố định thì dù khai
+        //     20 tag thật, bản mệnh vẫn giữ nguyên phần của nó, ngược triết lý "bằng chứng lấn át
+        //     suy đoán" của mô hình.
+        if (person is { Votes: > 0m } owner && owner.Vector.L1() > 0m)
+        {
+            contributions.Add(new CurrentContribution(
+                CurrentSourceKind.Person, owner.Label, owner.Votes, owner.Vector.Normalize()));
         }
 
         // 3) Sản phẩm đặt trong phòng.

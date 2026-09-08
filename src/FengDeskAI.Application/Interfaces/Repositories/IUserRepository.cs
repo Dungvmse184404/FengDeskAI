@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Identity;
+﻿using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
@@ -8,6 +8,12 @@ public interface IUserRepository : IGenericRepository<User>
     Task<User?> GetByEmailAsync(string email, CancellationToken ct = default);
     Task<User?> GetByPhoneAsync(string phone, CancellationToken ct = default);
     Task<User?> GetByGoogleIdAsync(string googleId, CancellationToken ct = default);
+    /// <summary>
+    /// User kèm navigation <c>Occupation</c> — dùng cho màn hồ sơ, nơi phải hiện TÊN nghề chứ không
+    /// phải id. Tách khỏi <c>GetByIdAsync</c> để những luồng không cần nghề khỏi gánh thêm một JOIN.
+    /// </summary>
+    Task<User?> GetByIdWithOccupationAsync(Guid id, CancellationToken ct = default);
+
     Task<bool> EmailExistsAsync(string email, CancellationToken ct = default);
     Task<bool> PhoneExistsAsync(string phone, CancellationToken ct = default);
 

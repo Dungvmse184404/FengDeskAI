@@ -30,6 +30,13 @@ public readonly record struct ElementVector(
     public ElementVector Scale(decimal k)
         => new(Tho * k, Kim * k, Thuy * k, Moc * k, Hoa * k);
 
+    /// <summary>
+    /// Chia từng thành phần cho <paramref name="k"/>. Chia thẳng chứ KHÔNG nhân <c>1/k</c>: với decimal,
+    /// <c>1/0.3</c> đã làm tròn một lần rồi nhân là làm tròn lần hai, lệch so với chia trực tiếp.
+    /// </summary>
+    public ElementVector Divide(decimal k)
+        => new(Tho / k, Kim / k, Thuy / k, Moc / k, Hoa / k);
+
     /// <summary>Hiệu 2 vector — dùng tính Gap. KHÔNG chuẩn hóa lại.</summary>
     public ElementVector Subtract(ElementVector o)
         => new(Tho - o.Tho, Kim - o.Kim, Thuy - o.Thuy, Moc - o.Moc, Hoa - o.Hoa);

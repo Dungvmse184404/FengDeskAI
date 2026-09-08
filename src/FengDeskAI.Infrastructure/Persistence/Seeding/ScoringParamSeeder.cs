@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Recommendation;
+﻿using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -8,6 +8,15 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// <summary>
 /// Seed tham số engine chấm điểm v3 (PHẦN F). Data đọc từ <c>seed-data/scoring-params.json</c>.
 /// Idempotent theo code. LƯU Ý: các cặp *Share cần giữ tổng = 1.0 — chỉ chỉnh scale khi hiểu rõ engine.
+///
+/// <para>
+/// <b>⚠️ Cố ý CHỈ CHÈN, không đồng bộ giá trị row đã có.</b> Bảng này là tham số engine mà người vận hành chỉnh runtime qua
+/// <c>PUT /api/admin/scoring/params/{code}</c> — seeder ghi đè mỗi lần khởi động sẽ xoá sạch hiệu
+/// chỉnh của họ, gồm cả kill-switch <c>PERSONAL_WEIGHT_*</c> và <c>VIBE_FILTER_HARD</c>.
+/// Muốn đổi giá trị nền của row đã tồn tại thì đi bằng <b>data migration</b> có mệnh đề <c>WHERE</c>
+/// canh đúng giá trị cũ — xem <c>ScoringPenaltiesV32</c>. Như vậy thay đổi nằm trong lịch sử
+/// migration: review được, rollback được, và không âm thầm đổi hành vi chấm điểm mỗi lần deploy.
+/// </para>
 /// </summary>
 public class ScoringParamSeeder : IDataSeeder
 {

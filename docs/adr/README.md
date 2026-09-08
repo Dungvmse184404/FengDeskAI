@@ -63,7 +63,8 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 | [recommendation-scoring-v3.md](./recommendation-scoring-v3.md) | Engine chấm điểm phong thủy v3 |
 | [recommendation-scoring-v4-polarity.md](./recommendation-scoring-v4-polarity.md) | v4 — thêm polarity (tương sinh/tương khắc) |
 | [vibe-soft-scoring.md](./vibe-soft-scoring.md) | Vibe: bộ lọc cứng → tham số điểm (+ `MIN_SCORE_THRESHOLD`, kill-switch) |
-| [personalized-recommendation-v3.1.md](./personalized-recommendation-v3.1.md) | **Proposal** — v3.1: trục cá nhân (`personalScore` × `Wp` theo `Scope`) cho luồng workspace + lọc `Aspiration` |
+| [personalized-recommendation-v3.1.md](./personalized-recommendation-v3.1.md) | v3.1: trục cá nhân (`personalScore` × `Wp` theo `Scope`) cho luồng workspace + lọc `Aspiration` — **§3.3/§3.4 superseded một phần bởi v3.2** |
+| [score-explainability-v3.2.md](./score-explainability-v3.2.md) | **v3.2 (ACCEPTED)** — chuẩn hoá `gapScore` về ±1.0, `PersonalConflictMode.Scaled` (L2), `ScoreBreakdown` + radar `priorityVector`, yếu tố nghề nghiệp |
 
 > v2 đã bị xóa (chỉ còn stub trỏ sang v3, không còn nội dung). Engine hiện tại: xem `docs/ard/bounded-contexts/customer-care.md`.
 

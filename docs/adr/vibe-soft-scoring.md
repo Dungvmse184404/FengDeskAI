@@ -28,14 +28,19 @@ Cùng nguyên tắc đã dùng ở `recommendation-scoring-v4-polarity.md` §3.2
 
 | Code | Default | Áp khi |
 |---|---|---|
-| `VIBE_MISMATCH_PENALTY` | `0.20` | Sản phẩm **có** vibe nhưng không chứa vibe mục tiêu |
-| `VIBE_UNKNOWN_PENALTY` | `0.05` | Sản phẩm **chưa khai** vibe nào |
+| `VIBE_MISMATCH_PENALTY` | `0.40` | Sản phẩm **có** vibe nhưng không chứa vibe mục tiêu |
+| `VIBE_UNKNOWN_PENALTY` | `0.10` | Sản phẩm **chưa khai** vibe nào |
 
 ```
 score = clamp(gapScore − userPenalty − dirPenalty − vibePenalty, −1, 1)
 ```
 
-Cùng dạng với `USER_CONFLICT_PENALTY`/`DIRECTION_PENALTY` sẵn có. Cả hai trường hợp đều sinh `cautionFact` để AI diễn giải được lý do tụt hạng.
+Cùng dạng với `USER_CONFLICT_PENALTY`/`DIRECTION_PENALTY` sẵn có.
+
+> ⚠️ **v3.2 đã nhân đôi hai giá trị này** (0.20→0.40 · 0.05→0.10) cùng lúc với `USER_CONFLICT_PENALTY`
+> và `DIRECTION_PENALTY`, vì miền `gapScore` nở từ ±0.5 lên ±1.0 — xem
+> [score-explainability-v3.2 §8.3](./score-explainability-v3.2.md). Tỉ lệ giữa hai penalty **không đổi**:
+> "chưa khai vibe" vẫn nhẹ hơn "lệch vibe" đúng 4 lần. Cả hai trường hợp đều sinh `cautionFact` để AI diễn giải được lý do tụt hạng.
 
 ### 2.2 Lưới an toàn: loại theo ĐIỂM TỔNG
 

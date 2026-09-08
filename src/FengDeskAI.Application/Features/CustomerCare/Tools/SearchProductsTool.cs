@@ -30,6 +30,11 @@ public sealed class SearchProductsTool : IAiTool
             "Only products an admin approved for that goal are returned. Omit when they don't mention a goal; " +
             "if their goal seems relevant but unclear, ask them which one.",
             Enum: new[] { "Wealth", "Career", "Health", "Relationship", "Study" }),
+        ["placement"] = new("string", "How the item is used. DEFAULTS TO 'Desk' — omit it for ordinary desk/room " +
+            "decor. Pass 'Carry' only when the user asks for something to WEAR or CARRY (bracelet, pendant, " +
+            "keyring, wallet charm); 'Living' for plants and living things; 'Consumable' for incense, candles, " +
+            "salt and other things that get used up.",
+            Enum: new[] { "Desk", "Living", "Carry", "Consumable" }),
         ["limit"] = new("integer", $"Maximum number of results (default {MaxLimit})."),
     };
 
@@ -49,9 +54,25 @@ public sealed class SearchProductsTool : IAiTool
         if (Enum.TryParse<Domain.Enums.Catalog.Aspiration>(ToolArgs.GetString(arguments, "aspiration"), true, out var parsedAspiration))
             aspiration = parsedAspiration;
 
+        // Q10 — mặc định Desk khi model không truyền. Không mặc định thì "vòng tay Kim" và "đèn muối"
+        // rơi vào cùng một rổ, mà hai thứ đó đi HAI luồng chấm điểm khác nhau (gap phòng vs dụng thần).
+        // Desk là nhóm đông nhất nên mặc định đó ít gây bất ngờ nhất cho câu hỏi chung chung.
+        var placement = Enum.TryParse<Domain.Enums.Catalog.ProductPlacement>(
+            ToolArgs.GetString(arguments, "placement"), true, out var parsedPlacement)
+            ? parsedPlacement
+            : Domain.Enums.Catalog.ProductPlacement.Desk;
+
         var limit = Math.Clamp(ToolArgs.GetInt(arguments, "limit") ?? MaxLimit, 1, MaxLimit);
         var result = await _products.SearchAsync(
-            new ProductQueryParams { Search = query, Element = element, Aspiration = aspiration, Page = 1, PageSize = limit }, ct);
+            new ProductQueryParams
+            {
+                Search = query,
+                Element = element,
+                Aspiration = aspiration,
+                Placement = placement,
+                Page = 1,
+                PageSize = limit,
+            }, ct);
         if (result.IsSuccess && result.Data is { TotalCount: 0 } && aspiration is not null)
             return ToolArgs.Json(new
             {

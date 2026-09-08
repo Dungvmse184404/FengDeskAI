@@ -61,6 +61,9 @@ Năm placement × bốn luật rất dễ đẻ ra tháp `if` lồng nhau. Luậ
 public sealed record PlacementPolicy(
     bool IsRecommendable, ScoringTarget Target, DirectionMode Direction,
     PersonalConflictMode Conflict, bool FilterByPurposeVibe);
+// v3.1 thêm PersonalConflictMode.None; v3.2 thêm PersonalConflictMode.Scaled — xem
+// score-explainability-v3.2.md §14: khi trục cá nhân bật, BiKhac trừ USER_CONFLICT_PENALTY × Wp
+// thay vì bỏ hẳn penalty (None). Carry giữ nguyên AlwaysHard.
 ```
 
 `RecommendationScorer.ScoreOne` chỉ đọc policy. Thêm placement sau này = thêm một dòng bảng, không sửa nhánh logic — giữ đúng nguyên tắc engine deterministic.
@@ -156,6 +159,8 @@ Clamp **ở tầng tool**: `topN` mặc định 4, kẹp 3..5. `RecommendationSe
 2. Sp `Consumable` không xuất hiện trong `recommend_products` lẫn `recommend_personal_items`, nhưng vẫn ra ở `search_products`.
 3. Sp `Carry` không lọt vào `recommend_products` dù điểm gap cao.
 4. Sp `Living` không bao giờ bị trừ `DIRECTION_PENALTY`, kể cả khi mọi hướng hợp đều bị chắn.
+5. Sp `Carry` khắc bản mệnh vẫn **bị loại cứng** kể cả ở `Public` và kể cả khi trục cá nhân bật —
+   `AlwaysHard` không đổi theo `Wp` (v3.2 §14.6 #4).
 5. User có `BirthTime` → `PersonalTarget.Source == "TuTru"`; xóa `BirthTime` → `"NapAm"`; cùng user, hai lần chấm cho kết quả khác nhau và log ghi đúng nguồn.
 6. User không có `DateOfBirth` → `recommend_personal_items` trả 422 có hướng dẫn, **không** trả danh sách.
 7. Sp `Carry` có hành trội khắc bản mệnh → bị loại **kể cả** khi `WorkspaceScope` không phải `Private` (khác luật `Desk`).

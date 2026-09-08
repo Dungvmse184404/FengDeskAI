@@ -36,6 +36,7 @@ public class ProductService : IProductService
             Search = query.Search,
             Element = query.Element,
             Aspiration = query.Aspiration,
+            Placement = query.Placement,
             HasModel3D = query.HasModel3D,
             ActiveOnly = true,
             Skip = query.Skip,

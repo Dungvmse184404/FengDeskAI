@@ -10,6 +10,14 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// Seed bảng <c>element_input_map</c>: màu / vật liệu / hình khối → hành. Dùng chung phòng + sản phẩm.
 /// Data đọc từ <c>seed-data/element-input-map.json</c>. Idempotent theo (kind, code, element).
 /// Weight nhân với hệ số scale (file-level <c>weightScale</c> hoặc config <c>Seeding:WeightScale</c>).
+///
+/// <para>
+/// <b>⚠️ Row đã có: chỉ vá <c>LabelVi</c> khi còn trống và ép <c>Visibility = Public</c>. Cố ý KHÔNG
+/// đồng bộ <c>Weight</c>.</b> Phân bổ hành của một tag chỉnh được runtime qua
+/// <c>PUT /api/admin/scoring/element-input-tags/{kind}/{code}</c> — seeder ghi đè mỗi lần khởi động sẽ
+/// xoá sạch hiệu chỉnh đó. Muốn đổi giá trị nền của tag đã tồn tại thì đi bằng <b>data migration</b>
+/// có mệnh đề <c>WHERE</c> canh đúng giá trị cũ, xem <c>ScoringPenaltiesV32</c>.
+/// </para>
 /// </summary>
 public class ElementInputMapSeeder : IDataSeeder
 {
@@ -31,6 +39,8 @@ public class ElementInputMapSeeder : IDataSeeder
     {
         public ElementInputKind Kind { get; set; }
         public string Code { get; set; } = "";
+        /// <summary>Nhãn tiếng Việt hiển thị/diễn giải (vd Wood → "Gỗ").</summary>
+        public string? LabelVi { get; set; }
         public FengShuiElement Element { get; set; }
         public decimal Weight { get; set; }
     }
@@ -41,23 +51,43 @@ public class ElementInputMapSeeder : IDataSeeder
         var scale = _loader.EffectiveScale(file.WeightScale);
 
         var set = _context.Set<ElementInputMap>();
-        var existing = (await set.Select(x => new { x.InputKind, x.InputCode, x.Element }).ToListAsync(ct))
-            .Select(x => (x.InputKind, x.InputCode, x.Element)).ToHashSet();
+        // Tracked (không AsNoTracking) để backfill LabelVi cho row đã seed từ trước.
+        var existing = await set.ToDictionaryAsync(x => (x.InputKind, x.InputCode, x.Element), ct);
 
-        int added = 0;
+        int added = 0, relabeled = 0;
         foreach (var row in file.Rows)
         {
-            if (existing.Contains((row.Kind, row.Code, row.Element))) continue;
+            if (existing.TryGetValue((row.Kind, row.Code, row.Element), out var current))
+            {
+                // Chỉ backfill khi còn trống — KHÔNG đè nhãn admin/user đã chỉnh tay.
+                if (string.IsNullOrWhiteSpace(current.LabelVi) && !string.IsNullOrWhiteSpace(row.LabelVi))
+                {
+                    current.LabelVi = row.LabelVi;
+                    relabeled++;
+                }
+                // Code nằm trong seed = tag chính thức của hệ thống → luôn công khai.
+                if (current.Visibility != ElementInputVisibility.Public)
+                {
+                    current.Visibility = ElementInputVisibility.Public;
+                    relabeled++;
+                }
+                continue;
+            }
+
             await set.AddAsync(new ElementInputMap
             {
                 InputKind = row.Kind,
                 InputCode = row.Code,
+                LabelVi = row.LabelVi,
+                Visibility = ElementInputVisibility.Public, // tag seed hệ thống → dùng chung ngay
                 Element = row.Element,
                 Weight = row.Weight * scale,
             }, ct);
             added++;
         }
-        if (added > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed element_input_map: thêm {Added} row (scale {Scale}).", added, scale);
+        if (added > 0 || relabeled > 0) await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Seed element_input_map: thêm {Added} row, backfill nhãn {Relabeled} row (scale {Scale}).",
+            added, relabeled, scale);
     }
 }

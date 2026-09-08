@@ -54,25 +54,52 @@ Sản phẩm là "viên thuốc" bù mất cân bằng của phòng: bơm vào h
 
 ```
 gap   = adjustedIdeal − current           // + = thiếu cần bù, − = thừa cần tránh
-gapScore(product) = gap · productVector / |gap|₁
+gapScore(product) = gap · productVector / (|gap|₁ / 2)      // v3.2 — xem ghi chú
 ```
+
+> ⚠️ **Đổi ở v3.2** ([score-explainability-v3.2.md §8](./score-explainability-v3.2.md)): mẫu số là
+> **`|gap|₁ / 2`**, không phải `|gap|₁`. Vì `adjustedIdeal` và `current` đều Σ=1 nên `Σ gap = 0` ⇒ tổng
+> phần dương = tổng phần âm = `|gap|₁ / 2`; chia cho cả `|gap|₁` khiến `gapScore` bị **trần ±0.5** và
+> không bao giờ so sánh được với `personalScore ∈ [−1, +1]`. Sau khi sửa: **`gapScore ∈ [−1, +1]`**.
+>
+> **Chỉ áp cho nhánh `WorkspaceGap`.** Nhánh `PersonalNeed` (`Carry`) giữ nguyên mẫu số `|target|₁`:
+> target ở đó là vector Σ=1 **không âm**, không có "hai nửa" để chia — chia đôi sẽ khiến mọi sản phẩm
+> khớp từ 50% trở lên đều bão hoà ở 1.000 và luồng `Carry` mất khả năng xếp hạng.
 
 Các bước cho mỗi sản phẩm (`ScoreOne`):
 1. **Intent filter (hard):** thiếu vibe khớp mục đích → loại khỏi danh sách.
 2. **User constraint:** hành trội sản phẩm khắc mệnh user (`BiKhac`) → **loại** nếu `Private`, **trừ `USER_CONFLICT_PENALTY`** nếu `Shared/Public`.
+   *(v3.2 — khi trục cá nhân bật: `PersonalConflictMode.Scaled`, trừ `USER_CONFLICT_PENALTY × Wp`; xem score-explainability-v3.2 §14.)*
 3. **Gap score:** như trên; kèm mô tả bù/thừa hành nào.
 4. **Directional Validation:** hướng hợp = hướng cùng hành trội ∪ hướng sinh ra hành trội, trừ hướng bị chắn (`entrance/toilet/dark`). Còn hướng hợp → `placementHint`; hết → trừ `DIRECTION_PENALTY`.
 5. `score = clamp(gapScore − userPenalty − dirPenalty, −1, 1)`, sắp giảm dần, lấy `topN`.
+
+> **Công thức đầy đủ sau v3.1 + v3.2:**
+> ```
+> ĝ    = gap / (|gap|₁ / 2)                     // ∈ [−1, +1]
+> r[e] = ruleScore(mệnh, e)                     // ∈ [−1, +1], CÓ DẤU
+> d    = (1 − Wp)·ĝ + Wp·r                      // vector hướng tổng hợp
+> score = clamp( productVector · d − userPenalty − dirPenalty − vibePenalty , −1, 1 )
+> ```
 
 ## 5. Tham số engine (`scoring_params`, default trong `ScoringParameters`)
 
 | Code | Default | | Code | Default |
 |------|:---:|---|------|:---:|
-| `SELF_SHARE` | 0.60 | | `USER_CONFLICT_PENALTY` | 0.30 |
-| `SUPPORT_SHARE` | 0.30 | | `DIRECTION_PENALTY` | 0.15 |
+| `SELF_SHARE` | 0.60 | | `USER_CONFLICT_PENALTY` | **0.60** |
+| `SUPPORT_SHARE` | 0.30 | | `DIRECTION_PENALTY` | **0.30** |
 | `CHILD_SHARE` | 0.10 | | `FALLBACK_PRIMARY` | 0.70 |
 | `MATERIAL_SHARE` | 0.60 | | `FALLBACK_SECONDARY` | 0.30 |
 | `COLOR_SHARE` | 0.40 | | | |
+
+> **v3.2 — 4 penalty đã nhân đôi** (`USER_CONFLICT` 0.30→0.60 · `DIRECTION` 0.15→0.30 ·
+> `VIBE_MISMATCH` 0.20→0.40 · `VIBE_UNKNOWN` 0.05→0.10). Penalty là hằng số tuyệt đối, nên khi miền
+> `gapScore` nở từ ±0.5 lên ±1.0 thì sức nặng tương đối của chúng giảm một nửa — nhân đôi để **giữ đúng
+> tỉ lệ cũ**. Đổi qua `scoring_params`, không cần deploy.
+
+> ⚠️ `SELF_SHARE` / `SUPPORT_SHARE` / `CHILD_SHARE` chỉ dựng `personalVector` để **hiển thị**; engine
+> chấm điểm chỉ đọc `personalVector.Dominant()` (luôn = hành Nạp Âm vì 0.60 > 0.30 > 0.10) nên **chỉnh
+> ba tham số này không đổi điểm**. Xem score-explainability-v3.2 §5.
 
 ## 6. Response API (v3)
 

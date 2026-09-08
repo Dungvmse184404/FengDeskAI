@@ -179,12 +179,13 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         {
             var vocab = await GetVocabularyAsync(userId, ct);
 
+            // Tải ảnh SONG SONG: 3 ảnh nối tiếp = 3 round-trip Supabase cộng dồn, trong khi chúng
+            // hoàn toàn độc lập nhau. Giữ nguyên thứ tự ảnh theo thứ tự user gửi lên.
             List<string>? imagesBase64 = null;
             if (imageUrls.Count > 0)
             {
-                imagesBase64 = new List<string>(imageUrls.Count);
-                foreach (var url in imageUrls)
-                    imagesBase64.Add(await _encoder.FetchAsBase64Async(url, ct));
+                imagesBase64 = (await Task.WhenAll(
+                    imageUrls.Select(url => _encoder.FetchAsBase64Async(url, ct)))).ToList();
             }
 
             var userContent = description.Length > 0 ? description : "(Không có mô tả chữ — chỉ có ảnh, hãy phân tích ảnh.)";
@@ -206,13 +207,48 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
                 "[WorkspaceIntake] Bắt đầu parse cho user {UserId} (mô tả {Length} ký tự, {ImageCount} ảnh, model {Model}, think={Think}).",
                 userId, description.Length, imageUrls.Count, model, think);
 
+            // Trần token: bật think thì khối suy luận cũng tính vào đây → phải nới rộng hơn.
+            var maxOutputTokens = think == true
+                ? _options.MaxOutputTokensWhenThinking
+                : _options.MaxOutputTokens;
+
+            // Request chỉ có chữ không cần ctx rộng như request có ảnh.
+            var numCtx = hasImages
+                ? (_options.NumCtxVision > 0 ? _options.NumCtxVision : (int?)null)
+                : (_options.NumCtxText > 0 ? _options.NumCtxText : (int?)null);
+
             // Model + temperature riêng cho intake (Ai:Intake) — không dùng chung với chatbox.
             completion = await _client.CompleteAsync(
                 model, messages, tools: null,
-                options: new AiCompletionOptions(_options.Temperature, _options.JsonMode, think, _options.Stream),
+                options: new AiCompletionOptions(
+                    _options.Temperature, _options.JsonMode, think, _options.Stream,
+                    MaxOutputTokens: maxOutputTokens, NumCtx: numCtx),
                 onDelta: onDelta, ct: ct);
 
-            var raw = ParseRaw(completion.Content);
+            RawDraft raw;
+            try
+            {
+                raw = ParseRaw(completion.Content);
+            }
+            catch (JsonException) when (think == true)
+            {
+                // Bật "suy nghĩ kỹ" mà model tiêu hết trần token vào khối suy luận → không kịp viết
+                // JSON. Chạy lại NGAY một lượt không-think: nhanh, ổn định, và user vẫn có draft
+                // thay vì nhận thông báo lỗi rồi phải điền tay toàn bộ.
+                _logger.LogWarning(
+                    "[WorkspaceIntake] Lượt think không ra JSON (nhiều khả năng chạm trần {Max} token) — chạy lại không-think.",
+                    maxOutputTokens);
+
+                completion = await _client.CompleteAsync(
+                    model, messages, tools: null,
+                    options: new AiCompletionOptions(
+                        _options.Temperature, _options.JsonMode, Think: false, _options.Stream,
+                        MaxOutputTokens: _options.MaxOutputTokens, NumCtx: numCtx),
+                    onDelta: onDelta, ct: ct);
+
+                raw = ParseRaw(completion.Content);
+            }
+
             var draft = Normalize(raw, vocab);
 
             _logger.LogInformation(
@@ -255,7 +291,11 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
 
         var types = await _uow.WorkspaceTypes.GetAvailableForUserAsync(userId, ct);
         var styles = await _uow.Styles.GetAllAsync(ct);
-        var inputMap = await _uow.ScoringConfig.GetElementInputMapAsync(ct);
+        // Chỉ đưa vào prompt tag công khai + tag của chính user — AI không được gợi ý tag riêng
+        // của người khác (cùng quy tắc với picker: ElementInputMap.IsVisibleTo).
+        var inputMap = (await _uow.ScoringConfig.GetElementInputMapAsync(ct))
+            .Where(m => m.IsVisibleTo(userId))
+            .ToList();
 
         var vocab = new Vocabulary(
             types.Select(t => (t.Id, t.Name)).ToList(),
@@ -268,6 +308,11 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
 
     // ── Prompt ───────────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// System prompt cho intake. Giữ NGẮN có chủ đích: mỗi token prompt đều phải prefill lại ở mỗi
+    /// request, và khi user bật "suy nghĩ kỹ" thì prompt dài còn kéo theo khối suy luận dài hơn.
+    /// Quy tắc được nén thành gạch đầu dòng 1 câu; ví dụ rút còn 2 ca quan trọng nhất (đủ tín hiệu / mơ hồ).
+    /// </summary>
     private static string BuildSystemPrompt(Vocabulary vocab, bool hasImages = false)
     {
         var workspaceTypeNames = string.Join(", ", vocab.WorkspaceTypes.Select(t => t.Name));
@@ -282,85 +327,62 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         var decorItems = byKind.GetValueOrDefault(ElementInputKind.DecorItem, "(không có)");
 
         var imageRule = hasImages
-            ? "- Có kèm theo (các) ẢNH chụp không gian. Dùng ảnh làm bằng chứng NGANG HÀNG với mô tả chữ: " +
-              "chỉ điền field khi NHÌN THẤY RÕ trong ảnh (vd thấy rõ ánh sáng tự nhiên từ cửa sổ → lighting=Natural; " +
-              "thấy rõ bàn gỗ → inputs Material=Wood; thấy bể cá/cây xanh/gương... → inputs DecorItem tương ứng). " +
-              "KHÔNG suy diễn những gì không thấy rõ trong ảnh (vd không đoán hướng phòng chỉ vì thấy cửa sổ có nắng).\n"
+            ? "- Ảnh là bằng chứng ngang hàng với chữ: chỉ điền khi NHÌN THẤY RÕ (thấy nắng qua cửa sổ → Natural; " +
+              "thấy bàn gỗ → Material=Wood; thấy bể cá/cây/gương → DecorItem). Không đoán hướng từ ảnh.\n"
             : "";
 
         return
-            "Bạn là bộ trích xuất dữ liệu (data extractor) cho form \"không gian làm việc\" của FengDeskAI. " +
-            "Nhiệm vụ DUY NHẤT: đọc mô tả của khách — tiếng Việt HOẶC tiếng Anh, tự nhận diện ngôn ngữ — (và ảnh không gian nếu có) " +
-            "rồi trả về CHÍNH XÁC MỘT đối tượng JSON theo schema bên dưới — " +
-            "KHÔNG kèm markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON. Toàn bộ giá trị field/code vẫn PHẢI theo đúng danh sách " +
-            "cho phép bên dưới (đều là mã tiếng Anh cố định) dù mô tả gốc là tiếng Anh hay tiếng Việt.\n\n" +
+            "Trích xuất dữ liệu form \"không gian làm việc\" (FengDeskAI). Đọc mô tả (Việt hoặc Anh) " +
+            (hasImages ? "và ảnh " : "") +
+            "→ trả DUY NHẤT một object JSON đúng schema. Không markdown, không giải thích, không chữ nào ngoài JSON. " +
+            "Mọi giá trị phải lấy nguyên văn từ danh sách cho phép (mã tiếng Anh), kể cả khi mô tả là tiếng Việt.\n" +
+            "Suy luận NGẮN GỌN — đây là tác vụ trích xuất, không phải giải đố.\n\n" +
 
-            "## QUY TẮC TỐI QUAN TRỌNG\n" +
-            "- KHÔNG được đoán hay suy diễn. Field nào không được nhắc rõ ràng → để null.\n" +
-            "- Chỉ điền field khi văn bản nói TƯỜNG MINH. Vd \"cạnh cửa sổ\" KHÔNG có nghĩa là biết hướng; " +
-            "chỉ điền deskOrientation/roomFacingDirection khi user nói rõ như \"hướng đông\", \"bàn quay mặt về hướng tây\", \"nhìn về phía nam\".\n" +
+            "## QUY TẮC\n" +
+            "- Không đoán. Field không được nhắc TƯỜNG MINH → null. \"cạnh cửa sổ\" KHÔNG cho biết hướng; " +
+            "chỉ điền hướng khi user nói rõ (\"hướng đông\", \"bàn quay về tây\").\n" +
             imageRule +
-            "- CHỈ dùng đúng giá trị trong danh sách cho phép bên dưới — không tự bịa từ khác, không dịch nghĩa.\n" +
-            "- inputs (màu/vật liệu/hình khối/vật trang trí): đây là NGOẠI LỆ — hãy liệt kê CÀNG NHIỀU tín hiệu bạn nhận thấy CÀNG TỐT, " +
-            "KHÔNG giới hạn 1 cái mỗi loại (vd nếu user nhắc \"bàn gỗ, ghế da, có bể cá và cây xanh\" → liệt kê đủ cả Material=Wood, Material=Leather, " +
-            "DecorItem=FishTank, DecorItem=Plant). Rủi ro thấp vì user luôn sửa/xoá lại được ở bước review — thà liệt kê dư rồi để user bỏ bớt, " +
-            "còn hơn bỏ sót.\n" +
-            "- mentionedFields: liệt kê CHÍNH XÁC những field-key (theo tên trong schema) mà bạn tin user CÓ nhắc đến trong văn bản, " +
-            "kể cả khi bạn không map được ra giá trị hợp lệ (dùng để tính độ tự tin) — đừng liệt kê field user không hề nhắc.\n" +
-            "- hasDesk: true nếu user MÔ TẢ rõ có bàn làm việc (nhắc \"bàn\", loại bàn, hướng bàn, hoặc workspaceType kiểu bàn làm việc/văn phòng); " +
-            "false nếu user mô tả rõ đây là loại không gian KHÔNG có bàn làm việc (vd bếp, phòng khách, phòng ngủ, phòng ăn, ban công, phòng tập) " +
-            "và không hề nhắc đến bàn nào; null nếu không đủ căn cứ để kết luận theo cả 2 hướng trên.\n" +
-            "- NGOẠI LỆ DUY NHẤT cho quy tắc \"không đoán\": nếu workspaceType đã xác định chắc chắn và bản thân loại không gian đó " +
-            "gắn với ĐÚNG MỘT công năng hiển nhiên (Kitchen→Cooking, Bedroom→Sleep, Dining Room→Dining, Kids Room→Childcare, Home Gym→Exercise), " +
-            "được phép điền workPurpose tương ứng dù user không nói rõ từ \"mục đích\" — vì đây là suy ra từ định nghĩa loại phòng, không phải đoán mò. " +
-            "Các workspaceType khác (Home Office, Personal Desk...) KHÔNG áp dụng ngoại lệ này — vẫn phải để workPurpose null nếu không nói rõ.\n\n" +
+            "- inputs là NGOẠI LỆ của luật trên: liệt kê CÀNG NHIỀU tín hiệu nhận ra càng tốt, không giới hạn " +
+            "1 cái mỗi loại (\"bàn gỗ, ghế da, bể cá, cây xanh\" → đủ 4 mục). Thà dư còn hơn sót — user sửa lại được.\n" +
+            "- mentionedFields: những field-key user CÓ nhắc, kể cả khi không map ra giá trị hợp lệ.\n" +
+            "- hasDesk: true nếu có nhắc bàn làm việc (loại bàn / hướng bàn / workspaceType kiểu bàn-văn phòng); " +
+            "false nếu rõ ràng là loại phòng không có bàn (bếp, phòng khách, phòng ngủ, phòng ăn, ban công, phòng tập) " +
+            "và không nhắc bàn nào; null nếu không đủ căn cứ.\n" +
+            "- workPurpose: ngoại lệ DUY NHẤT được suy ra — khi workspaceType chắc chắn và chỉ có một công năng hiển nhiên " +
+            "(Kitchen→Cooking, Bedroom→Sleep, Dining Room→Dining, Kids Room→Childcare, Home Gym→Exercise). " +
+            "Home Office / Personal Desk... KHÔNG áp dụng, vẫn để null nếu không nói rõ.\n\n" +
 
-            "## SCHEMA (trả đúng các key sau, đúng kiểu, thiếu thì null)\n" +
+            "## SCHEMA (đủ key, thiếu thì null)\n" +
             "{\n" +
-            "  \"name\": string|null,                 // tên gợi nhớ ngắn cho không gian, vd \"Bàn làm việc tại nhà\"\n" +
-            "  \"locationType\": string|null,          // MỘT trong: " + string.Join(", ", Enum.GetNames<LocationType>()) + "\n" +
-            "  \"workspaceType\": string|null,         // TÊN loại không gian, MỘT trong: " + workspaceTypeNames + "\n" +
-            "  \"styleCode\": string|null,             // MỘT trong: " + styleCodes + "\n" +
-            "  \"lighting\": string|null,              // MỘT trong: " + string.Join(", ", Enum.GetNames<LightingType>()) + "\n" +
-            "  \"hasDesk\": boolean|null,             // xem quy tắc hasDesk phía trên\n" +
-            "  \"deskType\": string|null,              // MỘT trong: " + string.Join(", ", Enum.GetNames<DeskType>()) + " — null nếu không có bàn\n" +
-            "  \"deskOrientation\": string|null,       // hướng bàn quay mặt về, MỘT trong: " + string.Join(", ", Enum.GetNames<CompassDirection>()) + "\n" +
-            "  \"roomFacingDirection\": string|null,   // hướng cửa/phòng, cùng danh sách hướng trên\n" +
-            "  \"workPurpose\": string|null,           // MỘT trong: " + string.Join(", ", Enum.GetNames<WorkPurpose>()) + "\n" +
-            "  \"deskArea\": number|null,              // diện tích MẶT BÀN, đơn vị cm² (vd bàn 1.2m x 0.6m = 7200), chỉ điền khi user nói rõ kích thước\n" +
-            "  \"inputs\": [ { \"kind\": \"Color\"|\"Material\"|\"Shape\"|\"DecorItem\", \"code\": string } ],  // hiện trạng phòng: màu chủ đạo/chất liệu nội thất/hình khối/vật trang trí user nhắc\n" +
-            "        // Color (màu chủ đạo) MỘT trong: " + colors + "\n" +
-            "        // Material (chất liệu nội thất, vd bàn ghế gỗ) MỘT trong: " + materials + "\n" +
-            "        // Shape MỘT trong: " + shapes + "\n" +
-            "        // DecorItem (vật trang trí cụ thể, vd bể cá/cây xanh/gương) MỘT trong: " + decorItems + "\n" +
-            "  \"mentionedFields\": string[]           // các field-key ở trên mà user CÓ nhắc đến (bất kể map được hay không)\n" +
+            "  \"name\": string|null,               // tên ngắn gợi nhớ, vd \"Bàn làm việc tại nhà\"\n" +
+            "  \"locationType\": string|null,        // " + string.Join("|", Enum.GetNames<LocationType>()) + "\n" +
+            "  \"workspaceType\": string|null,       // " + workspaceTypeNames + "\n" +
+            "  \"styleCode\": string|null,           // " + styleCodes + "\n" +
+            "  \"lighting\": string|null,            // " + string.Join("|", Enum.GetNames<LightingType>()) + "\n" +
+            "  \"hasDesk\": boolean|null,\n" +
+            "  \"deskType\": string|null,            // " + string.Join("|", Enum.GetNames<DeskType>()) + " — null nếu không có bàn\n" +
+            "  \"deskOrientation\": string|null,     // hướng bàn quay về: " + string.Join("|", Enum.GetNames<CompassDirection>()) + "\n" +
+            "  \"roomFacingDirection\": string|null, // hướng cửa/phòng, cùng danh sách hướng\n" +
+            "  \"workPurpose\": string|null,         // " + string.Join("|", Enum.GetNames<WorkPurpose>()) + "\n" +
+            "  \"deskArea\": number|null,            // mặt bàn, cm² (1.2m x 0.6m = 7200) — chỉ khi nói rõ kích thước\n" +
+            "  \"inputs\": [{\"kind\":\"Color\"|\"Material\"|\"Shape\"|\"DecorItem\",\"code\":string}],\n" +
+            "        // Color: " + colors + "\n" +
+            "        // Material: " + materials + "\n" +
+            "        // Shape: " + shapes + "\n" +
+            "        // DecorItem: " + decorItems + "\n" +
+            "  \"mentionedFields\": string[]\n" +
             "}\n\n" +
 
-            "## VÍ DỤ 1\n" +
-            "User: \"Bàn làm việc ở nhà cạnh cửa sổ hướng đông, nhiều nắng sáng, bàn gỗ màu nâu, tôi hay ngồi học bài\"\n" +
-            "{\"name\":\"Bàn làm việc tại nhà\",\"locationType\":\"Home\",\"workspaceType\":null,\"styleCode\":null," +
-            "\"lighting\":\"Natural\",\"hasDesk\":true,\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":\"East\"," +
-            "\"workPurpose\":\"Study\",\"deskArea\":null," +
-            "\"inputs\":[{\"kind\":\"Material\",\"code\":\"Wood\"},{\"kind\":\"Color\",\"code\":\"Brown\"}]," +
-            "\"mentionedFields\":[\"name\",\"locationType\",\"lighting\",\"hasDesk\",\"roomFacingDirection\",\"workPurpose\",\"inputs\"]}\n\n" +
-
-            "## VÍ DỤ 2 (mơ hồ — hầu hết null)\n" +
-            "User: \"Phòng tôi khá đẹp\"\n" +
-            "{\"name\":null,\"locationType\":null,\"workspaceType\":null,\"styleCode\":null,\"lighting\":null,\"hasDesk\":null," +
-            "\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":null,\"workPurpose\":null,\"deskArea\":null," +
-            "\"inputs\":[],\"mentionedFields\":[]}\n\n" +
-
-            "## VÍ DỤ 3 (không gian rõ ràng không có bàn làm việc + LIỆT KÊ ĐỦ nhiều vật trang trí/chất liệu)\n" +
-            "User: \"Đây sẽ là nhà bếp khá rộng rãi, thuận hướng nắng, nội thất đa phần là gỗ, có bể cá lớn, " +
-            "treo thêm vài bức tranh và đặt vài chậu cây nhỏ cho tươi mát.\"\n" +
-            "{\"name\":null,\"locationType\":\"Home\",\"workspaceType\":\"Kitchen\",\"styleCode\":null," +
-            "\"lighting\":\"Natural\",\"hasDesk\":false,\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":null," +
-            "\"workPurpose\":\"Cooking\",\"deskArea\":null," +
-            "\"inputs\":[{\"kind\":\"Material\",\"code\":\"Wood\"},{\"kind\":\"DecorItem\",\"code\":\"FishTank\"}," +
+            "## VÍ DỤ\n" +
+            "\"Nhà bếp rộng, thuận nắng, nội thất gỗ, có bể cá lớn, treo tranh và vài chậu cây\" →\n" +
+            "{\"name\":null,\"locationType\":\"Home\",\"workspaceType\":\"Kitchen\",\"styleCode\":null,\"lighting\":\"Natural\"," +
+            "\"hasDesk\":false,\"deskType\":null,\"deskOrientation\":null,\"roomFacingDirection\":null,\"workPurpose\":\"Cooking\"," +
+            "\"deskArea\":null,\"inputs\":[{\"kind\":\"Material\",\"code\":\"Wood\"},{\"kind\":\"DecorItem\",\"code\":\"FishTank\"}," +
             "{\"kind\":\"DecorItem\",\"code\":\"Painting\"},{\"kind\":\"DecorItem\",\"code\":\"Plant\"}]," +
             "\"mentionedFields\":[\"locationType\",\"workspaceType\",\"lighting\",\"hasDesk\",\"workPurpose\",\"inputs\"]}\n\n" +
+            "\"Phòng tôi khá đẹp\" → mọi field null, \"inputs\":[], \"mentionedFields\":[].\n\n" +
 
-            "Chỉ trả JSON, không thêm bất kỳ ký tự nào khác.";
+            "Chỉ trả JSON.";
     }
 
     // ── Raw AI output (chưa tin) ─────────────────────────────────────────────
@@ -390,9 +412,44 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
 
     private static RawDraft ParseRaw(string content)
     {
-        var json = StripCodeFence(content);
+        var json = ExtractJsonObject(StripCodeFence(content))
+            ?? throw new JsonException("Không tìm thấy object JSON nào trong phản hồi của AI.");
+
         return JsonSerializer.Deserialize<RawDraft>(json, RawJsonOptions)
             ?? throw new JsonException("AI trả về JSON rỗng.");
+    }
+
+    /// <summary>
+    /// Bóc object JSON đầu tiên nằm trong text. KHÔNG giả định cả chuỗi là JSON — model hay kèm chữ
+    /// quanh nó, và khi bật think mà content rỗng thì transport đưa thẳng khối suy luận sang đây
+    /// (JSON thật thường nằm ở cuối khối đó).
+    /// Đếm ngoặc có nhận biết chuỗi + escape, nếu không thì một dấu { nằm trong chuỗi là lệch hết.
+    /// </summary>
+    private static string? ExtractJsonObject(string text)
+    {
+        var start = text.IndexOf('{');
+        while (start >= 0)
+        {
+            int depth = 0;
+            bool inString = false, escaped = false;
+
+            for (var i = start; i < text.Length; i++)
+            {
+                var c = text[i];
+
+                if (escaped) { escaped = false; continue; }
+                if (inString && c == '\\') { escaped = true; continue; }
+                if (c == '"') { inString = !inString; continue; }
+                if (inString) continue;
+
+                if (c == '{') depth++;
+                else if (c == '}' && --depth == 0) return text[start..(i + 1)];
+            }
+
+            // Object mở ra mà không đóng (bị cắt giữa chừng) → thử object kế tiếp nếu còn.
+            start = text.IndexOf('{', start + 1);
+        }
+        return null;
     }
 
     private static string StripCodeFence(string content)

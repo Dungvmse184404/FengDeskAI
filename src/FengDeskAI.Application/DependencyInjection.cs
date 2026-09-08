@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Common.Sanitization;
+﻿using FengDeskAI.Application.Common.Sanitization;
 using FengDeskAI.Application.Features.Catalog.Mappings;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Features.Chat.Mappings;
@@ -111,6 +111,7 @@ public static class DependencyInjection
         services.AddSingleton<IRecommendationScorer, RecommendationScorer>();
         services.AddScoped<IRecommendationService, RecommendationService>();
         services.AddScoped<IScoringConfigAdminService, ScoringConfigAdminService>();
+        services.AddScoped<IOccupationService, OccupationService>();
 
         services.AddScoped<IAiTool, SearchProductsTool>();
         services.AddScoped<IAiTool, GetProductTool>();
