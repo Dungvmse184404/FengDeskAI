@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Features.Catalog.DTOs;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Interfaces.External;
@@ -15,9 +15,9 @@ public sealed class SearchProductsTool : IAiTool
 
     public string Name => "search_products";
     public string Description =>
-        "Search feng shui products by keyword — scans NAME, DESCRIPTION, CATEGORY names and feng shui " +
+        "Search feng shui products by keyword - scans NAME, DESCRIPTION, CATEGORY names and feng shui " +
         "ELEMENTS (e.g. 'hỏa' finds Fire-element products), diacritics- and case-insensitive. Multi-word " +
-        "queries match all words first, then automatically relax to any-word if nothing matches — so pass " +
+        "queries match all words first, then automatically relax to any-word if nothing matches - so pass " +
         "the user's phrase as-is; no need to retry with shorter keywords. Returns id, name, image and " +
         "variants with price + stock (items).";
 
@@ -30,7 +30,7 @@ public sealed class SearchProductsTool : IAiTool
             "Only products an admin approved for that goal are returned. Omit when they don't mention a goal; " +
             "if their goal seems relevant but unclear, ask them which one.",
             Enum: new[] { "Wealth", "Career", "Health", "Relationship", "Study" }),
-        ["placement"] = new("string", "How the item is used. DEFAULTS TO 'Desk' — omit it for ordinary desk/room " +
+        ["placement"] = new("string", "How the item is used. DEFAULTS TO 'Desk' - omit it for ordinary desk/room " +
             "decor. Pass 'Carry' only when the user asks for something to WEAR or CARRY (bracelet, pendant, " +
             "keyring, wallet charm); 'Living' for plants and living things; 'Consumable' for incense, candles, " +
             "salt and other things that get used up.",

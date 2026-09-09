@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
 using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Application.Interfaces.External;
@@ -21,15 +21,15 @@ public sealed class ComputeDestinyChartTool : IAiTool
         "from birth info. Returns: can-chi year, zodiac animal, nạp âm element/mệnh with meaning; " +
         "PLUS (if gender given) Bát Trạch cung mệnh with 4 favorable directions (Sinh Khí/Diên Niên/Thiên Y/Phục Vị) " +
         "and 4 unfavorable ones; PLUS (if birthTime given) the full Tứ Trụ/Bát Tự four pillars with element distribution " +
-        "and 'favorableElementCodes' — use those codes as the element filter of search_products, or call " +
+        "and 'favorableElementCodes' - use those codes as the element filter of search_products, or call " +
         "recommend_personal_items for items the person wears/carries (it applies these elements itself). " +
-        "The 'missing' field lists what extra info would unlock deeper reading — answer with what you have first, then ask for it. " +
-        "NEVER calculate mệnh/cung/tứ trụ yourself — always call this tool. Results are for reference/entertainment; say so briefly.";
+        "The 'missing' field lists what extra info would unlock deeper reading - answer with what you have first, then ask for it. " +
+        "NEVER calculate mệnh/cung/tứ trụ yourself - always call this tool. Results are for reference/entertainment; say so briefly.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
         ["birthDate"] = new("string", "Birth date in yyyy-MM-dd. Solar (dương lịch) by default; set isLunar=true if the person gave a lunar date.", Required: true),
-        ["birthTime"] = new("string", "Birth time HH:mm (24h clock time). Optional — unlocks the full four-pillar Bát Tự reading."),
+        ["birthTime"] = new("string", "Birth time HH:mm (24h clock time). Optional - unlocks the full four-pillar Bát Tự reading."),
         ["gender"] = new("string", "Biological gender for Bát Trạch cung mệnh. Optional.", Enum: new[] { "Male", "Female" }),
         ["isLunar"] = new("boolean", "true if birthDate is a lunar-calendar date (âm lịch). Default false."),
     };
@@ -71,7 +71,7 @@ public sealed class ComputeDestinyChartTool : IAiTool
         {
             var (d, m, y) = LunarCalendarConverter.Lunar2Solar(birthDate.Day, birthDate.Month, birthDate.Year);
             if (d == 0)
-                return Task.FromResult(ToolArgs.Error("Could not convert this lunar date — please double-check day/month/year."));
+                return Task.FromResult(ToolArgs.Error("Could not convert this lunar date - please double-check day/month/year."));
             solarDate = new DateOnly(y, m, d);
         }
 

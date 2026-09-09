@@ -1,5 +1,5 @@
-{
-  "_comment": "Danh sách nghề (taxonomy) — KHÔNG kèm delta ngũ hành. Bảng delta là phát biểu phong thủy, phải do chuyên gia duyệt rồi nhập qua PUT /api/admin/scoring/occupations/{code}/modifiers, giống cách feng_shui_rules đã làm. Bản nháp để chuyên gia bắt đầu nằm ở docs/adr/score-explainability-v3.2.md §11.5.",
+﻿{
+  "_comment": "Danh sách nghề (taxonomy) - KHÔNG kèm delta ngũ hành. Bảng delta là phát biểu phong thủy, phải do chuyên gia duyệt rồi nhập qua PUT /api/admin/scoring/occupations/{code}/modifiers, giống cách feng_shui_rules đã làm. Bản nháp để chuyên gia bắt đầu nằm ở docs/adr/score-explainability-v3.2.md §11.5.",
   "occupations": [
     { "code": "IT", "nameVi": "CNTT / Lập trình", "description": "Kỹ sư phần mềm, IT, dữ liệu.", "sort": 10 },
     { "code": "SALES", "nameVi": "Kinh doanh / Sales", "description": "Bán hàng, phát triển thị trường.", "sort": 20 },
@@ -8,6 +8,6 @@
     { "code": "CREATIVE", "nameVi": "Sáng tạo / Nghệ thuật", "description": "Thiết kế, truyền thông, nghệ thuật biểu diễn.", "sort": 50 },
     { "code": "CONSTRUCT", "nameVi": "Xây dựng / Bất động sản", "description": "Kiến trúc, thi công, môi giới bất động sản.", "sort": 60 },
     { "code": "FINANCE", "nameVi": "Tài chính / Kế toán", "description": "Ngân hàng, kiểm toán, kế toán, đầu tư.", "sort": 70 },
-    { "code": "OTHER", "nameVi": "Khác", "description": "Chưa có trong danh sách — trung tính, không bẻ hành nào.", "sort": 999 }
+    { "code": "OTHER", "nameVi": "Khác", "description": "Chưa có trong danh sách - trung tính, không bẻ hành nào.", "sort": 999 }
   ]
 }

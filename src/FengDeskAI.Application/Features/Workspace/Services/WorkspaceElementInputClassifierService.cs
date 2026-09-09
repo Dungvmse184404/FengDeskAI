@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
@@ -95,7 +95,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
             {
                 _logger.LogWarning("[ElementInputClassifier] AI không trả hành hợp lệ cho label \"{Label}\": {RawContent}", label, completion.Content);
                 return ServiceResult<ClassifyElementInputResponse>.Failure(
-                    ApiStatusCodes.UnprocessableEntity, "Không nhận diện được hành phù hợp — thử mô tả cụ thể hơn (vd chất liệu chính).");
+                    ApiStatusCodes.UnprocessableEntity, "Không nhận diện được hành phù hợp - thử mô tả cụ thể hơn (vd chất liệu chính).");
             }
 
             var persisted = await PersistAsync(request.Kind, normalized, label, ct);
@@ -118,7 +118,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
     private static string BuildPrompt() =>
         "Bạn là bộ phân loại ngũ hành phong thủy cho một VẬT PHẨM/VẬT TRANG TRÍ mới do người dùng tự gõ tên " +
         "(không có sẵn trong danh sách hệ thống). Đọc TÊN vật phẩm (tiếng Việt hoặc tiếng Anh) và trả về " +
-        "CHÍNH XÁC MỘT đối tượng JSON — KHÔNG markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON.\n\n" +
+        "CHÍNH XÁC MỘT đối tượng JSON - KHÔNG markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON.\n\n" +
 
         "## SCHEMA\n" +
         "{\n" +
@@ -127,7 +127,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
         "}\n\n" +
 
         "## QUY TẮC\n" +
-        "- Dựa trên chất liệu/hình dáng/công năng đặc trưng NHẤT của vật phẩm để suy luận hành — không suy diễn viển vông.\n" +
+        "- Dựa trên chất liệu/hình dáng/công năng đặc trưng NHẤT của vật phẩm để suy luận hành - không suy diễn viển vông.\n" +
         "- Vật phẩm rõ ràng thuộc 1 hành duy nhất → 1 phần tử, weight=1.\n" +
         "- Vật phẩm pha trộn rõ 2 đặc tính (vd vừa kim loại vừa có nước) → 2 phần tử.\n" +
         "- KHÔNG vượt quá 2 phần tử. KHÔNG bịa hành ngoài 5 hành trên.\n\n" +

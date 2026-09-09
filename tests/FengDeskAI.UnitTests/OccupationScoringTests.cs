@@ -7,9 +7,9 @@ using Xunit;
 namespace FengDeskAI.UnitTests;
 
 /// <summary>
-/// P5 — nghề nghiệp bẻ vector điểm quan hệ <c>r</c> (ADR v3.2 §11, phương án N1).
+/// P5 — nghề nghiệp bẻ vector điểm quan hệ <c>r</c> (ADR v3.2 §11, phương án N1). Data-Driven: mỗi ca
+/// là một <see cref="OccupationCase"/>, thêm ca = thêm một dòng dữ liệu.
 ///
-/// <para>Công thức đang khẳng định:</para>
 /// <code>
 /// r'[e] = clamp(r[e] + delta[e]·OCCUPATION_SHARE, −1, 1)
 /// r'[e] = min(r'[e], −0.1)   khi GetRelation(mệnh, e) == BiKhac   // nghề không đổi được bản mệnh
@@ -18,9 +18,13 @@ namespace FengDeskAI.UnitTests;
 ///
 /// <para>
 /// Mọi ca dựng phòng có <c>adjustedIdeal ≡ current</c> ⇒ <c>gap = 0</c> ⇒ <c>ĝ = 0</c>, nên
-/// <c>d·p = Wp·r'[e]</c> và kỳ vọng tính tay được từ đúng một số hạng. Placement
-/// <see cref="ProductPlacement.Living"/> tắt Directional Validation, <see cref="WorkPurpose.Other"/>
-/// tắt luật vibe — điểm còn lại chỉ là phần đang kiểm.
+/// <c>d·p = Wp·r'[e]</c> và kỳ vọng rút về đúng một số hạng. <see cref="ProductPlacement.Living"/>
+/// tắt Directional Validation, <see cref="WorkPurpose.Other"/> tắt luật cảm hứng không gian.
+/// </para>
+///
+/// <para>
+/// Ca chạy trên MỌI bản mệnh: hành khắc và hành ưa suy ra từ luật ngũ hành chứ không hard-code, nên
+/// bộ test không mục khi bảng <c>feng_shui_rules</c> đổi.
 /// </para>
 /// </summary>
 public sealed class OccupationScoringTests
@@ -30,13 +34,23 @@ public sealed class OccupationScoringTests
     private const decimal Wp = 0.50m;
 
     /// <summary>Phòng "phẳng": gap = 0 nên ĝ = 0, mọi thứ còn lại đến từ trục cá nhân.</summary>
-    private static readonly ElementVector FlatRoom = new(Tho: 0.2m, Kim: 0.2m, Thuy: 0.2m, Moc: 0.2m, Hoa: 0.2m);
+    private static readonly ElementVector FlatRoom =
+        new(Tho: 0.2m, Kim: 0.2m, Thuy: 0.2m, Moc: 0.2m, Hoa: 0.2m);
+
+    /// <summary>Hành đầu tiên KHẮC bản mệnh — suy từ luật, không hard-code.</summary>
+    private static FengShuiElement Clashing(FengShuiElement destiny)
+        => Enum.GetValues<FengShuiElement>()
+            .First(e => FengShuiCalculator.GetRelation(destiny, e) == FengShuiRelation.BiKhac);
+
+    /// <summary>Hành bản mệnh ƯA (không khắc, không phải chính nó) — nơi delta được phép tác động đủ.</summary>
+    private static FengShuiElement Friendly(FengShuiElement destiny)
+        => Enum.GetValues<FengShuiElement>()
+            .First(e => e != destiny && FengShuiCalculator.GetRelation(destiny, e) != FengShuiRelation.BiKhac);
+
+    // ===================== Bộ chạy chung =====================
 
     private static ScoringContext ContextOf(
-        FengShuiElement destiny,
-        ElementVector? occupationDelta = null,
-        decimal occupationShare = 0m,
-        ElementVector? personalNeed = null) => new()
+        FengShuiElement destiny, ElementVector? delta, decimal share, ElementVector? personalNeed = null) => new()
     {
         AdjustedIdeal = FlatRoom,
         CurrentVector = FlatRoom,
@@ -45,208 +59,206 @@ public sealed class OccupationScoringTests
         Scope = WorkspaceScope.Private,
         Purpose = WorkPurpose.Other,
         PersonalWeight = Wp,
-        OccupationDelta = occupationDelta,
-        OccupationCode = occupationDelta is null ? null : "IT",
-        OccupationNameVi = occupationDelta is null ? null : "CNTT / Lập trình",
-        Params = ScoringParameters.Default with { OccupationShare = occupationShare },
+        OccupationDelta = delta,
+        OccupationCode = delta is null ? null : "IT",
+        OccupationNameVi = delta is null ? null : "CNTT / Lập trình",
+        Params = ScoringParameters.Default with { OccupationShare = share },
     };
 
     private static ScoredProduct Score(
-        FengShuiElement destiny,
-        FengShuiElement product,
-        ElementVector? occupationDelta = null,
-        decimal occupationShare = 0m,
-        ProductPlacement placement = ProductPlacement.Living)
+        FengShuiElement destiny, FengShuiElement product, ElementVector? delta = null,
+        decimal share = 0m, ProductPlacement placement = ProductPlacement.Living,
+        ElementVector? personalNeed = null)
     {
-        var facts = new ProductFacts(ProductId, ElementVector.Single(product), new HashSet<string>(), placement);
+        var facts = new ProductFacts(
+            ProductId, ElementVector.Single(product), new HashSet<string>(), placement);
         var scored = new RecommendationScorer()
-            .Score(ContextOf(destiny, occupationDelta, occupationShare), new[] { facts })
+            .Score(ContextOf(destiny, delta, share, personalNeed), new[] { facts })
             .FirstOrDefault();
         Assert.NotNull(scored);
         return scored!;
     }
 
-    /// <summary>Hành đầu tiên KHẮC bản mệnh — suy từ luật, không hard-code, để ca không mục khi bảng đổi.</summary>
-    private static FengShuiElement ClashingElement(FengShuiElement destiny)
-        => Enum.GetValues<FengShuiElement>()
-            .First(e => FengShuiCalculator.GetRelation(destiny, e) == FengShuiRelation.BiKhac);
+    // ===================== A. Bảng ca =====================
 
-    /// <summary>Hành bản mệnh ƯA (không khắc, không phải chính nó) — nơi delta được phép tác động đủ.</summary>
-    private static FengShuiElement FriendlyElement(FengShuiElement destiny)
-        => Enum.GetValues<FengShuiElement>()
-            .First(e => e != destiny && FengShuiCalculator.GetRelation(destiny, e) != FengShuiRelation.BiKhac);
-
-    // ===================== Kill-switch =====================
-
-    /// <summary>
-    /// <c>OCCUPATION_SHARE = 0</c> phải cho kết quả <b>y hệt</b> khi chưa có P5, kể cả khi bảng delta đã
-    /// đầy dữ liệu. Đây là điều kiện để merge P5 mà không phải chạy lại golden set: tắt công tắc thì
-    /// mọi con số cũ phải giữ nguyên tới từng chữ số.
-    /// </summary>
-    [Fact(DisplayName = "SCORE-OCC-01 [Boundary] A zero occupation share leaves every number untouched")]
-    public void OccupationShare_WhenZero_ProducesIdenticalScoreAndBreakdown()
+    [Theory(DisplayName = "SCORE-OCC")]
+    [MemberData(nameof(Cases))]
+    public void Occupation_BendsTheRuleScoreAsSpecified(OccupationCase c)
     {
-        var delta = new ElementVector(Tho: 0.5m, Kim: -0.5m, Thuy: 0.5m, Moc: 0.5m, Hoa: -0.5m);
+        var friendly = Friendly(c.Destiny);
+        var clashing = Clashing(c.Destiny);
 
-        foreach (var destiny in Enum.GetValues<FengShuiElement>())
-        foreach (var product in Enum.GetValues<FengShuiElement>())
+        var delta = BuildDelta(friendly, clashing, c);
+        var target = c.ProductIsClashing ? clashing : friendly;
+        var baseline = Score(c.Destiny, target);
+        var shifted = Score(c.Destiny, target, delta, c.Share);
+
+        // (1) Điểm dịch đúng Wp × delta × share — tuyến tính, không nhảy bậc. Đây là lý do chọn N1
+        //     thay vì bẻ `personalVector` (engine chỉ đọc `.Dominant()` nên delta nhỏ bị nuốt mất,
+        //     delta lớn thì LẬT ĐỈNH — nhảy bậc).
+        Assert.Equal(c.ExpectedScoreShift, Math.Round(shifted.Score - baseline.Score, 3));
+
+        var breakdown = shifted.Breakdown!;
+
+        // (2) Chỉ khai báo "có nghề nghiệp" khi nó DỊCH ĐƯỢC thật — nếu không FE vẽ một lớp radar
+        //     phẳng lì kèm dòng giải thích rỗng nghĩa.
+        if (!c.ExpectsOccupationReported)
         {
-            var without = Score(destiny, product);
-            var with = Score(destiny, product, delta, occupationShare: 0m);
-
-            Assert.Equal(without.Score, with.Score);
-            Assert.Equal(without.Breakdown!.RuleScoreVector, with.Breakdown!.RuleScoreVector);
-            Assert.Null(with.Breakdown.OccupationShift);
-            Assert.Null(with.Breakdown.OccupationCode);
+            Assert.Null(breakdown.OccupationShift);
+            Assert.Null(breakdown.OccupationCode);
+            return;
         }
+
+        Assert.Equal("IT", breakdown.OccupationCode);
+        Assert.Equal(c.Share, breakdown.OccupationShare);
+
+        var shift = breakdown.OccupationShift!.Value;
+        Assert.Equal(c.ExpectedFriendlyShift, Math.Round(shift[friendly], 3));
+
+        // (3) `occupationShift` = r' − r, đo SAU khi chặn. Trục bị chặn hiện gần 0 chứ không hiện
+        //     `delta·share` danh nghĩa — một lớp radar nói "nghề của bạn nâng Kim" trong khi Kim vẫn
+        //     khắc mệnh là nói dối bằng đồ hoạ.
+        Assert.Equal(
+            Math.Round(breakdown.RuleScoreVector!.Value[clashing] - breakdown.BaseRuleScoreVector!.Value[clashing], 6),
+            Math.Round(shift[clashing], 6));
+
+        // (4) Nghề nghiệp KHÔNG đổi được bản mệnh: hành BiKhac bị chặn trần ở −0.1 dù delta tới đâu.
+        Assert.True(breakdown.RuleScoreVector!.Value[clashing] <= -0.1m,
+            $"{c.Id}: mệnh {c.Destiny}, hành khắc {clashing} — r' = {breakdown.RuleScoreVector.Value[clashing]}, phải ≤ −0.1.");
+
+        // (5) Phạt kiêng kỵ là PHẠM TRÙ (đi đường GetRelation), nghề nghiệp không được chạm vào — §14.4.
+        Assert.Equal(baseline.Breakdown!.UserPenalty, breakdown.UserPenalty);
     }
 
-    /// <summary>
-    /// Nghề đã khai nhưng <b>chưa có delta nào</b> cũng phải là không-tác-động. Chuyên gia chưa duyệt
-    /// bảng số thì nghề chỉ là một nhãn hồ sơ, không được lén đổi thứ hạng.
-    /// </summary>
-    [Fact(DisplayName = "SCORE-OCC-02 [Boundary] An occupation with a zero delta vector changes nothing")]
-    public void OccupationDelta_WhenAllZero_DoesNotMoveTheScore()
+    private static ElementVector BuildDelta(
+        FengShuiElement friendly, FengShuiElement clashing, OccupationCase c)
+        => ElementVector.Single(friendly).Scale(c.DeltaOnFriendly)
+            .Add(ElementVector.Single(clashing).Scale(c.DeltaOnClashing));
+
+    public static TheoryData<OccupationCase> Cases()
     {
+        var data = new TheoryData<OccupationCase>();
+
         foreach (var destiny in Enum.GetValues<FengShuiElement>())
         {
-            var friendly = FriendlyElement(destiny);
-            Assert.Equal(
-                Score(destiny, friendly).Score,
-                Score(destiny, friendly, ElementVector.Zero, occupationShare: 1m).Score);
+            data.Add(new OccupationCase
+            {
+                Id = "SCORE-OCC-01", Name = "[Boundary] A zero share leaves every number untouched",
+                Destiny = destiny, DeltaOnFriendly = 0.50m, DeltaOnClashing = -0.50m, Share = 0.00m,
+                ExpectedScoreShift = 0.000m, ExpectsOccupationReported = false,
+                Why = "Kill-switch: mọi delta × 0 ⇒ r' ≡ r ⇒ byte-identical như khi chưa có P5.",
+            });
+
+            data.Add(new OccupationCase
+            {
+                Id = "SCORE-OCC-02", Name = "[Boundary] An all-zero delta vector changes nothing",
+                Destiny = destiny, DeltaOnFriendly = 0m, DeltaOnClashing = 0m, Share = 1.00m,
+                ExpectedScoreShift = 0.000m, ExpectsOccupationReported = false,
+                Why = "Nghề chưa được chuyên gia nhập delta ⇒ chỉ là nhãn hồ sơ, không được lén đổi thứ hạng.",
+            });
+
+            data.Add(new OccupationCase
+            {
+                Id = "SCORE-OCC-03", Name = "[Normal] The delta shifts the score by Wp × delta × share",
+                Destiny = destiny, DeltaOnFriendly = 0.20m, Share = 1.00m,
+                ExpectedScoreShift = 0.100m, ExpectedFriendlyShift = 0.200m,
+                Why = "ĝ = 0 và sản phẩm thuần một hành ⇒ điểm dịch = Wp × delta × share = 0.5 × 0.20 × 1.0.",
+            });
+
+            data.Add(new OccupationCase
+            {
+                Id = "SCORE-OCC-04", Name = "[Normal] Half the share moves the score by half as much",
+                Destiny = destiny, DeltaOnFriendly = 0.20m, Share = 0.50m,
+                ExpectedScoreShift = 0.050m, ExpectedFriendlyShift = 0.100m,
+                Why = "Tuyến tính theo share: 0.5 × 0.20 × 0.5 = 0.050.",
+            });
+
+            data.Add(new OccupationCase
+            {
+                Id = "SCORE-OCC-05", Name = "[Abnormal] A negative delta pushes the score down symmetrically",
+                Destiny = destiny, DeltaOnFriendly = -0.20m, Share = 1.00m,
+                ExpectedScoreShift = -0.100m, ExpectedFriendlyShift = -0.200m,
+                Why = "Delta âm phải hạ điểm đúng bằng mức delta dương nâng lên — không có chiều nào ưu ái.",
+            });
+
+            data.Add(new OccupationCase
+            {
+                Id = "SCORE-L2-07", Name = "[Boundary] An occupation cannot lift a clashing element out of the negative",
+                Destiny = destiny, DeltaOnFriendly = 0.20m, DeltaOnClashing = 1.00m, Share = 1.00m,
+                ProductIsClashing = true,
+                ExpectedScoreShift = 0.450m, ExpectedFriendlyShift = 0.200m,
+                Why = "§14.7 (hoãn từ P1 sang P5): delta = +1.0 và share mở hết vẫn KHÔNG kéo nổi hành BiKhac "
+                    + "lên ≥ 0 — trần chặn ở −0.1. r đi từ −1.0 lên đúng −0.1 nên điểm dịch "
+                    + "0.5 × (−0.1 − (−1.0)) = 0.450, mà sản phẩm vẫn ở phe ÂM và vẫn bị phạt đủ như cũ: "
+                    + "−0.800 → −0.350. Nghề đổi mức ƯA THÍCH, không đổi được bản mệnh.",
+            });
         }
+
+        return data;
     }
 
-    // ===================== Tác động tuyến tính =====================
-
-    /// <summary>
-    /// Lý do chọn N1 thay vì bẻ <c>personalVector</c>: tác động phải <b>tuyến tính và liên tục</b>.
-    /// Với <c>ĝ = 0</c> và sản phẩm thuần một hành, điểm dịch đúng <c>Wp × delta × share</c> — không
-    /// nhảy bậc, không phụ thuộc việc delta có đủ lớn để lật đỉnh hay không.
-    /// </summary>
-    [Theory(DisplayName = "SCORE-OCC-03 [Normal] The occupation delta shifts the score linearly")]
-    [InlineData(0.20, 1.00, 0.100)]
-    [InlineData(0.20, 0.50, 0.050)]
-    [InlineData(-0.20, 1.00, -0.100)]
-    public void OccupationDelta_ShiftsScoreBy_PersonalWeightTimesDeltaTimesShare(
-        double delta, double share, double expectedShift)
-    {
-        foreach (var destiny in Enum.GetValues<FengShuiElement>())
-        {
-            var friendly = FriendlyElement(destiny);
-            var deltaVector = ElementVector.Single(friendly).Scale((decimal)delta);
-
-            decimal baseline = Score(destiny, friendly).Score;
-            decimal shifted = Score(destiny, friendly, deltaVector, (decimal)share).Score;
-
-            Assert.Equal((decimal)expectedShift, Math.Round(shifted - baseline, 3));
-        }
-    }
-
-    // ===================== Ràng buộc kiêng kỵ =====================
-
-    /// <summary>
-    /// <b>SCORE-L2-07</b> (§14.7, hoãn từ P1 sang P5). Nghề nghiệp KHÔNG đổi được bản mệnh: dù khai
-    /// <c>delta = +1.0</c> và mở hết <c>OCCUPATION_SHARE = 1.0</c>, hành đang <c>BiKhac</c> vẫn phải
-    /// nằm ở <c>≤ −0.1</c>. Không có chặn này thì một dòng delta gõ sai đủ để hệ thống đi gợi ý đúng
-    /// thứ người dùng phải kiêng.
-    /// </summary>
-    [Fact(DisplayName = "SCORE-L2-07 [Boundary] An occupation cannot lift a clashing element out of the negative")]
-    public void OccupationDelta_CannotRaiseAClashingElementAboveTheCap()
-    {
-        foreach (var destiny in Enum.GetValues<FengShuiElement>())
-        {
-            var clashing = ClashingElement(destiny);
-            var scored = Score(destiny, clashing, ElementVector.Single(clashing), occupationShare: 1m);
-
-            var adjusted = scored.Breakdown!.RuleScoreVector!.Value[clashing];
-            Assert.True(adjusted <= -0.1m,
-                $"Mệnh {destiny}, hành khắc {clashing}: r' = {adjusted}, phải ≤ −0.1 dù delta = +1.0.");
-        }
-    }
-
-    /// <summary>
-    /// Phạt điểm khi sản phẩm khắc mệnh là một <b>phạm trù</b> (<c>GetRelation</c>), không phải một
-    /// con số liên tục — nên delta nghề nghiệp không được chạm vào nó. Ca này khoá đúng ranh giới
-    /// phân vai ở §14.4: nghề đổi mức ƯA THÍCH, không đổi mức KIÊNG KỴ.
-    /// </summary>
-    [Fact(DisplayName = "SCORE-OCC-04 [Abnormal] An occupation never softens the destiny-clash penalty")]
-    public void OccupationDelta_DoesNotChangeTheUserConflictPenalty()
-    {
-        foreach (var destiny in Enum.GetValues<FengShuiElement>())
-        {
-            var clashing = ClashingElement(destiny);
-
-            decimal Penalty(ScoredProduct s) => s.Breakdown!.UserPenalty;
-
-            Assert.Equal(
-                Penalty(Score(destiny, clashing)),
-                Penalty(Score(destiny, clashing, ElementVector.Single(clashing), occupationShare: 1m)));
-        }
-    }
-
-    /// <summary>
-    /// <c>OccupationShift = r' − r</c> phải là mức dịch <b>THẬT</b>, tức sau khi chặn. Trục bị chặn
-    /// hiện gần 0 chứ không hiện <c>delta·share</c> danh nghĩa — FE vẽ lớp nghề nghiệp từ đây, và một
-    /// lớp nói "nghề của bạn nâng Kim" trong khi Kim vẫn khắc mệnh là nói dối bằng đồ hoạ.
-    /// </summary>
-    [Fact(DisplayName = "SCORE-OCC-05 [Normal] The reported shift is the real one, measured after clamping")]
-    public void OccupationShift_ReportsTheEffectiveShift_NotTheNominalDelta()
-    {
-        foreach (var destiny in Enum.GetValues<FengShuiElement>())
-        {
-            var clashing = ClashingElement(destiny);
-            var friendly = FriendlyElement(destiny);
-            var delta = ElementVector.Single(clashing).Add(ElementVector.Single(friendly).Scale(0.2m));
-
-            var scored = Score(destiny, friendly, delta, occupationShare: 1m);
-            var breakdown = scored.Breakdown!;
-            var shift = breakdown.OccupationShift!.Value;
-
-            Assert.Equal("IT", breakdown.OccupationCode);
-            Assert.Equal(1m, breakdown.OccupationShare);
-
-            // Hành được ưa: dịch đúng delta đã khai.
-            Assert.Equal(0.2m, Math.Round(shift[friendly], 3));
-
-            // Hành khắc mệnh: r bị chặn nên phần dịch thật nhỏ hơn hẳn delta danh nghĩa 1.0.
-            Assert.True(shift[clashing] < 1m,
-                $"Mệnh {destiny}: trục {clashing} báo dịch {shift[clashing]}, đáng ra phải bị chặn.");
-            Assert.Equal(
-                breakdown.RuleScoreVector!.Value[clashing] - breakdown.BaseRuleScoreVector!.Value[clashing],
-                shift[clashing]);
-        }
-    }
-
-    // ===================== Ranh giới luồng =====================
+    // ===================== B. Ranh giới luồng =====================
 
     /// <summary>
     /// Luồng <see cref="ProductPlacement.Carry"/> chấm theo vector dụng thần, KHÔNG dựng <c>r</c> —
-    /// nên N1 không có chỗ bám và nghề nghiệp không tác động. Ca này khoá điều đó lại thành hành vi
-    /// có chủ ý: muốn nghề nghiệp vào luồng Carry thì phải bẻ chính vector dụng thần, một quyết định
-    /// nghiệp vụ khác chưa chốt (§11.2).
+    /// nên N1 không có chỗ bám và nghề nghiệp không tác động. Khoá lại thành hành vi CÓ CHỦ Ý: muốn
+    /// nghề vào luồng đó thì phải bẻ chính vector dụng thần, một quyết định nghiệp vụ khác chưa chốt (§11.2).
     /// </summary>
-    [Fact(DisplayName = "SCORE-OCC-06 [Boundary] The carry flow is untouched by occupation")]
-    public void OccupationDelta_DoesNotAffectTheCarryFlow()
+    [Theory(DisplayName = "SCORE-OCC-06 [Boundary] The carry flow is untouched by occupation")]
+    [MemberData(nameof(Destinies))]
+    public void Occupation_DoesNotAffectTheCarryFlow(FengShuiElement destiny)
     {
-        foreach (var destiny in Enum.GetValues<FengShuiElement>())
-        {
-            var friendly = FriendlyElement(destiny);
-            var need = ElementVector.Single(friendly);
-            var facts = new ProductFacts(
-                ProductId, ElementVector.Single(friendly), new HashSet<string>(), ProductPlacement.Carry);
+        var friendly = Friendly(destiny);
+        var need = ElementVector.Single(friendly);
 
-            decimal ScoreCarry(ElementVector? delta, decimal share)
-            {
-                var ctx = ContextOf(destiny, delta, share, personalNeed: need);
-                var scored = new RecommendationScorer().Score(ctx, new[] { facts }).FirstOrDefault();
-                Assert.NotNull(scored);
-                return scored!.Score;
-            }
+        decimal ScoreCarry(ElementVector? delta, decimal share)
+            => Score(destiny, friendly, delta, share, ProductPlacement.Carry, need).Score;
 
-            Assert.Equal(
-                ScoreCarry(null, 0m),
-                ScoreCarry(ElementVector.Single(friendly).Scale(0.5m), 1m));
-        }
+        Assert.Equal(
+            ScoreCarry(null, 0m),
+            ScoreCarry(ElementVector.Single(friendly).Scale(0.5m), 1m));
     }
+
+    public static TheoryData<FengShuiElement> Destinies()
+    {
+        var data = new TheoryData<FengShuiElement>();
+        foreach (var destiny in Enum.GetValues<FengShuiElement>()) data.Add(destiny);
+        return data;
+    }
+}
+
+/// <summary>Một ca của P5 — xem <see cref="OccupationScoringTests"/>.</summary>
+public sealed class OccupationCase
+{
+    public string Id { get; init; } = "";
+
+    /// <summary>Tên hiển thị, gồm nhãn phân loại [Normal] / [Boundary] / [Abnormal].</summary>
+    public string Name { get; init; } = "";
+
+    public FengShuiElement Destiny { get; init; }
+
+    /// <summary>Delta trên hành bản mệnh ƯA — nơi nghề nghiệp được phép tác động đủ.</summary>
+    public decimal DeltaOnFriendly { get; init; }
+
+    /// <summary>Delta trên hành KHẮC bản mệnh — nơi engine phải chặn lại.</summary>
+    public decimal DeltaOnClashing { get; init; }
+
+    public decimal Share { get; init; }
+
+    /// <summary>Sản phẩm thuần hành KHẮC mệnh thay vì hành ưa.</summary>
+    public bool ProductIsClashing { get; init; }
+
+    /// <summary>Mức điểm dịch kỳ vọng so với khi không có nghề.</summary>
+    public decimal ExpectedScoreShift { get; init; }
+
+    /// <summary><c>occupationShift[hành ưa]</c> kỳ vọng.</summary>
+    public decimal ExpectedFriendlyShift { get; init; }
+
+    /// <summary>Breakdown có phải khai báo khối <c>occupation</c> không.</summary>
+    public bool ExpectsOccupationReported { get; init; } = true;
+
+    /// <summary>Phép tính bằng tay — in ra khi ca fail.</summary>
+    public string Why { get; init; } = "";
+
+    public override string ToString() => $"{Id} {Destiny} {Name}";
 }

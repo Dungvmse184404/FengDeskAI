@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.CustomerCare.Services;
 using FengDeskAI.Application.Features.Workspace.Services;
@@ -26,7 +26,7 @@ public sealed class RecommendProductsTool : IAiTool
         "list_my_workspaces; omit it to use the user's default workspace. Returns a ranked list with " +
         "scores, reasons and placement hints. " +
         "For items the user CARRIES OR WEARS (bracelet, pendant, charm, car hanger, wallet item) use " +
-        "recommend_personal_items instead — those are scored against the person, not a room.";
+        "recommend_personal_items instead - those are scored against the person, not a room.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {

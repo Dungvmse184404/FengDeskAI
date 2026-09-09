@@ -30,7 +30,8 @@ public static class WorkspaceElementAnalyzer
         IReadOnlyCollection<WorkspaceProfileInput> profileInputs,
         ElementInputResolver resolver,
         PersonPresence? person = null,
-        decimal? interiorVotes = null)
+        decimal? interiorVotes = null,
+        decimal? saturationAlpha = null)
     {
         var ideal = WorkspaceVectorBuilder.BuildIdeal(typeElements);
         var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, modifiers);
@@ -38,7 +39,7 @@ public static class WorkspaceElementAnalyzer
         // hình và điểm nói hai chuyện khác nhau về cùng một căn phòng.
         var current = WorkspaceVectorBuilder.BuildCurrentBreakdown(
                 profileInputs, resolver, typeElements, Array.Empty<ProductContribution>(),
-                person, interiorVotes)
+                person, interiorVotes, saturationAlpha)
             .Current;
         var gap = adjustedIdeal.Subtract(current);
         return new WorkspaceElementAnalysis(ideal, adjustedIdeal, current, gap);

@@ -1,7 +1,8 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FengDeskAI.ApiTests.Infrastructure;
+using FengDeskAI.Application.Common.Constants;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -346,7 +347,12 @@ public sealed class CatalogFlowTests
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
-        Assert.Contains("vibe", await ApiEnvelope.MessageAsync(response), StringComparison.OrdinalIgnoreCase);
+        // So với HẰNG SỐ chứ không so với một từ trong câu: câu chữ hiển thị cho người dùng được
+        // phép sửa (và đã sửa - "vibe" là từ trong code, không đưa lên giao diện), còn việc endpoint
+        // trả đúng thông báo nào mới là thứ ca này khoá.
+        Assert.Equal(
+            ApiStatusMessages.Product.VibesNotExist,
+            await ApiEnvelope.MessageAsync(response));
     }
 
     // ===================== Vector ngũ hành =====================

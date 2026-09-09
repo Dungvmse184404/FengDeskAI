@@ -119,11 +119,11 @@ public class WorkspaceProfileService : IWorkspaceProfileService
 
         var breakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
             ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, deliveredContribs,
-            person, scoringParams.InteriorPriorVotes);
+            person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha);
         var current = breakdown.Current;
         var previewCurrent = WorkspaceVectorBuilder
             .BuildCurrentBreakdown(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, previewContribs,
-                person, scoringParams.InteriorPriorVotes)
+                person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha)
             .Current;
         var gap = adjustedIdeal.Subtract(current);
         var previewGap = adjustedIdeal.Subtract(previewCurrent);
@@ -166,6 +166,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             Contributions = CurrentBreakdownMapping.ToContributionRows(breakdown),
             EvidenceCount = breakdown.EvidenceCount,
             TotalVotes = Math.Round(breakdown.TotalVotes, 3),
+            SaturationAlpha = scoringParams.EvidenceSaturationAlpha,
             Confidence = CurrentBreakdownMapping.ConfidenceOf(breakdown),
             PersonalDirection = await BuildPersonalDirectionAsync(
                 ctx.Scope, user?.DateOfBirth, adjustedIdeal, gap, ct),
@@ -306,7 +307,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         await _uow.SaveChangesAsync(ct);
         return ServiceResult.Success(item.IsDelivered
             ? "Đã đặt sản phẩm vào không gian."
-            : "Đã đặt sản phẩm vào không gian (hàng đang giao — radar hiển thị dạng xem trước).");
+            : "Đã đặt sản phẩm vào không gian (hàng đang giao - radar hiển thị dạng xem trước).");
     }
 
     public async Task<IServiceResult> RemovePlacementAsync(Guid workspaceProfileId, Guid userId, Guid orderItemId, CancellationToken ct = default)

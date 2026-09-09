@@ -1,4 +1,4 @@
-namespace FengDeskAI.Application.Common.Constants;
+﻿namespace FengDeskAI.Application.Common.Constants;
 
 /// <summary>
 /// Message trả về client qua <c>ServiceResult</c> — gom về một nơi để tái sử dụng và đồng nhất.
@@ -150,8 +150,8 @@ public static class ApiStatusMessages
         public const string ImageNotFound = "Không tìm thấy ảnh.";
         public const string ImageCreated = "Thêm ảnh thành công.";
         public const string ImageDeleted = "Đã xóa ảnh.";
-        public const string StylesNotExist = "Có mã phong cách (style) không tồn tại.";
-        public const string VibesNotExist = "Có mã vibe không tồn tại.";
+        public const string StylesNotExist = "Có mã phong cách không tồn tại.";
+        public const string VibesNotExist = "Có mã cảm hứng không gian không tồn tại.";
 
         // Model 3D — kết quả hiện tại (ProductModel3D)
         public const string Model3DSourceImageRequired = "Sản phẩm chưa có ảnh để sinh model 3D.";
@@ -169,7 +169,7 @@ public static class ApiStatusMessages
         public const string Model3DRequestQueued = "Đã gửi yêu cầu, hệ thống đang tự động tạo model 3D.";
         public const string Model3DRequestAwaitingStaff = "Đã gửi yêu cầu tạo model 3D, đang chờ nhân viên xử lý.";
         public const string Model3DRequestNotActionableByStaff = "Yêu cầu này không ở trạng thái chờ nhân viên xử lý.";
-        public const string Model3DRequestNoTaskToAccept = "Yêu cầu chưa có kết quả Meshy để chấp nhận — hãy gọi tạo model trước.";
+        public const string Model3DRequestNoTaskToAccept = "Yêu cầu chưa có kết quả Meshy để chấp nhận - hãy gọi tạo model trước.";
         public const string Model3DRequestTaskNotSucceeded = "Task Meshy của yêu cầu này chưa hoàn tất (Succeeded).";
         public const string Model3DRequestAccepted = "Đã chấp nhận model 3D cho ảnh sản phẩm đã chọn.";
         public const string Model3DImageHasModel = "Ảnh đang có model 3D; hãy xóa model trước khi xóa ảnh.";
@@ -179,10 +179,10 @@ public static class ApiStatusMessages
         public const string Model3DStorageError = "Không thể lưu file model 3D vào kho lưu trữ; vui lòng thử lại.";
         public const string Model3DProviderError = "Dịch vụ sinh 3D gặp lỗi, vui lòng thử lại sau.";
         /// <summary>Chỉ dùng cho response staff sàn (mục generate/retry) — KHÔNG dùng cho owner/garden staff.</summary>
-        public const string Model3DProviderInsufficientCredits = "Meshy hết credit — vui lòng nạp thêm rồi thử lại.";
+        public const string Model3DProviderInsufficientCredits = "Meshy hết credit - vui lòng nạp thêm rồi thử lại.";
         public const string Model3DProviderInvalidRequest = "Meshy từ chối ảnh hoặc tham số đầu vào.";
-        public const string Model3DProviderUnauthorized = "Backend không xác thực được với Meshy — vui lòng kiểm tra API key.";
-        public const string Model3DProviderRateLimited = "Meshy đang giới hạn tần suất — vui lòng đợi một lúc rồi thử lại.";
+        public const string Model3DProviderUnauthorized = "Backend không xác thực được với Meshy - vui lòng kiểm tra API key.";
+        public const string Model3DProviderRateLimited = "Meshy đang giới hạn tần suất - vui lòng đợi một lúc rồi thử lại.";
     }
 
     public static class Cart
@@ -274,9 +274,9 @@ public static class ApiStatusMessages
         // ===== Mô tả đầy đủ + cách khắc phục =====
         public const string PickupAddressMissing = "Cửa hàng chưa có địa chỉ lấy hàng. Hãy thêm địa chỉ cửa hàng.";
         public const string PickupWardGhnCodeMissing = "Phường/xã của địa chỉ lấy hàng chưa có mã vùng của nhà vận chuyển. Hãy chọn lại phường/xã.";
-        public const string PickupPhoneInvalid = "Chưa có số điện thoại người gửi hợp lệ. Nhà vận chuyển chỉ nhận số di động 10 chữ số (hotline 1900/số cố định không dùng được) — hãy nhập số điện thoại người gửi cho địa chỉ cửa hàng.";
+        public const string PickupPhoneInvalid = "Chưa có số điện thoại người gửi hợp lệ. Nhà vận chuyển chỉ nhận số di động 10 chữ số (hotline 1900/số cố định không dùng được) - hãy nhập số điện thoại người gửi cho địa chỉ cửa hàng.";
         public const string PickupNameMissing = "Chưa có tên người gửi cho địa chỉ lấy hàng.";
-        public const string CarrierShopIdMissing = "Cửa hàng chưa được cấp mã shop của nhà vận chuyển. Hệ thống tự cấp sau khi địa chỉ lấy hàng và số điện thoại người gửi đầy đủ — nếu đã đủ mà vẫn báo lỗi, hãy liên hệ quản trị viên.";
+        public const string CarrierShopIdMissing = "Cửa hàng chưa được cấp mã shop của nhà vận chuyển. Hệ thống tự cấp sau khi địa chỉ lấy hàng và số điện thoại người gửi đầy đủ - nếu đã đủ mà vẫn báo lỗi, hãy liên hệ quản trị viên.";
 
         // ===== Message tổng hợp ({0} = danh sách trường thiếu) =====
         public const string OwnerBlockedFormat = "Cửa hàng đang thiếu thông tin giao hàng: {0}. Vui lòng bổ sung trước khi tạo vận đơn.";
@@ -377,7 +377,7 @@ public static class ApiStatusMessages
         public const string BankInfoRequired = "Đơn COD cần thông tin tài khoản ngân hàng để hoàn tiền.";
         public const string ExchangeItemRequired = "Đổi hàng cần chọn biến thể thay thế cho mỗi sản phẩm.";
         public const string ExchangeItemNotFound = "Không tìm thấy biến thể thay thế hợp lệ của cửa hàng.";
-        public const string ExchangeMoreExpensive = "Biến thể đổi có giá cao hơn — vui lòng trả hàng rồi đặt đơn mới.";
+        public const string ExchangeMoreExpensive = "Biến thể đổi có giá cao hơn - vui lòng trả hàng rồi đặt đơn mới.";
         /// <summary>{0} = tên biến thể, {1} = số lượng tồn còn lại.</summary>
         public const string ExchangeOutOfStockFormat = "Biến thể đổi '{0}' không đủ tồn kho (còn {1}).";
         public const string ManageForbidden = "Bạn không có quyền xử lý yêu cầu trả hàng của cửa hàng này.";

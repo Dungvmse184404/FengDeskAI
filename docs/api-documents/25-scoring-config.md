@@ -196,6 +196,65 @@ một bảng chưa duyệt thì thứ hạng đổi mà không ai review.
 | `delta ∈ [−1, 1]` | `r` vốn nằm trong [−1,1]; delta lớn hơn chỉ ép mọi hành về biên, biến `OCCUPATION_SHARE` thành công tắc thay vì núm hiệu chỉnh |
 | `delta = 0` | Bị bỏ qua, không lưu dòng rác |
 
+### Phần khắc mệnh không trội của vật mang theo người *(v3.2 §18)*
+
+| Code | Seed | Ý nghĩa |
+|------|:---:|---------|
+| `MINOR_CLASH_PENALTY` | **0.60** | Phạt phần hành khắc bản mệnh **không phải hành trội**, theo đúng tỉ trọng. `0` = tắt |
+
+```
+clashShare  = Σ product[e]  với mọi e mà GetRelation(mệnh, e) == BiKhac
+userPenalty = MINOR_CLASH_PENALTY × clashShare
+```
+
+**Chỉ áp cho luồng `Carry`.** Nhánh dụng thần dùng vector Σ=1 **không âm** nên không có trục nào mang
+dấu trừ, còn bộ lọc xung khắc lại chỉ so hành TRỘI - một vòng tay `Kim 0.50 / Thủy 0.30 / Hỏa 0.20`
+đeo cho người mệnh Kim lọt qua cả hai và **20% Hỏa biến mất không dấu vết**.
+
+Luồng phòng KHÔNG áp: ở đó `d = (1−Wp)·ĝ + Wp·r` với `r` có dấu đã trừ phần khắc theo tỉ trọng rồi,
+thêm nữa là đếm hai lần.
+
+⚠️ Hành **trội** khắc mệnh vẫn đi đường cũ (`AlwaysHard` loại thẳng), không rơi vào công thức tỉ
+trọng - chuyển hết sang tỉ trọng sẽ giảm phạt của vật 50% Hỏa từ 0.60 xuống 0.30, tức nới lỏng đúng
+nhóm cần phạt nặng nhất.
+
+Dòng phạt trong breakdown mang mã riêng `MINOR_CLASH_PENALTY`, nhãn **"Khắc bản mệnh (phần phụ)"** và
+câu giải thích nêu đích danh hành nào, bao nhiêu phần trăm.
+
+### Nén tương phản khi dựng `current` *(v3.2 §17)*
+
+| Code | Seed | Ý nghĩa |
+|------|:---:|---------|
+| `EVIDENCE_SATURATION_ALPHA` | **0.60** | Số mũ nén: `current = normalize(khối lượng^α)`. `1.0` = tắt (tuyến tính như trước) |
+
+```
+m[e]    = Σᵢ vᵢ · wᵢ[e]        // khối lượng thô theo PHIẾU — §12 giữ nguyên
+current = normalize( m^α )
+```
+
+Sửa tật: khai 12 tag Mộc thì Mộc chiếm ~60% hiện trạng và nuốt gần hết bốn hành còn lại. Cảm nhận về
+số lượng vốn không tuyến tính (**định luật luỹ thừa Stevens**) — mức dịch tương đối bằng `α · Δm/m`,
+tỉ lệ với thay đổi TƯƠNG ĐỐI:
+
+| Mộc đang có | Thêm 2 phiếu | Cảm nhận đổi |
+|---:|---:|---:|
+| 10 phiếu | +20% | +11.6% |
+| 100 phiếu | +2% | +1.2% |
+
+**Bộ hãm MỀM, không phải trần cứng.** Một hành cần **2–3 lần** số tag mới đạt cùng mức áp đảo (Mộc đạt
+60%: 13 tag ở α=1, 41 tag ở α=0.6), và thứ tự giữa các hành luôn được giữ.
+
+⚠️ Áp lên **TỔNG của từng hành**, sau khi cộng hết mọi nguồn — không áp riêng cho tag hay riêng cho
+nền phòng. Nén một nhóm rồi cộng với nhóm chưa nén là cộng hai hệ đơn vị (`phiếu` vs `phiếu^α`), làm
+mất bất biến tỉ lệ, và **đẩy bản mệnh chủ nhân LÊN** chứ không xuống. Chi tiết ở
+[§17.4](../adr/score-explainability-v3.2.md).
+
+Hệ quả: nén ép tương phản **giữa các hành**, còn tỉ lệ **giữa các nguồn trong cùng một hành** không
+đổi — nên `PERSON_PRESENCE_VOTES_*`/`INTERIOR_PRIOR_VOTES` vẫn là lever đúng để chỉnh sức nặng prior.
+
+> `confidence` tính trên phiếu **thô**, α không chạm tới: nó đo *có bao nhiêu bằng chứng*, không đo
+> *nhìn thấy đậm tới đâu*.
+
 ### Cờ điều khiển (kill-switch)
 
 | Code | Seed | Ý nghĩa |

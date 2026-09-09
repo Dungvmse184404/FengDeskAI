@@ -1,4 +1,4 @@
-﻿# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
+# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
 
 > **Trạng thái:** **ACCEPTED** rev.5 — 13/13 quyết định đã chốt 08/09/2026 (bảng ở PHẦN E)
 > **Đã xong:** 12 doc liên quan + bộ test `RecommendationScorerTests.cs`. **Chưa xong:** code engine (P1).
@@ -1212,6 +1212,209 @@ chỉnh ở đây là đổi ranking toàn hệ thống. Đã thêm guard.
 
 # PHẦN D — KẾ HOẠCH
 
+## 17. Nén tương phản khi dựng `current` — định luật luỹ thừa Stevens
+
+### 17.1 Tật đang sửa
+
+Mô hình phiếu (§12) cộng tuyến tính: mỗi tag Mộc thêm đúng 1 phiếu vào Mộc. Hệ quả là khai nhiều tag
+về một hành thì hành đó **nuốt** cả bốn hành còn lại. Nhà bếp chính + 12 tag Mộc:
+
+| | Kim | Mộc | Thuỷ | Hoả | Thổ | cao/thấp |
+|---|---:|---:|---:|---:|---:|---:|
+| α=1 (tuyến tính) | 15.7% | **59.6%** | 1.8% | 10.7% | 12.2% | 33.4x |
+| **α=0.6** | 19.4% | **43.2%** | 5.3% | 15.4% | 16.7% | **8.2x** |
+
+12 tag Mộc chỉ nói *"phòng nhiều gỗ"*, không nói *"phòng gấp 12 lần gỗ"*.
+
+### 17.2 Công thức
+
+```
+m[e]    = Σᵢ vᵢ · wᵢ[e]        // khối lượng thô, đơn vị PHIẾU — §12 giữ nguyên
+current = normalize( m^α )     // α = EVIDENCE_SATURATION_ALPHA, seed 0.60
+```
+
+Cảm nhận về số lượng vốn không tuyến tính (**định luật luỹ thừa Stevens**, dạng hiện đại của
+Weber–Fechner). Mức dịch tương đối bằng `α · Δm/m` — tỉ lệ với thay đổi **TƯƠNG ĐỐI**, đúng trực giác
+*"mất 2 trong 10 cây là chuyện lớn, mất 2 trong 100 cây thì không"*:
+
+| Mộc đang có | Thêm 2 phiếu | Khối lượng cảm nhận đổi |
+|---:|---:|---:|
+| 10 phiếu | +20% | +11.6% |
+| 100 phiếu | +2% | +1.2% |
+
+### 17.3 Vì sao luỹ thừa, không phải `log`
+
+Cả hai đều lõm. Luỹ thừa **bất biến theo tỉ lệ**, `log` thì không — khai đúng căn phòng đó nhưng chi
+tiết gấp đôi:
+
+| | tương phản cao/thấp |
+|---|---|
+| luỹ thừa α=0.6 | 3.7x → **3.7x** ✅ |
+| `log(1+m)` | 4.5x → **3.5x** ❌ |
+
+`log` đẩy người khai kỹ về phía cân bằng, tức **phạt vì cẩn thận**. Khoá bằng `SCORE-SAT-04`.
+
+### 17.4 ⚠️ Áp lên TỔNG của từng hành, không áp lên từng nhóm nguồn
+
+Đã cân nhắc ba chỗ đặt, trên Nhà bếp chính + 12 tag Mộc, α=0.6:
+
+| | phần của chủ nhân (2 phiếu) | bất biến tỉ lệ | cùng hệ đơn vị |
+|---|---:|:-:|:-:|
+| α=1 (hiện tại) | 8.70% | ✅ | ✅ |
+| **A** nén riêng tag | 14.86% | ❌ | ❌ |
+| **B** nén tag + nền phòng | **16.36%** | ❌ | ❌ |
+| **C** nén tổng ⭐ | 12.58% | ✅ | ✅ |
+
+**Trực giác "chừa bản mệnh ra khỏi phép nén" cho kết quả NGƯỢC.** Nén làm cái to nhỏ lại; chừa chủ
+nhân ra nghĩa là mọi thứ khác co lại còn chủ nhân giữ nguyên ⇒ chủ nhân **nổi lên**. Chính B — phương
+án trực giác nhất — đẩy bản mệnh lên mạnh nhất (8.70% → 16.36%).
+
+Hai lỗi kỹ thuật nữa của A và B:
+- **Lệch đơn vị**: `m^0.6` không còn là phiếu. A và B cộng `4.44 (đã nén)` với `3 phiếu (thô)`.
+- **Không phủ sản phẩm**: ví dụ gốc là *100 cây cảnh*, mà cây mua rồi đặt vào phòng là **sản phẩm**,
+  không phải tag. A và B đều bỏ sót đúng ca đó.
+
+**Tính chất quyết định của C:** nén ép tương phản **GIỮA các hành**, còn tỉ lệ **giữa các nguồn TRONG
+cùng một hành** không đổi một chút nào. Trong hành Kim, chủ nhân so với 2 tag Trắng+Bạc vẫn đúng
+`0.6000` y hệt số thô. Nên câu chuyện *"prior loãng dần khi user khai thêm tag"* của §12 sống nguyên
+vẹn. Khoá bằng `SCORE-SAT-06`.
+
+> Muốn giảm ảnh hưởng bản mệnh thì lever đúng là `PERSON_PRESENCE_VOTES_*` — nó chỉnh trong không gian
+> phiếu nên không kéo theo tác dụng phụ nào.
+
+### 17.5 Bộ hãm MỀM, không phải trần cứng
+
+| Mộc đạt | α=1 cần | α=0.6 cần |
+|---|---:|---:|
+| 40% | 5 tag | 10 tag (2.0x) |
+| 50% | 8 tag | 20 tag (2.5x) |
+| 60% | 13 tag | 41 tag (3.2x) |
+
+Ở 80 tag Mộc, α=0.6 vẫn cho Mộc 69%. **Đã cân nhắc và BỎ trần cứng**: vượt trần rồi thì phòng 20 tag
+Mộc và phòng 200 tag Mộc trông y hệt nhau — mất thứ tự, mất luôn khả năng nói "phòng này nhiều gỗ hơn
+phòng kia". Luỹ thừa giữ đơn điệu (`SCORE-SAT-03`), và 2–3x số tag là đủ để người khai bình thường
+không chạm tới vùng áp đảo.
+
+### 17.6 Phân bổ lại `contributions[]`
+
+Nén là phi tuyến trên tổng nên không quy ngược ra `Votes_i / TotalVotes` được nữa:
+
+```
+share_i[e] = current[e] · ( Votes_i · Vector_i[e] / m[e] )
+```
+
+`Σᵢ share_i[e] = current[e]` (radar xếp chồng vẫn khít, `SCORE-SAT-05`), và ở `α = 1` rút gọn về đúng
+công thức cũ. `sharePercent` nay cộng từ các hành chứ không còn là `votes/totalVotes`: một nguồn rót
+vào hành đã bão hoà **thật sự** đóng góp ít hơn vào hình cuối. `votes` vẫn giữ số THÔ — phiếu là thứ
+user khai, nó không đổi.
+
+`confidence` tính trên phiếu **THÔ**, không đụng tới α: nó đo *có bao nhiêu bằng chứng*, không đo
+*nhìn thấy đậm tới đâu* (`SCORE-SAT-07`).
+
+### 17.7 Không áp vào đâu
+
+| | Vì sao |
+|---|---|
+| `adjustedIdeal` | Mục tiêu, không phải bằng chứng tích luỹ — không có gì để bão hoà |
+| Vector sản phẩm | 2–3 input mỗi sản phẩm, không có ca áp đảo |
+
+### 17.8 Ảnh hưởng tới điểm sản phẩm — gián tiếp
+
+Nén **không** làm sản phẩm "được cộng ít đi". Khi `current[e]` vượt `adjustedIdeal[e]` thì `gap[e]` âm
+và sản phẩm thuần hành đó ăn điểm **âm** — cơ chế đó có từ v3, không liên quan §17.
+
+Ảnh hưởng thật là gián tiếp và đúng hướng: `current` bớt méo → `gap` bớt méo → engine thôi lao đi bù
+một hành chỉ vì user khai nhiều tag về nó.
+
+### 17.9 Kill-switch
+
+`α = 1` ⇒ `m^1 = m` ⇒ byte-identical. `ElementVector.Pow` **thoát sớm** ở `α = 1`, không đi qua
+`Math.Pow`, nên đây là đẳng thức tuyệt đối chứ không phải "bằng nhau tới chữ số thứ n" (`SCORE-SAT-01`).
+
+Seed **0.60** chứ không seed trung tính: default trong code phải khớp seed, nếu không môi trường thiếu
+row sẽ chấm khác prod — đúng vết `PERSONAL_WEIGHT_*` đã vấp (`SCORE-PARAM-03`).
+
+**Golden set không phải dựng lại**: nó cấp thẳng `Current` vào `ScoringContext`, không đi qua
+`BuildCurrentBreakdown`, nên α không chạm tới. 271/271 unit test xanh.
+
+## 18. Phần hành khắc mệnh KHÔNG trội của vật mang theo người
+
+### 18.1 Lỗ hổng - phát hiện từ một ca thật trên UI
+
+"Vòng tay thạch anh tím" chấm cho người mệnh **Kim** (Tân Tỵ 2001, Bạch Lạp Kim). Vector dựng từ
+chính dữ liệu trong DB (Crystal → Thủy/Kim, tím → Hỏa, tròn → Kim):
+
+| | Kim | Thủy | **Hỏa** |
+|---|---:|---:|---:|
+| Vector sản phẩm | 0.50 | 0.30 | **0.20** |
+
+`feng_shui_rules`: `Kim → Hỏa = BiKhac, −1.00`. Tức **20% vật này đang khắc bản mệnh người đeo**.
+Nó lọt qua CẢ HAI cơ chế:
+
+1. **Bộ lọc xung khắc chỉ so hành TRỘI.** `GetRelation(Kim, Kim) = TuongHoa` ⇒ không chặn, penalty 0.
+   Câu giải thích trên UI còn đúng sự thật một nửa: *"**Hành trội** của sản phẩm không khắc bản mệnh"*.
+2. **Nhánh `PersonalNeed` không có trục âm nào.** `ForPersonalNeed` trả vector dụng thần **Σ=1, không
+   âm**. `dụngThần[Hỏa] = 0` ⇒ 20% Hỏa nhân ra đúng **0.000**: không cộng, không trừ, vô hình.
+
+`0.6×0 + 0.4×0.50 = 0.200` → **60%**, khớp đúng con số đo được trên màn hình.
+
+> Đây chính là khiếm khuyết §10.2b đã ghi cho `personalTarget` - *"vector không có phần tử âm nên chỉ
+> nâng mục tiêu, không bao giờ phản đối được hành khắc mệnh"*. v3.2 sửa cho **luồng phòng** bằng `r`
+> có dấu; **luồng Carry bị bỏ sót**.
+
+### 18.2 Cách sửa "hiển nhiên" KHÔNG chữa được
+
+Bắt chước luồng phòng, trộn `r` có dấu vào nhánh dụng thần:
+
+| | điểm | % |
+|---|---:|---:|
+| hiện tại | 0.200 | 60% |
+| chỉ dùng `r` | 0.240 | **62%** |
+| trộn `Wc = 0.5` | 0.220 | 61% |
+
+Điểm **TĂNG**. Vì `r[Kim] = +1.00` thưởng cho 50% Kim tới `+0.50`, lấn át hẳn `r[Hỏa]×0.20 = −0.20`.
+Áp máy móc "cùng công thức với luồng phòng" ở đây sẽ **nâng điểm** cho vật khắc mệnh.
+
+### 18.3 Chốt: phạt theo TỈ TRỌNG phần khắc
+
+```
+clashShare  = Σ product[e]  với mọi e mà GetRelation(mệnh, e) == BiKhac
+userPenalty = MINOR_CLASH_PENALTY × clashShare
+```
+
+Vòng tay: `0.60 × 0.20 = 0.120` ⇒ `0.200 − 0.120 = 0.080` → **54%**.
+
+Vấn đề không phải "thiếu tín hiệu liên tục" mà là **phạm trù kiêng kỵ đang bị đánh giá nhị phân theo
+mỗi hành trội**. Sửa đúng chỗ là làm phạm trù đó biết đến tỉ trọng - và giữ nguyên phân vai §14.4:
+`r` lo mức độ hợp (liên tục), `USER_CONFLICT_PENALTY`/`MINOR_CLASH_PENALTY` lo kiêng kỵ (phạm trù),
+đọc `GetRelation` chứ không đọc bảng `feng_shui_rules`.
+
+### 18.4 Ba ranh giới
+
+| | |
+|---|---|
+| **Chỉ nhánh `PersonalNeed`** | Luồng phòng đã trừ phần khắc qua `Wp · r[e] · share`. Cộng thêm penalty này là **đếm hai lần** (`SCORE-MC-05`) |
+| **Hành TRỘI khắc mệnh vẫn đi đường cũ** | Loại cứng `AlwaysHard`, không rơi vào công thức tỉ trọng. Cố ý: chuyển hết sang tỉ trọng sẽ **giảm** phạt của vật 50% Hỏa từ 0.60 xuống 0.30 - nới lỏng đúng nhóm cần phạt nặng nhất (`SCORE-MC-04`) |
+| **Chấp nhận một bậc nhảy** | 34% Hỏa mà trội thì phạt đủ, 33% không trội thì phạt 0.20. Luật v3 vốn đã nhị phân theo hành trội (§14.6 #2), nên đây không phải bậc nhảy mới |
+
+### 18.5 Phải NÓI RA trong "Điểm này đến từ đâu?"
+
+Dòng phạt đổi cả mã, nhãn lẫn câu giải thích - im lặng trừ điểm còn tệ hơn không trừ:
+
+| | |
+|---|---|
+| `code` | `MINOR_CLASH_PENALTY` (không phải `USER_CONFLICT_PENALTY`) - để màn quản trị chỉ đúng dòng cấu hình đã quyết định con số |
+| `labelVi` | **Khắc bản mệnh (phần phụ)** |
+| `reasonVi` | *"Hành trội Kim không khắc bản mệnh Kim của bạn, nhưng vật phẩm còn 20% là Hỏa - khắc bản mệnh. Vật mang trên người nên phần đó vẫn bị trừ theo đúng tỉ trọng: 0.60 × 0.20 = 0.12."* |
+| `cautionFacts` | thêm một dòng cảnh báo, không để nó nằm im trong breakdown |
+
+`SCORE-MC-02` khoá cả bốn điểm này.
+
+### 18.6 Kill-switch
+
+`MINOR_CLASH_PENALTY = 0` ⇒ byte-identical như trước §18 (`SCORE-MC-03`). Seed **0.60**, ngang
+`USER_CONFLICT_PENALTY`; default trong code khớp seed (`SCORE-PARAM-04`).
+
 ## P0 — Sửa dữ liệu *(0.5 ngày)*
 
 | # | Việc |
@@ -1355,23 +1558,22 @@ thay vì giả vờ ngược lại.
 
 ## Cần quyết
 
-| # | Câu hỏi | Chặn |
-|:-:|---|---|
-| # | Câu hỏi | **Quyết định (08/09/2026)** | Ở đâu |
-|:-:|---|---|---|
-| **Q1** | Chuẩn hoá `gapScore` ×2 | ✅ **Đồng ý** — mẫu số `\|gap\|₁/2`, **chỉ** nhánh `WorkspaceGap` | §8.1 · P1.1 |
-| **Q2** | Nhân đôi 4 penalty theo | ✅ **Đồng ý** — 0.60 / 0.30 / 0.40 / 0.10 | §8.3 · P1.2 |
-| **Q3** | Trộn ở tầng nào | ✅ **Tầng CHÊNH LỆCH** (giữ code) — tầng MỤC TIÊU không phạt được khắc mệnh | §10.1–10.2 |
-| **Q4** | Lớp cá nhân trên radar | ✅ **`priorityVector`** — `Wp` đã nằm trong nó, đa giác xoay theo `Wp` (§10.3). `personalVector` bị loại vì engine chỉ đọc `.Dominant()` | §10.3–10.4 · P4.1 |
-| **Q5** | Nghề nghiệp N1/N2/N3 | ✅ **N1** — bẻ vector điểm quan hệ `r`, không bẻ `personalVector` | §11.3 · §14.4 |
-| **Q6** | Bathroom · Laundry · Garage · Balcony · Rooftop Garden | ✅ **`Private`** | §4 · P0.2 |
-| **Q7** | Hạ `VIBE_FILTER_HARD` về 0.0 | ✅ **Có** — 5 lý do ở §15 | §15 · P2 |
-| **Q8** | Nghề nghiệp bắt buộc hay tuỳ chọn | ✅ **Tuỳ chọn** trong profile — `users.occupation_id` nullable, không chặn đăng ký | §11.1 · P5.3 |
-| **Q9** | Ai duyệt bảng delta theo nghề | ✅ **`ManagerOrAbove`** (cùng policy với `scoring-config`) | §11.5 · P5.7 |
-| **Q10** | `search_products` param `placement` | ✅ **Thêm**, mặc định **`Desk`** khi model không truyền | P3.9 |
-| **Q11** | Đứt gãy tại `Wp = 0` | ✅ **Chấp nhận (a)** — `Wp = 0` là công tắc TẮT v3.1, rơi trọn về v3. Không ai đặt 0.01 | §14.3 |
-| **Q12** | `Public` bỏ lọc/phạt khắc mệnh | ✅ **Có** — `PersonalConflictMode.None` | §14.3 |
-| **Q13** | Hợp nhất với v4-polarity | ✅ **Lồng** — giữ cân bằng phòng↔mệnh, polarity là lớp ngoài | §14.5 |
+|    #    | Câu hỏi                                                | Chặn                                                                                                                                    |                   |
+| :-----: | ------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------- | ----------------- |
+|    #    | Câu hỏi                                                | **Quyết định (08/09/2026)**                                                                                                             | Ở đâu             |
+| **Q1**  | Chuẩn hoá `gapScore` ×2                                | ✅ **Đồng ý** — mẫu số `\|gap\|₁/2`, **chỉ** nhánh `WorkspaceGap`                                                                        | §8.1 · P1.1       |
+| **Q2**  | Nhân đôi 4 penalty theo                                | ✅ **Đồng ý** — 0.60 / 0.30 / 0.40 / 0.10                                                                                                | §8.3 · P1.2       |
+| **Q3**  | Trộn ở tầng nào                                        | ✅ **Tầng CHÊNH LỆCH** (giữ code) — tầng MỤC TIÊU không phạt được khắc mệnh                                                              | §10.1–10.2        |
+| **Q4**  | Lớp cá nhân trên radar                                 | ✅ **`priorityVector`** — `Wp` đã nằm trong nó, đa giác xoay theo `Wp` (§10.3). `personalVector` bị loại vì engine chỉ đọc `.Dominant()` | §10.3–10.4 · P4.1 |
+| **Q5**  | Nghề nghiệp N1/N2/N3                                   | ✅ **N1** — bẻ vector điểm quan hệ `r`, không bẻ `personalVector`                                                                        | §11.3 · §14.4     |
+| **Q6**  | Bathroom · Laundry · Garage · Balcony · Rooftop Garden | ✅ **`Private`**                                                                                                                         | §4 · P0.2         |
+| **Q7**  | Hạ `VIBE_FILTER_HARD` về 0.0                           | ✅ **Có** — 5 lý do ở §15                                                                                                                | §15 · P2          |
+| **Q8**  | Nghề nghiệp bắt buộc hay tuỳ chọn                      | ✅ **Tuỳ chọn** trong profile — `users.occupation_id` nullable, không chặn đăng ký                                                       | §11.1 · P5.3      |
+| **Q9**  | Ai duyệt bảng delta theo nghề                          | ✅ **`ManagerOrAbove`** (cùng policy với `scoring-config`)                                                                               | §11.5 · P5.7      |
+| **Q10** | `search_products` param `placement`                    | ✅ **Thêm**, mặc định **`Desk`** khi model không truyền                                                                                  | P3.9              |
+| **Q11** | Đứt gãy tại `Wp = 0`                                   | ✅ **Chấp nhận (a)** — `Wp = 0` là công tắc TẮT v3.1, rơi trọn về v3. Không ai đặt 0.01                                                  | §14.3             |
+| **Q12** | `Public` bỏ lọc/phạt khắc mệnh                         | ✅ **Có** — `PersonalConflictMode.None`                                                                                                  | §14.3             |
+| **Q13** | Hợp nhất với v4-polarity                               | ✅ **Lồng** — giữ cân bằng phòng↔mệnh, polarity là lớp ngoài                                                                             | §14.5             |
 
 ## Ước lượng
 

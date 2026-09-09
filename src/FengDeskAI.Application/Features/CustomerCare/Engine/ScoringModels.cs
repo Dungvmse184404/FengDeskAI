@@ -38,6 +38,12 @@ public static class ScoringParamCodes
     // P5 — nghề nghiệp bẻ vector điểm quan hệ `r` (xem §11.3, phương án N1).
     public const string OccupationShare = "OCCUPATION_SHARE";
 
+    // §17 — nén tương phản khi dựng `current` (định luật luỹ thừa Stevens).
+    public const string EvidenceSaturationAlpha = "EVIDENCE_SATURATION_ALPHA";
+
+    // §18 — phạt phần hành khắc mệnh KHÔNG trội, chỉ ở luồng vật mang theo người.
+    public const string MinorClashPenalty = "MINOR_CLASH_PENALTY";
+
     /// <summary>Số phiếu của chủ nhân phòng theo scope — phòng càng riêng tư, chủ nhân càng nặng.</summary>
     public static string PersonPresenceVotesFor(WorkspaceScope scope) => scope switch
     {
@@ -143,6 +149,65 @@ public sealed record ScoringParameters
     public decimal OccupationShare { get; init; } = 0.00m;
 
     /// <summary>
+    /// Phạt phần hành KHẮC bản mệnh <b>không phải hành trội</b> của vật mang theo người, tính theo
+    /// đúng tỉ trọng: <c>penalty = MinorClashPenalty × Σ product[e] (e khắc mệnh)</c>.
+    ///
+    /// <para>
+    /// Bịt một lỗ hổng chỉ có ở nhánh <see cref="ScoringTarget.PersonalNeed"/>: vector dụng thần
+    /// <b>Σ=1 và không âm</b> nên không có trục nào mang dấu trừ, còn bộ lọc xung khắc lại chỉ so
+    /// hành TRỘI. Kết quả là một vật 50% Kim / 20% Hỏa đeo trên người mệnh Kim lọt qua cả hai: hành
+    /// trội Kim tỷ hòa nên không bị lọc, còn 20% Hỏa nhân với <c>dụngThần[Hỏa] = 0</c> nên biến mất
+    /// không dấu vết.
+    /// </para>
+    ///
+    /// <para>
+    /// <b>KHÔNG áp cho luồng phòng.</b> Ở đó <c>d = (1−Wp)·ĝ + Wp·r</c> với <c>r</c> có dấu đã tính
+    /// phần khắc theo đúng tỉ trọng rồi; cộng thêm penalty này nữa là đếm hai lần.
+    /// </para>
+    ///
+    /// <para>
+    /// Hành trội mà khắc mệnh thì <b>vẫn đi đường cũ</b> (loại cứng / phạt đủ
+    /// <see cref="UserConflictPenalty"/>), không rơi vào công thức tỉ trọng — cố ý giữ nguyên hành vi
+    /// đã có thay vì nới lỏng đúng nhóm cần phạt nặng nhất. Đổi lại là một bậc nhảy quanh ngưỡng trội,
+    /// chấp nhận được vì luật v3 vốn đã nhị phân theo hành trội.
+    /// </para>
+    ///
+    /// <para><b>Seed 0.60</b> — ngang <see cref="UserConflictPenalty"/>. Đặt <c>0</c> = tắt hẳn, kết quả
+    /// byte-identical như trước §18.</para>
+    /// </summary>
+    public decimal MinorClashPenalty { get; init; } = 0.60m;
+
+    /// <summary>
+    /// Số mũ nén tương phản khi dựng <c>current</c>: <c>current = normalize(khốiLượng^α)</c>.
+    ///
+    /// <para>
+    /// Sửa đúng một tật: khai 12 tag Mộc thì Mộc chiếm ~60% hiện trạng và nuốt gần hết bốn hành còn
+    /// lại, dù 12 tag đó chỉ nói "phòng nhiều gỗ" chứ không nói "phòng gấp 12 lần gỗ". Cảm nhận về số
+    /// lượng vốn <b>không tuyến tính</b> (định luật luỹ thừa Stevens).
+    /// </para>
+    ///
+    /// <para>
+    /// <b>Seed 0.60</b> — khoảng số mũ thực nghiệm cho cảm nhận về DIỆN TÍCH/SỐ LƯỢNG nhìn thấy.
+    /// <c>α = 1</c> là kill-switch (tuyến tính, hành vi trước §17); <c>α → 0</c> đẩy mọi hành về đều nhau.
+    /// Default ở đây <b>phải khớp seed</b>: lệch nhau thì môi trường thiếu row sẽ chấm khác prod —
+    /// đúng vết <c>PERSONAL_WEIGHT_*</c> đã vấp.
+    /// </para>
+    ///
+    /// <para>
+    /// Chọn luỹ thừa chứ không phải <c>log</c> vì luỹ thừa <b>bất biến theo tỉ lệ</b>: khai 6 tag hay
+    /// khai đúng 6 tag đó nhân đôi thành 12 đều ra cùng một hình. <c>log</c> thì không — người khai kỹ
+    /// hơn bị đẩy về phía cân bằng, tức bị phạt vì cẩn thận.
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ Đây là bộ hãm MỀM, không phải trần cứng: ở 80 tag Mộc, <c>α = 0.6</c> vẫn cho Mộc 69%. Nó
+    /// làm một hành cần <b>2–3 lần</b> số tag mới đạt cùng mức áp đảo, và giữ nguyên thứ tự giữa các
+    /// hành — thứ mà trần cứng sẽ đánh mất (vượt trần rồi thì 20 tag và 200 tag trông y hệt).
+    /// </para>
+    /// </summary>
+    public decimal EvidenceSaturationAlpha { get; init; } = 0.60m;
+
+    /// <summary>
     /// Số phiếu quy ước của nền phòng — prior Dirichlet: nền phòng LUÔN có mặt, nặng ngang 3 tag thật,
     /// và loãng dần khi user khai thêm tag. Trước đây hard-code trong <c>ElementVectorBuilders</c>;
     /// đưa vào bảng để cùng họ với số phiếu chủ nhân.
@@ -213,6 +278,8 @@ public sealed record ScoringParameters
             PersonalWeightShared = V(ScoringParamCodes.PersonalWeightShared, d.PersonalWeightShared),
             PersonalWeightPublic = V(ScoringParamCodes.PersonalWeightPublic, d.PersonalWeightPublic),
             OccupationShare = V(ScoringParamCodes.OccupationShare, d.OccupationShare),
+            EvidenceSaturationAlpha = V(ScoringParamCodes.EvidenceSaturationAlpha, d.EvidenceSaturationAlpha),
+            MinorClashPenalty = V(ScoringParamCodes.MinorClashPenalty, d.MinorClashPenalty),
         };
     }
 }

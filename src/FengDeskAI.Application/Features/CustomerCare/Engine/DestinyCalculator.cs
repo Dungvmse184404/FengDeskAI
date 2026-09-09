@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums;
+﻿using FengDeskAI.Domain.Enums;
 using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Domain.Enums.Recommendation;
 
@@ -57,36 +57,36 @@ public static class DestinyCalculator
     /// <summary>Nghĩa 30 nạp âm — key khớp tên trong <see cref="FengShuiCalculator.GetNapAmName"/>.</summary>
     private static readonly Dictionary<string, string> NapAmMeanings = new()
     {
-        ["Hải Trung Kim"] = "Vàng dưới biển — tiềm năng lớn còn ẩn sâu",
-        ["Lư Trung Hỏa"] = "Lửa trong lò — cháy âm ỉ, cần mẫn, có sức nung chảy",
-        ["Đại Lâm Mộc"] = "Gỗ rừng già — cây cổ thụ to lớn, che chở",
-        ["Lộ Bàng Thổ"] = "Đất ven đường — nén chặt, vững chãi, rộng lớn",
-        ["Kiếm Phong Kim"] = "Vàng mũi kiếm — sắt thép đã tôi luyện, cực kỳ sắc bén",
-        ["Sơn Đầu Hỏa"] = "Lửa trên núi — ngọn lửa bốc cao, rực rỡ",
-        ["Giản Hạ Thủy"] = "Nước dưới khe — mạch ngầm tĩnh lặng, sâu sắc",
-        ["Thành Đầu Thổ"] = "Đất trên thành — cứng cáp, mang tính bảo vệ",
-        ["Bạch Lạp Kim"] = "Vàng trong sáp — kim loại đang định hình",
-        ["Dương Liễu Mộc"] = "Gỗ cây liễu — mềm mại, uyển chuyển",
-        ["Tuyền Trung Thủy"] = "Nước trong suối — chảy liên tục, linh hoạt, thanh khiết, trí tuệ",
-        ["Ốc Thượng Thổ"] = "Đất trên mái nhà — che mưa chắn gió",
-        ["Tích Lịch Hỏa"] = "Lửa sấm sét — nhanh, bùng nổ, chớp nhoáng",
-        ["Tùng Bách Mộc"] = "Gỗ tùng bách — kiên cường bất chấp sương tuyết",
-        ["Trường Lưu Thủy"] = "Nước sông dài — dòng chảy cuồn cuộn, vươn xa",
-        ["Sa Trung Kim"] = "Vàng trong cát — cần sàng lọc mới tỏa sáng",
-        ["Sơn Hạ Hỏa"] = "Lửa dưới chân núi — bếp lửa sinh hoạt, ấm áp",
-        ["Bình Địa Mộc"] = "Cây đồng bằng — sinh trưởng vùng đất bằng phẳng",
-        ["Bích Thượng Thổ"] = "Đất trên vách tường — cần chỗ dựa để vững",
-        ["Kim Bạch Kim"] = "Vàng nguyên chất — tinh khiết",
-        ["Phú Đăng Hỏa"] = "Lửa ngọn đèn — soi rọi ban đêm, mang tính trí tuệ",
-        ["Thiên Hà Thủy"] = "Nước trên trời — nước mưa gột rửa vạn vật",
-        ["Đại Trạch Thổ"] = "Đất bãi đầm — phù sa nuôi dưỡng, linh hoạt",
-        ["Thoa Xuyến Kim"] = "Vàng trang sức — đã chế tác thành hình, lấp lánh",
-        ["Tang Đố Mộc"] = "Gỗ cây dâu — biểu tượng của sự cống hiến",
-        ["Đại Khê Thủy"] = "Nước suối lớn — thác nước, dòng chảy mạnh mẽ",
-        ["Sa Trung Thổ"] = "Đất trong cát — tơi xốp, cần bồi đắp liên kết",
-        ["Thiên Thượng Hỏa"] = "Lửa trên trời — ánh mặt trời, công minh, rực rỡ nhất",
-        ["Thạch Lựu Mộc"] = "Gỗ cây lựu đá — sức sống mãnh liệt nơi khắc nghiệt",
-        ["Đại Hải Thủy"] = "Nước biển lớn — bao la, sâu thẳm, mạnh mẽ nhất loài Thủy",
+        ["Hải Trung Kim"] = "Vàng dưới biển - tiềm năng lớn còn ẩn sâu",
+        ["Lư Trung Hỏa"] = "Lửa trong lò - cháy âm ỉ, cần mẫn, có sức nung chảy",
+        ["Đại Lâm Mộc"] = "Gỗ rừng già - cây cổ thụ to lớn, che chở",
+        ["Lộ Bàng Thổ"] = "Đất ven đường - nén chặt, vững chãi, rộng lớn",
+        ["Kiếm Phong Kim"] = "Vàng mũi kiếm - sắt thép đã tôi luyện, cực kỳ sắc bén",
+        ["Sơn Đầu Hỏa"] = "Lửa trên núi - ngọn lửa bốc cao, rực rỡ",
+        ["Giản Hạ Thủy"] = "Nước dưới khe - mạch ngầm tĩnh lặng, sâu sắc",
+        ["Thành Đầu Thổ"] = "Đất trên thành - cứng cáp, mang tính bảo vệ",
+        ["Bạch Lạp Kim"] = "Vàng trong sáp - kim loại đang định hình",
+        ["Dương Liễu Mộc"] = "Gỗ cây liễu - mềm mại, uyển chuyển",
+        ["Tuyền Trung Thủy"] = "Nước trong suối - chảy liên tục, linh hoạt, thanh khiết, trí tuệ",
+        ["Ốc Thượng Thổ"] = "Đất trên mái nhà - che mưa chắn gió",
+        ["Tích Lịch Hỏa"] = "Lửa sấm sét - nhanh, bùng nổ, chớp nhoáng",
+        ["Tùng Bách Mộc"] = "Gỗ tùng bách - kiên cường bất chấp sương tuyết",
+        ["Trường Lưu Thủy"] = "Nước sông dài - dòng chảy cuồn cuộn, vươn xa",
+        ["Sa Trung Kim"] = "Vàng trong cát - cần sàng lọc mới tỏa sáng",
+        ["Sơn Hạ Hỏa"] = "Lửa dưới chân núi - bếp lửa sinh hoạt, ấm áp",
+        ["Bình Địa Mộc"] = "Cây đồng bằng - sinh trưởng vùng đất bằng phẳng",
+        ["Bích Thượng Thổ"] = "Đất trên vách tường - cần chỗ dựa để vững",
+        ["Kim Bạch Kim"] = "Vàng nguyên chất - tinh khiết",
+        ["Phú Đăng Hỏa"] = "Lửa ngọn đèn - soi rọi ban đêm, mang tính trí tuệ",
+        ["Thiên Hà Thủy"] = "Nước trên trời - nước mưa gột rửa vạn vật",
+        ["Đại Trạch Thổ"] = "Đất bãi đầm - phù sa nuôi dưỡng, linh hoạt",
+        ["Thoa Xuyến Kim"] = "Vàng trang sức - đã chế tác thành hình, lấp lánh",
+        ["Tang Đố Mộc"] = "Gỗ cây dâu - biểu tượng của sự cống hiến",
+        ["Đại Khê Thủy"] = "Nước suối lớn - thác nước, dòng chảy mạnh mẽ",
+        ["Sa Trung Thổ"] = "Đất trong cát - tơi xốp, cần bồi đắp liên kết",
+        ["Thiên Thượng Hỏa"] = "Lửa trên trời - ánh mặt trời, công minh, rực rỡ nhất",
+        ["Thạch Lựu Mộc"] = "Gỗ cây lựu đá - sức sống mãnh liệt nơi khắc nghiệt",
+        ["Đại Hải Thủy"] = "Nước biển lớn - bao la, sâu thẳm, mạnh mẽ nhất loài Thủy",
     };
 
     /// <summary>Kua số → tên cung mệnh (Kua 5 không tồn tại — GetKuaNumber đã đổi nam→2, nữ→8).</summary>
@@ -105,18 +105,18 @@ public static class DestinyCalculator
     // Ý nghĩa 8 cung Bát Trạch (4 cát theo thứ tự tốt dần xuống, 4 hung theo thứ tự xấu dần xuống).
     private static readonly (string Name, string Meaning)[] GoodStars =
     {
-        ("Sinh Khí", "thu hút vượng khí — tốt nhất khi cần bứt phá năng suất, khởi đầu dự án mới"),
-        ("Diên Niên", "nền tảng ổn định — duy trì tập trung cao độ, bền quan hệ"),
+        ("Sinh Khí", "thu hút vượng khí - tốt nhất khi cần bứt phá năng suất, khởi đầu dự án mới"),
+        ("Diên Niên", "nền tảng ổn định - duy trì tập trung cao độ, bền quan hệ"),
         ("Thiên Y", "sức khỏe, bền bỉ, minh mẫn"),
         ("Phục Vị", "bình an, giữ vững phong độ"),
     };
 
     private static readonly (string Name, string Meaning)[] BadStars =
     {
-        ("Tuyệt Mệnh", "xấu nhất — hao tổn, thất bại lớn; tránh đặt bàn làm việc/giường"),
+        ("Tuyệt Mệnh", "xấu nhất - hao tổn, thất bại lớn; tránh đặt bàn làm việc/giường"),
         ("Ngũ Quỷ", "thị phi, mất mát, quan hệ xấu"),
         ("Lục Sát", "kiện tụng, bất hòa, tình cảm trắc trở"),
-        ("Họa Hại", "xui xẻo vặt — nhẹ nhất trong 4 hung"),
+        ("Họa Hại", "xui xẻo vặt - nhẹ nhất trong 4 hung"),
     };
 
     // Bảng hướng theo cung mệnh (docs/adr/note.md):

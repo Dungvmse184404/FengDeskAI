@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.CustomerCare.Services;
 using FengDeskAI.Application.Interfaces.External;
@@ -18,12 +18,12 @@ public sealed class RecommendPersonalItemsTool : IAiTool
     public string Name => "recommend_personal_items";
 
     public string Description =>
-        "Suggest feng shui items the user CARRIES OR WEARS — bracelet, necklace/pendant, ring, keychain, " +
+        "Suggest feng shui items the user CARRIES OR WEARS - bracelet, necklace/pendant, ring, keychain, " +
         "wallet charm, car hanger. Scored against the user's own destiny elements (Tứ Trụ favorable elements " +
         "when their birth time is known, otherwise their Nạp Âm element), NOT against any room, so no " +
         "workspace is needed and no placement direction applies. " +
         "For items PLACED IN A ROOM (desk decor, plants, statues) use recommend_products instead. " +
-        "Needs the user's date of birth on file — if the tool reports it missing, ask them for it.";
+        "Needs the user's date of birth on file - if the tool reports it missing, ask them for it.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
@@ -76,7 +76,7 @@ public sealed class RecommendPersonalItemsTool : IAiTool
                 i.CautionFacts,
                 i.PlacementHint,
             }),
-            Note = "These items travel with the person — do NOT give compass placement advice for them. "
+            Note = "These items travel with the person - do NOT give compass placement advice for them. "
                 + "Explain the fit using 'personalTarget' and each item's matchFacts. When mentioning a product, "
                 + "write its name EXACTLY as the 'link' value (a markdown link). Do not invent other URLs.",
         });

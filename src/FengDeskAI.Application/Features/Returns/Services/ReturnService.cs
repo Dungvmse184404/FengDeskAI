@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
@@ -414,7 +414,7 @@ public class ReturnService : IReturnService
             rr.RouteAfterAccept(); // UnderReview → Reviewing (plant_health) | ReturnInTransit (hàng vật lý)
             LogTransition(rr, routedFrom,
                 rr.Reason == ReturnReason.PlantHealth
-                    ? "Cây chết — bỏ qua thu hồi, chuyển thẳng bước quyết định"
+                    ? "Cây chết - bỏ qua thu hồi, chuyển thẳng bước quyết định"
                     : "Yêu cầu khách gửi hàng trả về để thu hồi", actor.UserId);
 
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Yêu cầu đang được xử lý",
@@ -517,7 +517,7 @@ public class ReturnService : IReturnService
                 // Hết hàng thay thế → fallback sang hoàn tiền (không dead-end).
                 var exFrom = rr.Status;
                 rr.FallbackToRefund(); // Exchanging → Refunding
-                LogTransition(rr, exFrom, "Hết hàng thay thế — chuyển sang hoàn tiền", actor.UserId);
+                LogTransition(rr, exFrom, "Hết hàng thay thế - chuyển sang hoàn tiền", actor.UserId);
                 rr.RefundAmount = ReturnWorkflow.ComputeRefundAmount(rr.Items);
                 await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn tiền (hết hàng đổi) ticket #{rr.Id}", ct);
                 await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Chuyển sang hoàn tiền",

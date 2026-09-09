@@ -417,7 +417,7 @@ public sealed class RecommendationService : IRecommendationService
         var previewCurrent = WorkspaceVectorBuilder.BuildCurrentBreakdown(
                 wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements,
                 new[] { new ProductContribution(Guid.Empty, string.Empty, facts.Vector, voteWeight) },
-                person, p.InteriorPriorVotes)
+                person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha)
             .Current;
         var previewGapVec = wctx.Analysis.AdjustedIdeal.Subtract(previewCurrent);
 
@@ -425,7 +425,7 @@ public sealed class RecommendationService : IRecommendationService
         // chỉ khác là ở đây không tính sản phẩm đang xem vào (nó đã có mặt trong previewCurrent).
         var currentBreakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
             wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements, Array.Empty<ProductContribution>(),
-            person, p.InteriorPriorVotes);
+            person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha);
 
         var response = new ProductFitResponse
         {
@@ -514,7 +514,7 @@ public sealed class RecommendationService : IRecommendationService
 
         var cautions = scored.CautionFacts.ToList();
         if (product.Placement != ProductPlacement.Carry)
-            cautions.Insert(0, "Sản phẩm này không phải vật mang theo người — điểm dưới đây chấm theo bản mệnh "
+            cautions.Insert(0, "Sản phẩm này không phải vật mang theo người - điểm dưới đây chấm theo bản mệnh "
                 + "của bạn, để chọn đúng nên xem độ hợp với phòng.");
 
         var response = new PersonalFitResponse
@@ -538,7 +538,7 @@ public sealed class RecommendationService : IRecommendationService
                 Value = Math.Round(x.Value, 3),
             }).ToList(),
             DestinyElement = FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob)).ToString(),
-            DestinyLabelVi = $"{FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob))} — "
+            DestinyLabelVi = $"{FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob))} - "
                 + $"{FengShuiCalculator.GetNapAmName(FengShuiCalculator.GetLunarYear(dob))} "
                 + $"({FengShuiCalculator.GetLunarYear(dob)})",
         };
@@ -643,7 +643,7 @@ public sealed class RecommendationService : IRecommendationService
             return (filtered, null);
 
         var all = await _uow.Products.GetScorableCandidatesAsync(placements, null, ct);
-        return (all, $"Chưa có vật phẩm nào được duyệt thẻ mục tiêu \"{aspiration}\" — danh sách dưới đây "
+        return (all, $"Chưa có vật phẩm nào được duyệt thẻ mục tiêu \"{aspiration}\" - danh sách dưới đây "
             + "gợi ý theo không gian và bản mệnh, chưa lọc theo mục tiêu đó.");
     }
 
@@ -669,7 +669,8 @@ public sealed class RecommendationService : IRecommendationService
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
         var person = prms is null ? null : PersonPresenceBuilder.Build(ownerDateOfBirth, scope, prms);
         var analysis = WorkspaceElementAnalyzer.Analyze(
-            typeElements, modifiers, profileInputs, resolver, person, prms?.InteriorPriorVotes);
+            typeElements, modifiers, profileInputs, resolver, person,
+            prms?.InteriorPriorVotes, prms?.EvidenceSaturationAlpha);
 
         return new WorkspaceScoringContext(wsType, scope, resolver, analysis, profileInputs, typeElements);
     }

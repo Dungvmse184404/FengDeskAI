@@ -15,9 +15,17 @@ namespace FengDeskAI.Application.Features.CustomerCare.DTOs;
 public static class CurrentBreakdownMapping
 {
     /// <summary>
-    /// Phần của nguồn <c>i</c> trong <c>Current[e]</c> = <c>Vector_i[e] × Votes_i / TotalVotes</c>.
+    /// Phần của nguồn <c>i</c> trong <c>Current[e]</c> — xem <see cref="CurrentBreakdown.ShareOf"/>.
     /// Tổng <see cref="CurrentContributionRow.SharePercent"/> mọi nguồn = 100 → FE xếp chồng thẳng lên
     /// radar, không phải tính lại.
+    ///
+    /// <para>
+    /// <c>SharePercent</c> cộng từ các hành chứ KHÔNG còn là <c>Votes / TotalVotes</c>: sau nén tương
+    /// phản, một nguồn rót vào hành đã bão hoà thật sự đóng góp ít hơn vào hình cuối. Đó là con số
+    /// đúng để hiển thị — nói với user rằng tag Mộc thứ 12 vẫn "nặng 1 phiếu như mọi tag khác" trong
+    /// khi nó gần như không đổi được gì là nói sai. <c>Votes</c> vẫn giữ số THÔ, vì phiếu là thứ user
+    /// khai và nó không đổi.
+    /// </para>
     /// </summary>
     public static List<CurrentContributionRow> ToContributionRows(CurrentBreakdown breakdown)
     {
@@ -26,17 +34,19 @@ public static class CurrentBreakdownMapping
         return breakdown.Contributions
             .Select(c =>
             {
-                var share = c.Votes / breakdown.TotalVotes;
+                var perElement = c.Vector.Enumerate()
+                    .Where(x => x.Value > 0m)
+                    .Select(x => (x.Element, Share: breakdown.ShareOf(c, x.Element)))
+                    .ToList();
                 return new CurrentContributionRow
                 {
                     Source = c.Source.ToString(),
                     Label = c.Label,
-                    SharePercent = Math.Round(100m * share, 2),
+                    SharePercent = Math.Round(100m * perElement.Sum(x => x.Share), 2),
                     Votes = Math.Round(c.Votes, 3),
-                    Elements = c.Vector.Enumerate()
-                        .Where(x => x.Value > 0m)
+                    Elements = perElement
                         .Select(x => new ContributionElementShare(
-                            x.Element.ToString(), Math.Round(100m * x.Value * share, 2)))
+                            x.Element.ToString(), Math.Round(100m * x.Share, 2)))
                         .OrderByDescending(x => x.Percent)
                         .ToList(),
                     InputKind = c.InputKind?.ToString(),

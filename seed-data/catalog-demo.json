@@ -1,5 +1,5 @@
-{
-  "_comment": "Dữ liệu demo cho Catalog — MỘT nguồn duy nhất cho 3 seeder (CatalogDemo → ProductFengShuiDemo → ProductElementInputDemo). Tên sản phẩm chỉ khai ở đây; trước kia mỗi seeder giữ bảng riêng khớp theo chuỗi con trong tên nên đổi tên là 2 seeder kia âm thầm hỏng.",
+﻿{
+  "_comment": "Dữ liệu demo cho Catalog - MỘT nguồn duy nhất cho 3 seeder (CatalogDemo → ProductFengShuiDemo → ProductElementInputDemo). Tên sản phẩm chỉ khai ở đây; trước kia mỗi seeder giữ bảng riêng khớp theo chuỗi con trong tên nên đổi tên là 2 seeder kia âm thầm hỏng.",
 
   "vendor": {
     "email": "vendor@fengdesk.local",

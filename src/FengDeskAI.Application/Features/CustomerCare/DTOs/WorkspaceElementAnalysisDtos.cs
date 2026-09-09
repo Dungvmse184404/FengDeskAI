@@ -50,6 +50,19 @@ public sealed record WorkspaceElementAnalysisResponse
     /// </summary>
     public decimal TotalVotes { get; init; }
 
+    /// <summary>
+    /// Số mũ nén tương phản đã áp khi dựng <c>current</c> (<c>EVIDENCE_SATURATION_ALPHA</c>).
+    /// <c>1</c> = tuyến tính.
+    ///
+    /// <para>
+    /// FE cần con số này để <b>mô phỏng đổi số phiếu</b>: <c>current</c> là ảnh phi tuyến của khối
+    /// lượng thô, nên phải nghịch đảo về khối lượng trước rồi mới đổi phiếu —
+    /// <c>m[e] ∝ current[e]^(1/α)</c>, chuẩn lại theo <c>totalVotes</c>. Đảo tuyến tính thẳng trên
+    /// <c>current</c> sẽ ra một căn phòng không tồn tại.
+    /// </para>
+    /// </summary>
+    public decimal SaturationAlpha { get; init; }
+
     // ===== v3.2 §10.3 — trục cá nhân trên radar phòng =====
 
     /// <summary>

@@ -82,7 +82,8 @@ public sealed record CurrentContribution(
 public sealed record CurrentBreakdown(
     ElementVector Current,
     decimal TotalVotes,
-    IReadOnlyList<CurrentContribution> Contributions)
+    IReadOnlyList<CurrentContribution> Contributions,
+    ElementVector RawMass = default)
 {
     /// <summary>
     /// Số bằng chứng THẬT (tag + sản phẩm) — 0 nghĩa là Current hoàn toàn suy ra từ prior.
@@ -90,6 +91,30 @@ public sealed record CurrentBreakdown(
     /// hai nguồn đó là suy đoán, không phải quan sát.</para>
     /// </summary>
     public int EvidenceCount => Contributions.Count(c => !IsPrior(c.Source));
+
+    /// <summary>
+    /// Phần của một nguồn trong <c>Current[e]</c>, đã tính nén tương phản.
+    ///
+    /// <para>
+    /// Nén là phép biến đổi <b>phi tuyến trên tổng của từng hành</b>, nên không thể quy ngược ra
+    /// "nguồn i chiếm <c>Votes_i / TotalVotes</c>" như thời tuyến tính. Phân bổ lại theo đúng tỉ lệ
+    /// khối lượng THÔ trong chính hành đó:
+    /// </para>
+    /// <code>
+    /// share_i[e] = Current[e] · (Votes_i · Vector_i[e] / RawMass[e])
+    /// </code>
+    /// <para>
+    /// Hai tính chất đi kèm: <c>Σ_i share_i[e] = Current[e]</c> (radar xếp chồng vẫn khít), và tỉ lệ
+    /// <b>giữa các nguồn TRONG một hành</b> giữ nguyên y hệt số thô — nên câu chuyện "prior loãng dần
+    /// khi user khai thêm tag" của §12 không bị nén động tới. Nén chỉ ép tương phản GIỮA các hành.
+    /// </para>
+    /// <para>Ở <c>α = 1</c> rút gọn về đúng <c>Vector_i[e] · Votes_i / TotalVotes</c> của bản cũ.</para>
+    /// </summary>
+    public decimal ShareOf(CurrentContribution source, FengShuiElement element)
+    {
+        decimal raw = RawMass[element];
+        return raw <= 0m ? 0m : Current[element] * (source.Votes * source.Vector[element] / raw);
+    }
 
     /// <summary>Nguồn suy đoán (nền loại phòng, bản mệnh chủ nhân) — đối lập với bằng chứng user khai.</summary>
     public static bool IsPrior(CurrentSourceKind source)
@@ -120,7 +145,7 @@ public static class PersonPresenceBuilder
 
         var destiny = FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob));
         var vector = FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare);
-        return new PersonPresence($"Bạn — mệnh {destiny}", votes, vector);
+        return new PersonPresence($"Bạn - mệnh {destiny}", votes, vector);
     }
 }
 
@@ -180,9 +205,11 @@ public static class WorkspaceVectorBuilder
         IReadOnlyCollection<WorkspaceProfileInput> inputs,
         ElementInputResolver resolver,
         IEnumerable<WorkspaceTypeElement> interiorFallback,
-        IReadOnlyCollection<(ElementVector Vector, decimal VoteWeight)> productContributions)
+        IReadOnlyCollection<(ElementVector Vector, decimal VoteWeight)> productContributions,
+        decimal? saturationAlpha = null)
         => BuildCurrentBreakdown(inputs, resolver, interiorFallback,
-                productContributions.Select(p => new ProductContribution(Guid.Empty, string.Empty, p.Vector, p.VoteWeight)).ToList())
+                productContributions.Select(p => new ProductContribution(Guid.Empty, string.Empty, p.Vector, p.VoteWeight)).ToList(),
+                saturationAlpha: saturationAlpha)
             .Current;
 
     /// <summary>
@@ -198,7 +225,8 @@ public static class WorkspaceVectorBuilder
         IEnumerable<WorkspaceTypeElement> interiorFallback,
         IReadOnlyCollection<ProductContribution> productContributions,
         PersonPresence? person = null,
-        decimal? interiorVotes = null)
+        decimal? interiorVotes = null,
+        decimal? saturationAlpha = null)
     {
         var contributions = new List<CurrentContribution>();
 
@@ -262,7 +290,14 @@ public static class WorkspaceVectorBuilder
             totalVotes += c.Votes;
         }
 
-        return new CurrentBreakdown(total.Normalize(), totalVotes, contributions);
+        // §17 — nén tương phản. Áp lên TỔNG của từng hành, sau khi đã cộng hết mọi nguồn, chứ không
+        // áp lên từng nguồn: "phòng này đậm hành X tới đâu" là thuộc tính của khối lượng cuối cùng,
+        // không phải của riêng tag hay riêng nền phòng. Nén một nhóm nguồn rồi cộng với nhóm chưa nén
+        // là cộng hai hệ đơn vị khác nhau (phiếu vs phiếu^α), và làm mất luôn tính bất biến tỉ lệ.
+        //
+        // Đặt TRƯỚC Normalize: nén rồi mới chia tổng, nếu ngược lại thì Σ=1 khiến α gần như vô hiệu.
+        var alpha = saturationAlpha ?? 1m;
+        return new CurrentBreakdown(total.Pow(alpha).Normalize(), totalVotes, contributions, total);
     }
 
     /// <summary>Cộng dồn contributions KHÔNG chuẩn hóa (khác <see cref="ElementVector.FromContributions"/>).</summary>

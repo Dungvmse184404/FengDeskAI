@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Features.CustomerCare.DTOs;
+﻿using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 
@@ -91,7 +91,7 @@ public static class SpaceInsightBuilder
         var names = JoinVi(top.Select(ElementSemantics.ElementName).ToList());
         var benefit = ElementSemantics.Trait(top[0], purpose);
 
-        return $"Đối với {subject} dùng để {purposeVi}, hành {names} trội hơn sẽ thuận lợi hơn — "
+        return $"Đối với {subject} dùng để {purposeVi}, hành {names} trội hơn sẽ thuận lợi hơn - "
              + $"đây là nguồn {benefit} mà không gian cần.";
     }
 
@@ -118,10 +118,10 @@ public static class SpaceInsightBuilder
                 // Có khai tag nhưng không tag nào sinh ra hành này → lệch đến từ nền phòng.
                 ? $"Hiện tại hành {surplusName} đang chiếm ưu thế trong phòng"
                 : $"Phòng chưa khai báo nội thất/vật trang trí nào nên hệ thống ước tính theo nền chung "
-                  + $"của loại phòng — theo đó hành {surplusName} đang chiếm ưu thế";
+                  + $"của loại phòng - theo đó hành {surplusName} đang chiếm ưu thế";
 
         if (target is null)
-            return head + $" — vượt mức {ElementSemantics.Trait(surplus, purpose)} mà phòng cần.";
+            return head + $" - vượt mức {ElementSemantics.Trait(surplus, purpose)} mà phòng cần.";
 
         var verb = isToxic ? "triệt tiêu" : "lấn át";
         return head + $" và {verb} hành {target} "
@@ -137,28 +137,28 @@ public static class SpaceInsightBuilder
 
         if (!HasEvidence(breakdown))
             return $"Hiện tại phòng chưa khai báo nội thất/vật trang trí nào, hệ thống đang ước tính theo "
-                 + $"nền chung của loại phòng — theo đó hành {names} còn thiếu ({trait} chưa đủ nguồn).";
+                 + $"nền chung của loại phòng - theo đó hành {names} còn thiếu ({trait} chưa đủ nguồn).";
 
         var declared = DescribeDeclared(breakdown!);
         return $"Hiện tại, với {declared}, phòng chưa có nguồn nào sinh hành {names} "
-             + $"— {trait} vì thế còn thiếu.";
+             + $"- {trait} vì thế còn thiếu.";
     }
 
     private static string BuildBalancedStatus(WorkPurpose? purpose, int? birthYear, CurrentBreakdown? breakdown)
     {
         if (!HasEvidence(breakdown))
-            return "Hiện tại phòng chưa khai báo nội thất/vật trang trí nào — hệ thống ước tính theo nền chung "
+            return "Hiện tại phòng chưa khai báo nội thất/vật trang trí nào - hệ thống ước tính theo nền chung "
                  + "của loại phòng và chưa thấy hành nào lệch chuẩn.";
 
         var declared = DescribeDeclared(breakdown!);
         if (birthYear is { } year)
         {
             var m = FengShuiCalculator.GetNapAmElement(year);
-            return $"Hiện tại, với {declared}, ngũ hành phòng đang cân bằng — trợ lực tốt cho bản mệnh "
+            return $"Hiện tại, với {declared}, ngũ hành phòng đang cân bằng - trợ lực tốt cho bản mệnh "
                  + $"{FengShuiCalculator.GetNapAmName(year)} của bạn, duy trì {ElementSemantics.Trait(m, purpose)}.";
         }
 
-        return $"Hiện tại, với {declared}, ngũ hành phòng đang cân bằng — không hành nào lệch chuẩn.";
+        return $"Hiện tại, với {declared}, ngũ hành phòng đang cân bằng - không hành nào lệch chuẩn.";
     }
 
     // ── Dòng 3: đề xuất ────────────────────────────────────────────────────

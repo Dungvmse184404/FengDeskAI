@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Interfaces.External;
 
@@ -68,7 +68,7 @@ public sealed class GetProductTool : IAiTool
             Has3DModel = p.Models3D.Count > 0,
 
             Note = "When mentioning this product, write its name EXACTLY as the 'link' value (a markdown "
-                + "link). Never paste a raw id into your reply. 'placement' says where the item is used — "
+                + "link). Never paste a raw id into your reply. 'placement' says where the item is used - "
                 + "do not give compass placement advice for Carry items.",
         });
     }

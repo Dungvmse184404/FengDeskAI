@@ -106,6 +106,7 @@ Phân tích ngũ hành của một workspace **không cần chạy cả phiên r
   "evidenceCount": 3,
   "confidence": 0.5,
   "totalVotes": 11,
+  "saturationAlpha": 0.60,
   "elements": [
     { "element": "Thuy", "ideal": 0.20, "adjustedIdeal": 0.30, "current": 0.04, "gap":  0.26 },
     { "element": "Moc",  "ideal": 0.25, "adjustedIdeal": 0.25, "current": 0.24, "gap":  0.01 },
@@ -154,6 +155,7 @@ Phân tích ngũ hành của một workspace **không cần chạy cả phiên r
 | `evidenceCount` | int | Số bằng chứng thật (tag + sản phẩm đã giao). **0 = mọi con số suy ra từ nền loại phòng** |
 | `confidence` | decimal | `0..1` — tỉ lệ `current` đến từ dữ liệu user khai thay vì nền phòng |
 | `totalVotes` | decimal | Tổng phiếu mọi nguồn — mẫu số của mọi `sharePercent`; FE mô phỏng lại được "chủ nhân nặng N phiếu thì phòng ra sao" mà không gọi lại API |
+| `saturationAlpha` | decimal | Số mũ nén tương phản đã áp (`EVIDENCE_SATURATION_ALPHA`); `1` = tuyến tính. FE cần nó để mô phỏng đổi phiếu — xem mục dưới |
 | `contributions[].votes` | decimal | Số **phiếu** của nguồn — đơn vị gốc của mô hình. FE hiện "3 phiếu" thay vì "27%": phiếu ổn định, còn % đổi mỗi lần khai thêm tag |
 | `personalDirection` | object \| null | *(v3.2)* Trục cá nhân của căn phòng — xem bảng riêng bên dưới |
 | `elements[]` | array | 5 hành, sắp **giảm dần theo `gap`** (thiếu nhất → thừa nhất) |
@@ -278,8 +280,23 @@ là 0. Cả ba đều dẫn tới `Wp = 0`, mà khi đó `d ≡ ĝ` nên trục 
 
 ### Công thức `current` (v3.2)
 ```
-current = normalize( Interior × 3  +  Chủ nhân × (3|2|0)  +  Σ tag (1 phiếu/tag)  +  Σ sản phẩm (× voteWeight) )
+m       = Interior × 3  +  Chủ nhân × (3|2|0)  +  Σ tag (1 phiếu/tag)  +  Σ sản phẩm (× voteWeight)
+current = normalize( m^α )        // α = EVIDENCE_SATURATION_ALPHA, seed 0.60
 ```
+
+**`m^α` — nén tương phản (§17).** Khai 12 tag Mộc chỉ nói "phòng nhiều gỗ", không nói "phòng gấp 12
+lần gỗ". Không nén thì Mộc chiếm ~60% hiện trạng và nuốt bốn hành còn lại; với α=0.6 còn ~43% mà vẫn
+giữ Mộc trội. Đây là bộ hãm **mềm** — một hành cần 2–3 lần số tag mới đạt cùng mức áp đảo, thứ tự
+giữa các hành không đổi.
+
+⚠️ Nén áp lên **tổng của từng hành**, nên `contributions[].sharePercent` **không còn** bằng
+`votes / totalVotes`: một nguồn rót vào hành đã bão hoà thật sự đóng góp ít hơn vào hình cuối. Trường
+`votes` vẫn là số **thô** — phiếu là thứ user khai, nó không đổi.
+
+⚠️ Muốn mô phỏng "nếu chủ nhân nặng N phiếu" thì phải **nghịch đảo về khối lượng thô trước**:
+`m[e] ∝ current[e]^(1/α)`, chuẩn lại theo `totalVotes`, đổi phiếu, rồi `^α` và chuẩn hoá lại. Trừ
+thẳng trên `current` là trừ một đại lượng ĐÃ NÉN cho một đại lượng theo PHIẾU — ra một căn phòng
+không tồn tại.
 - **Nền phòng luôn có mặt** như prior 3 phiếu → không bao giờ có hành = 0 dù user khai ít tag.
   Càng nhiều tag thì prior càng mờ đi (3 tag = 50/50 với nền).
 - Vector `Interior` được seed sao cho phòng **chỉ chọn loại, chưa khai gì** đạt `compatibilityPercent` ≈ **70%**

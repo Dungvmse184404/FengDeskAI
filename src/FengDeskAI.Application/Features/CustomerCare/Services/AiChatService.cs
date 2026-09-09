@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Common.Sanitization;
@@ -243,7 +243,7 @@ public sealed class AiChatService : IAiChatService
     private sealed class RewindAbortedException : Exception
     {
         public RewindAbortedException(IServiceResult<AiChatResponse> result)
-            : base("Rewind aborted — rollback lịch sử đã cắt.")
+            : base("Rewind aborted - rollback lịch sử đã cắt.")
             => Result = result;
 
         public IServiceResult<AiChatResponse> Result { get; }
@@ -385,7 +385,7 @@ public sealed class AiChatService : IAiChatService
                     stalledCandidate = completion;
                 messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content));
                 messages.Add(new AiChatMessage(AiChatRoles.System,
-                    "You announced you would fetch data but did NOT emit any tool call — the user received nothing. " +
+                    "You announced you would fetch data but did NOT emit any tool call - the user received nothing. " +
                     "Act NOW in this turn: emit the required tool call immediately, or if no tool is needed, " +
                     "give the complete final answer. Never announce or promise an action again."));
                 continue;
@@ -406,7 +406,7 @@ public sealed class AiChatService : IAiChatService
                 _logger.LogInformation("[AiChat] Model lộ tên tool/tham số nội bộ — yêu cầu gen lại (còn {Left} lần).", toolLeakNudgesLeft);
                 messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content));
                 messages.Add(new AiChatMessage(AiChatRoles.System,
-                    "Your previous reply exposed internal tool/function names and/or their parameters — this is " +
+                    "Your previous reply exposed internal tool/function names and/or their parameters - this is " +
                     "NEVER allowed, even if the user asked directly. Rewrite your answer NOW: describe only WHAT " +
                     "you can help with, in plain natural language, with zero tool names, parameter names, tables, " +
                     "or code-like identifiers."));
@@ -843,7 +843,7 @@ public sealed class AiChatService : IAiChatService
         "- If `missing` is non-empty, provide the partial reading first, then ask for missing info (e.g., birth time) for deeper Tứ Trụ.\n" +
         "- Use `favorableElementCodes` (or destiny element) as the `element` filter in `search_products`.\n" +
         "- **PICK THE RIGHT SUGGESTION TOOL:** items placed in a room (desk decor, plants, statues) -> `recommend_products`; items worn or carried (bracelet, pendant, ring, keychain, car hanger) -> `recommend_personal_items`. Never give compass placement advice for worn/carried items.\n" +
-        "- NEVER calculate destiny info manually—always use tools. End with a one-line disclaimer that feng shui is for reference.\n\n" +
+        "- NEVER calculate destiny info manually-always use tools. End with a one-line disclaimer that feng shui is for reference.\n\n" +
 
         "## ORDERING PROTOCOL\n" +
         "- To place an order, call `prepare_order` (uses default address unless specified). Show the FULL summary (items, variant, quantity, unit price, shipping fee, total, address) in a **Table** and ask for confirmation.\n" +
@@ -865,7 +865,7 @@ public sealed class AiChatService : IAiChatService
         if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
             parts.Add(_options.SystemPrompt!.Trim());
         if (maxReplyChars is { } limit && limit > 0)
-            parts.Add($"**This is a small chat widget — answer BRIEFLY and concisely, and do NOT exceed {limit} characters.** If you need to say more, summarize the key points and invite the customer to open the full assistant page.");
+            parts.Add($"**This is a small chat widget - answer BRIEFLY and concisely, and do NOT exceed {limit} characters.** If you need to say more, summarize the key points and invite the customer to open the full assistant page.");
         if (!string.IsNullOrWhiteSpace(userDisplayName))
             parts.Add($"The user you are talking to is named {userDisplayName!.Trim()}.");
 

@@ -193,7 +193,7 @@ public sealed record ElementDirection(
         var bridge = FengShuiCalculator.GetGeneratedElement(roomNeed);
         return new ConflictResolution(roomNeed, destiny, bridge,
             $"Phòng đang thiếu {roomNeed}, nhưng {roomNeed} khắc bản mệnh {destiny} của bạn. "
-            + $"Hệ thống ưu tiên vật hành {bridge} — {roomNeed} sinh {bridge}, {bridge} sinh {destiny} — "
+            + $"Hệ thống ưu tiên vật hành {bridge} - {roomNeed} sinh {bridge}, {bridge} sinh {destiny} - "
             + $"bù cho phòng mà vẫn nuôi bản mệnh.");
     }
 }

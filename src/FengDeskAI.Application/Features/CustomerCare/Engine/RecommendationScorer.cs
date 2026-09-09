@@ -13,6 +13,26 @@ internal static class VibeCodes
     public const string Creative = "Creative";
     public const string Calm = "Calm";
     public const string Energize = "Energize";
+
+    /// <summary>
+    /// Tên tiếng Việt của cảm hứng không gian — <b>mã code không được lên giao diện</b>.
+    ///
+    /// <para>
+    /// Bảng <c>vibes</c> có cột <c>name</c> tiếng Việt và admin sửa được, nhưng engine là code THUẦN
+    /// (không I/O) nên không đọc DB được. Giữ bản dịch tại đây cho 5 mã mà engine tự suy ra từ
+    /// <c>WorkPurpose</c>; mã lạ thì trả về chính nó thay vì ném lỗi — một nhãn hơi thô vẫn hơn là
+    /// làm hỏng cả lượt chấm điểm.
+    /// </para>
+    /// </summary>
+    public static string Vi(string code) => code switch
+    {
+        Focus => "tập trung",
+        Relax => "thư giãn",
+        Creative => "sáng tạo",
+        Calm => "tĩnh tại",
+        Energize => "năng lượng",
+        _ => code,
+    };
 }
 
 /// <summary>
@@ -89,7 +109,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         //    VIBE_FILTER_HARD ≥ 0.5 giữ nguyên hành vi v3 (loại cứng); < 0.5 chuyển sang trừ điểm.
         decimal vibePenalty = 0m;
         string vibeCode = ScoringParamCodes.VibeMismatchPenalty;
-        string vibeReason = "Vibe sản phẩm hợp mục đích của phòng — không trừ điểm.";
+        string vibeReason = "Cảm hứng không gian của sản phẩm hợp mục đích của phòng - không trừ điểm.";
         if (TargetVibe(ctx.Purpose) is { } vibe)
         {
             bool unknown = product.Vibes.Count == 0;
@@ -106,18 +126,23 @@ public sealed class RecommendationScorer : IRecommendationScorer
                     vibePenalty = unknown ? ctx.Params.VibeUnknownPenalty : ctx.Params.VibeMismatchPenalty;
 
                 vibeCode = unknown ? ScoringParamCodes.VibeUnknownPenalty : ScoringParamCodes.VibeMismatchPenalty;
+                // Cả tên mục đích lẫn tên cảm hứng đều phải là tiếng Việt: `ctx.Purpose` in ra thẳng
+                // sẽ cho user thấy "Cooking", còn `vibe` sẽ cho thấy "Energize" - tên hằng trong code.
+                string purposeVi = ElementSemantics.PurposeVi(ctx.Purpose);
+                string vibeVi = VibeCodes.Vi(vibe);
+
                 vibeReason = unknown
-                    ? $"Sản phẩm chưa khai vibe nào — chưa xác minh được có hợp mục đích {ctx.Purpose} của phòng không."
-                    : $"Phòng dùng để {ctx.Purpose} nên cần vibe {vibe}; sản phẩm không khai vibe đó.";
+                    ? $"Sản phẩm chưa khai cảm hứng không gian nào - chưa xác minh được có hợp mục đích {purposeVi} của phòng không."
+                    : $"Phòng dùng để {purposeVi} nên cần cảm hứng {vibeVi}; sản phẩm không khai mục đó.";
 
                 cautions.Add(unknown
-                    ? "Sản phẩm chưa khai báo vibe — chưa xác minh được có hợp mục đích phòng không."
-                    : $"Vibe sản phẩm chưa khớp mục đích {ctx.Purpose} của phòng.");
+                    ? "Sản phẩm chưa khai cảm hứng không gian - chưa xác minh được có hợp mục đích phòng không."
+                    : $"Cảm hứng không gian của sản phẩm chưa khớp mục đích {purposeVi} của phòng.");
             }
         }
         else
         {
-            vibeReason = "Phòng không nêu mục đích cụ thể — không xét vibe.";
+            vibeReason = "Phòng không nêu mục đích cụ thể - không xét cảm hứng không gian.";
         }
 
         var productDominant = product.Vector.Dominant();
@@ -126,10 +151,12 @@ public sealed class RecommendationScorer : IRecommendationScorer
         //    PersonalConflictMode.None = không gian Public: không neo vào bản mệnh một người (§14.3 · Q12).
         //    Scaled = L2 của v3.2: không loại, trừ USER_CONFLICT_PENALTY × Wp (§14.2).
         decimal userPenalty = 0m;
+        string userPenaltyCode = ScoringParamCodes.UserConflictPenalty;
+        string userPenaltyLabel = "Khắc bản mệnh";
         string userPenaltyReason = policy.Conflict switch
         {
             PersonalConflictMode.None when ctx.Scope == WorkspaceScope.Public =>
-                "Không gian chung — hệ thống không xét khắc bản mệnh của riêng ai.",
+                "Không gian chung - hệ thống không xét khắc bản mệnh của riêng ai.",
             _ when ctx.PersonalVector is null =>
                 "Chưa có ngày sinh nên chưa xác định được bản mệnh để xét.",
             _ => "Hành trội của sản phẩm không khắc bản mệnh của bạn.",
@@ -160,13 +187,36 @@ public sealed class RecommendationScorer : IRecommendationScorer
                     ? $"Hành {productDominant} khắc bản mệnh {personalDominant}. Mức phạt co giãn theo "
                         + $"trọng số cá nhân của không gian: {ctx.Params.UserConflictPenalty:0.00} × "
                         + $"{ctx.PersonalWeight:0.00} = {userPenalty:0.00}."
-                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} — trục cá nhân đang tắt "
+                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} - trục cá nhân đang tắt "
                         + $"nên áp mức phạt đầy đủ {userPenalty:0.00}.";
 
                 cautions.Add(scaled
-                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ {userPenalty:0.00} điểm."
-                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} — trừ điểm"
+                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - trừ {userPenalty:0.00} điểm."
+                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} - trừ điểm"
                         + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
+            }
+            else if (policy.Target == ScoringTarget.PersonalNeed
+                     && ctx.Params.MinorClashPenalty > 0m
+                     && ClashShare(personalDominant, product.Vector) is > 0m and var clashShare)
+            {
+                // §18 — hành trội không khắc, nhưng vật vẫn CHỨA hành khắc mệnh. Chỉ nhánh dụng thần
+                // mới cần nhánh này: vector dụng thần không âm nên phần khắc đó nhân ra đúng 0, còn
+                // luồng phòng đã trừ nó qua r có dấu.
+                userPenalty = ctx.Params.MinorClashPenalty * clashShare;
+                userPenaltyCode = ScoringParamCodes.MinorClashPenalty;
+                userPenaltyLabel = "Khắc bản mệnh (phần phụ)";
+
+                string clashing = ClashingElementsVi(personalDominant, product.Vector);
+                userPenaltyReason =
+                    $"Hành trội {ElementSemantics.ElementName(productDominant)} không khắc bản mệnh "
+                    + $"{ElementSemantics.ElementName(personalDominant)} của bạn, nhưng vật phẩm còn "
+                    + $"{clashShare:P0} là {clashing} - khắc bản mệnh. Vật mang trên người nên phần đó "
+                    + $"vẫn bị trừ theo đúng tỉ trọng: {ctx.Params.MinorClashPenalty:0.00} × "
+                    + $"{clashShare:0.00} = {userPenalty:0.00}.";
+
+                cautions.Add(
+                    $"Vật phẩm có {clashShare:P0} {clashing} - khắc bản mệnh "
+                    + $"{ElementSemantics.ElementName(personalDominant)} của bạn, trừ {userPenalty:0.00} điểm.");
             }
             else if (!scaled)
             {
@@ -256,7 +306,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 : ElementDirection.PersonalTargetOf(ctx.AdjustedIdeal, mine2, ctx.PersonalWeight),
             Components: BuildComponents(ctx, policy, product, normalizedGap, gapScore, personalScore, destiny),
             Penalties: BuildPenalties(
-                ctx, userPenalty, userPenaltyReason, dirPenalty, placementHint, vibePenalty, vibeCode, vibeReason),
+                ctx, userPenalty, userPenaltyCode, userPenaltyLabel, userPenaltyReason,
+                dirPenalty, placementHint, vibePenalty, vibeCode, vibeReason),
             ConflictResolution: direction.ConflictResolution,
             DestinyElement: destiny,
             // Chỉ khai báo nghề nghiệp khi nó THẬT SỰ dịch được `r`. Trả mã nghề kèm một shift toàn 0
@@ -318,21 +369,21 @@ public sealed class RecommendationScorer : IRecommendationScorer
     /// </summary>
     private static IReadOnlyList<ScorePenalty> BuildPenalties(
         ScoringContext ctx,
-        decimal userPenalty, string userPenaltyReason,
+        decimal userPenalty, string userPenaltyCode, string userPenaltyLabel, string userPenaltyReason,
         decimal dirPenalty, string? placementHint,
         decimal vibePenalty, string vibeCode, string vibeReason)
         => new[]
         {
-            new ScorePenalty(ScoringParamCodes.UserConflictPenalty, "Khắc bản mệnh",
+            new ScorePenalty(userPenaltyCode, userPenaltyLabel,
                 userPenalty, userPenalty > 0m, userPenaltyReason),
 
             new ScorePenalty(ScoringParamCodes.DirectionPenalty, "Hướng hợp bị chắn",
                 dirPenalty, dirPenalty > 0m,
                 dirPenalty > 0m
                     ? "Mọi hướng hợp với vật phẩm đều trùng cửa vào, nhà vệ sinh hoặc góc tối."
-                    : placementHint ?? "Còn hướng hợp để đặt vật phẩm — không trừ điểm."),
+                    : placementHint ?? "Còn hướng hợp để đặt vật phẩm - không trừ điểm."),
 
-            new ScorePenalty(vibeCode, "Lệch vibe mục đích", vibePenalty, vibePenalty > 0m, vibeReason),
+            new ScorePenalty(vibeCode, "Lệch cảm hứng không gian", vibePenalty, vibePenalty > 0m, vibeReason),
         };
 
     /// <summary>Câu giải thích chung cho "vector mục tiêu × vector sản phẩm": nêu đúng hành đã khớp.</summary>
@@ -345,7 +396,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             .Take(2).Select(x => $"{x.Element} ({x.Value:+0.00;-0.00})").ToList();
 
         if (hit.Count > 0)
-            return $"Sản phẩm cấp {string.Join(" và ", hit)} — đúng {wantedLabel}.";
+            return $"Sản phẩm cấp {string.Join(" và ", hit)} - đúng {wantedLabel}.";
 
         var miss = direction.Enumerate()
             .Where(x => x.Value < 0m && productVector[x.Element] > 0m)
@@ -353,7 +404,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             .Take(2).Select(x => $"{x.Element} ({x.Value:+0.00;-0.00})").ToList();
 
         return miss.Count > 0
-            ? $"Sản phẩm cấp {string.Join(" và ", miss)} — {unwantedLabel}."
+            ? $"Sản phẩm cấp {string.Join(" và ", miss)} - {unwantedLabel}."
             : "Hành của sản phẩm trung tính với nhu cầu đang xét.";
     }
 
@@ -387,8 +438,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
         else if (personalScore < -0.05m)
         {
             cautions.Add(relation == FengShuiRelation.BiKhac
-                ? $"Hành {productDominant} khắc bản mệnh {personalDominant} — đã trừ vào điểm hợp mệnh."
-                : $"Hành {productDominant} làm hao khí bản mệnh {personalDominant} — trừ nhẹ điểm hợp mệnh.");
+                ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - đã trừ vào điểm hợp mệnh."
+                : $"Hành {productDominant} làm hao khí bản mệnh {personalDominant} - trừ nhẹ điểm hợp mệnh.");
         }
     }
 
@@ -396,9 +447,9 @@ public sealed class RecommendationScorer : IRecommendationScorer
     private static string? PlacementHintWithoutDirection(ProductPlacement placement) => placement switch
     {
         ProductPlacement.Carry =>
-            "Vật phẩm mang theo người — tác dụng đi theo bản mệnh của bạn, không phụ thuộc hướng đặt trong phòng.",
+            "Vật phẩm mang theo người - tác dụng đi theo bản mệnh của bạn, không phụ thuộc hướng đặt trong phòng.",
         ProductPlacement.Living =>
-            "Cây/vật sống — ưu tiên vị trí đủ ánh sáng và dễ chăm sóc thay vì chọn theo hướng la bàn.",
+            "Cây/vật sống - ưu tiên vị trí đủ ánh sáng và dễ chăm sóc thay vì chọn theo hướng la bàn.",
         _ => null,
     };
 
@@ -408,11 +459,11 @@ public sealed class RecommendationScorer : IRecommendationScorer
         switch (placement)
         {
             case ProductPlacement.Carry:
-                cautions.Add("Đây là vật phẩm mang theo người — điểm dưới đây chấm theo nhu cầu của phòng, "
+                cautions.Add("Đây là vật phẩm mang theo người - điểm dưới đây chấm theo nhu cầu của phòng, "
                     + "để chọn đúng nên xem gợi ý theo bản mệnh.");
                 break;
             case ProductPlacement.Consumable:
-                cautions.Add("Đây là hàng tiêu hao, cần thay định kỳ — không được engine đưa vào danh sách gợi ý.");
+                cautions.Add("Đây là hàng tiêu hao, cần thay định kỳ - không được engine đưa vào danh sách gợi ý.");
                 break;
         }
     }
@@ -438,7 +489,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             var bumped = topNeeded.Where(e => productVector[e] > 0m).ToList();
             if (bumped.Count > 0)
                 facts.Add(personal
-                    ? $"Mang hành {string.Join("/", bumped)} — đúng hành bản mệnh bạn cần được bồi."
+                    ? $"Mang hành {string.Join("/", bumped)} - đúng hành bản mệnh bạn cần được bồi."
                     : $"Bù năng lượng hành {string.Join("/", bumped)} đang thiếu của phòng.");
             else
                 facts.Add(personal
@@ -451,7 +502,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             // với gap phòng; giữ lời văn riêng phòng khi không có hành thừa nào khớp.
             var worsened = topExcess.Where(e => productVector[e] > 0m).ToList();
             if (worsened.Count > 0)
-                cautions.Add($"Bơm thêm hành {string.Join("/", worsened)} vốn đã thừa trong phòng — nên cân nhắc.");
+                cautions.Add($"Bơm thêm hành {string.Join("/", worsened)} vốn đã thừa trong phòng - nên cân nhắc.");
             else
                 cautions.Add(personal
                     ? "Hành của vật phẩm chưa khớp hành bản mệnh bạn đang cần."
@@ -479,13 +530,13 @@ public sealed class RecommendationScorer : IRecommendationScorer
             var preferred = ctx.AspirationDirections.FirstOrDefault(a => placementDirs.Contains(a.Direction));
             if (preferred is not null)
                 return (0m, $"Hãy đặt vật phẩm này ở hướng {FengShuiCalculator.DirectionVi(preferred.Direction)} "
-                    + $"— cung {preferred.CungName} của bạn, đúng mục tiêu đang hướng tới.");
+                    + $"- cung {preferred.CungName} của bạn, đúng mục tiêu đang hướng tới.");
 
             return (0m, $"Hãy đặt vật phẩm này ở hướng {DirectionVi(placementDirs[0])} của phòng để kích hoạt năng lượng tốt nhất.");
         }
 
         return (ctx.Params.DirectionPenalty,
-            "Các hướng hợp với vật phẩm đều bị chắn (cửa/WC/góc tối) — cân nhắc vị trí đặt.");
+            "Các hướng hợp với vật phẩm đều bị chắn (cửa/WC/góc tối) - cân nhắc vị trí đặt.");
     }
 
     private static string? TargetVibe(WorkPurpose purpose) => purpose switch
@@ -504,6 +555,32 @@ public sealed class RecommendationScorer : IRecommendationScorer
         WorkPurpose.Mixed => VibeCodes.Focus,
         _ => null, // Other → không lọc theo intent
     };
+
+    /// <summary>
+    /// Tổng tỉ trọng những hành KHẮC bản mệnh trong vector sản phẩm.
+    ///
+    /// <para>
+    /// Đọc quan hệ từ <see cref="FengShuiCalculator.GetRelation"/> chứ không từ bảng
+    /// <c>feng_shui_rules</c>: "khắc bản mệnh" là một PHẠM TRÙ của ngũ hành, không phải con số admin
+    /// chỉnh được (§14.4). Điểm số mềm mới đi đường <c>r</c>.
+    /// </para>
+    /// </summary>
+    private static decimal ClashShare(FengShuiElement destiny, ElementVector productVector)
+    {
+        decimal sum = 0m;
+        foreach (var (element, value) in productVector.Enumerate())
+            if (value > 0m && FengShuiCalculator.GetRelation(destiny, element) == FengShuiRelation.BiKhac)
+                sum += value;
+        return sum;
+    }
+
+    /// <summary>Tên tiếng Việt của các hành khắc mệnh đang có mặt — cho câu giải thích.</summary>
+    private static string ClashingElementsVi(FengShuiElement destiny, ElementVector productVector)
+        => string.Join(", ", productVector.Enumerate()
+            .Where(x => x.Value > 0m
+                        && FengShuiCalculator.GetRelation(destiny, x.Element) == FengShuiRelation.BiKhac)
+            .OrderByDescending(x => x.Value)
+            .Select(x => ElementSemantics.ElementName(x.Element)));
 
     /// <summary>Ủy quyền về <see cref="FengShuiCalculator.DirectionVi"/> — giữ một nguồn tên hướng duy nhất.</summary>
     private static string DirectionVi(CompassDirection d) => FengShuiCalculator.DirectionVi(d);

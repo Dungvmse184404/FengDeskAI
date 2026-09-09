@@ -1,5 +1,5 @@
-{
-  "_comment": "Thẻ MỤC TIÊU phong thủy cho sản phẩm demo. Khớp sản phẩm theo 'match' (chuỗi con trong tên, không phân biệt hoa/thường) — cùng cách ProductFengShuiDemoSeeder làm. Giá trị hợp lệ: Wealth | Career | Health | Relationship | Study.",
+﻿{
+  "_comment": "Thẻ MỤC TIÊU phong thủy cho sản phẩm demo. Khớp sản phẩm theo 'match' (chuỗi con trong tên, không phân biệt hoa/thường) - cùng cách ProductFengShuiDemoSeeder làm. Giá trị hợp lệ: Wealth | Career | Health | Relationship | Study.",
   "approveOnSeed": true,
   "_approveOnSeedNote": "true = seed thẳng ở trạng thái ĐÃ DUYỆT để môi trường dev/demo lọc được ngay. Ở production để false rồi cho admin duyệt qua PUT /api/products/{id}/aspirations.",
   "rows": [

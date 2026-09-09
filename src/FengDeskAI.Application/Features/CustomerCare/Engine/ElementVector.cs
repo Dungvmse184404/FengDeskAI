@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums.Workspace;
+﻿using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
@@ -49,6 +49,41 @@ public readonly record struct ElementVector(
         decimal sum = t + k + w + m + h;
         if (sum == 0m) return Zero;
         return new(t / sum, k / sum, w / sum, m / sum, h / sum);
+    }
+
+    /// <summary>
+    /// Nâng từng trục lên luỹ thừa <paramref name="alpha"/> — <b>nén tương phản</b> theo định luật
+    /// luỹ thừa Stevens (dạng hiện đại của Weber–Fechner).
+    ///
+    /// <para>
+    /// Cảm nhận "phòng này nhiều hành X tới đâu" tăng theo <c>khốiLượng^α</c> chứ không tuyến tính:
+    /// thêm 2 cây vào phòng đã có 10 cây là chuyện lớn, thêm 2 cây vào phòng đã có 100 cây thì gần
+    /// như không ai nhận ra. Với <c>α &lt; 1</c>, mức dịch tương đối bằng <c>α · Δm/m</c> — tỉ lệ với
+    /// thay đổi TƯƠNG ĐỐI, đúng trực giác đó.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>α = 1</c> <b>thoát sớm, trả về chính vector này</b> — không đi qua <see cref="Math.Pow"/>,
+    /// nên kill-switch cho kết quả byte-identical chứ không phải "gần đúng tới chữ số thứ n".
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ <c>decimal</c> không có luỹ thừa phân số nên phải mượn <c>double</c>. Để engine giữ tính tái
+    /// lập, kết quả <b>lượng tử hoá về 9 chữ số thập phân</b>: sai khác 1 ulp của <c>Math.Pow</c> giữa
+    /// các nền tảng (~1e-16 tương đối) bị nuốt hoàn toàn, mà độ phân giải vẫn xa hơn mức 3 chữ số API trả.
+    /// </para>
+    ///
+    /// <para>Trục ≤ 0 trả 0: IEEE cho <c>0^0 = 1</c>, sẽ biến một hành KHÔNG có mặt thành có mặt.</para>
+    /// </summary>
+    public ElementVector Pow(decimal alpha)
+    {
+        if (alpha == 1m) return this;
+
+        static decimal Axis(decimal value, decimal a)
+            => value <= 0m ? 0m : Math.Round((decimal)Math.Pow((double)value, (double)a), 9);
+
+        return new(Axis(Tho, alpha), Axis(Kim, alpha), Axis(Thuy, alpha),
+                   Axis(Moc, alpha), Axis(Hoa, alpha));
     }
 
     /// <summary>Tích vô hướng Σ_e a[e]·b[e].</summary>

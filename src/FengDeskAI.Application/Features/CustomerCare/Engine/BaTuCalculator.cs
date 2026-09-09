@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums.Workspace;
+﻿using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
@@ -173,7 +173,7 @@ public static class BaTuCalculator
             FavorableElements: favorable.Select(ElementVn).ToList(),
             FavorableElementCodes: favorable.Select(e => e.ToString()).ToList(),
             MethodNote: (birthTime is null
-                ? "Thiếu giờ sinh — chỉ tính 3 trụ (năm/tháng/ngày); kết quả vượng nhược và dụng thần là sơ bộ. "
+                ? "Thiếu giờ sinh - chỉ tính 3 trụ (năm/tháng/ngày); kết quả vượng nhược và dụng thần là sơ bộ. "
                 : "") +
                 "Phương pháp rút gọn: trụ năm theo Lập Xuân, trụ tháng theo tiết khí; 23h gộp vào giờ Tý cùng ngày; " +
                 "chưa xét hợp-xung-hình-hại giữa các chi.");

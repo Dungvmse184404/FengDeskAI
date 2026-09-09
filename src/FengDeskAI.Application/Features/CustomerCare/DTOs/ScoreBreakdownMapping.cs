@@ -99,7 +99,7 @@ public static class ScoreBreakdownMapping
             .OrderBy(x => x.Value).Select(x => x.Element.ToString()).ToList();
 
         if (up.Count == 0 && down.Count == 0)
-            return $"Nghề {occupationNameVi} không đổi mức hợp của hành nào — hoặc hệ số đang rất nhỏ, "
+            return $"Nghề {occupationNameVi} không đổi mức hợp của hành nào - hoặc hệ số đang rất nhỏ, "
                  + "hoặc những hành nghề này ưa đều đang khắc bản mệnh của bạn nên bị chặn lại.";
 
         var parts = new List<string>();
@@ -136,19 +136,19 @@ public static class ScoreBreakdownMapping
     public static string PersonalWeightReason(WorkspaceScope scope, decimal wp, FengShuiElement? destiny)
     {
         if (scope == WorkspaceScope.Public)
-            return "Không gian chung — điểm không neo vào bản mệnh của riêng ai.";
+            return "Không gian chung - điểm không neo vào bản mệnh của riêng ai.";
 
         if (destiny is null)
-            return "Chưa có ngày sinh nên chưa tính được bản mệnh — điểm hiện chỉ dựa trên nhu cầu của phòng. "
+            return "Chưa có ngày sinh nên chưa tính được bản mệnh - điểm hiện chỉ dựa trên nhu cầu của phòng. "
                 + "Thêm ngày sinh để nhận gợi ý hợp bản mệnh.";
 
         if (wp <= 0m)
-            return "Trục cá nhân đang tắt trong cấu hình — điểm hiện chỉ dựa trên nhu cầu của phòng.";
+            return "Trục cá nhân đang tắt trong cấu hình - điểm hiện chỉ dựa trên nhu cầu của phòng.";
 
         int percent = (int)Math.Round(wp * 100m, MidpointRounding.AwayFromZero);
         return scope == WorkspaceScope.Private
-            ? $"Phòng riêng tư — {percent}% điểm đến từ bản mệnh của bạn, phần còn lại từ nhu cầu của phòng."
-            : $"Không gian dùng chung — chỉ {percent}% điểm đến từ bản mệnh của bạn, "
+            ? $"Phòng riêng tư - {percent}% điểm đến từ bản mệnh của bạn, phần còn lại từ nhu cầu của phòng."
+            : $"Không gian dùng chung - chỉ {percent}% điểm đến từ bản mệnh của bạn, "
                 + "phần lớn vẫn là nhu cầu của phòng.";
     }
 
@@ -159,6 +159,6 @@ public static class ScoreBreakdownMapping
         if (dateOfBirth is not { } dob) return element.ToString();
 
         int lunarYear = FengShuiCalculator.GetLunarYear(dob);
-        return $"{element} — {FengShuiCalculator.GetNapAmName(lunarYear)} ({lunarYear})";
+        return $"{element} - {FengShuiCalculator.GetNapAmName(lunarYear)} ({lunarYear})";
     }
 }

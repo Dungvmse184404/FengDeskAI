@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text;
 using System.Text.Json;
 using FengDeskAI.Application.Common.Constants;
@@ -188,7 +188,7 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
                     imageUrls.Select(url => _encoder.FetchAsBase64Async(url, ct)))).ToList();
             }
 
-            var userContent = description.Length > 0 ? description : "(Không có mô tả chữ — chỉ có ảnh, hãy phân tích ảnh.)";
+            var userContent = description.Length > 0 ? description : "(Không có mô tả chữ - chỉ có ảnh, hãy phân tích ảnh.)";
             var messages = new List<AiChatMessage>
             {
                 new(AiChatRoles.System, BuildSystemPrompt(vocab, hasImages: imagesBase64 is { Count: > 0 })),
@@ -336,19 +336,19 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             (hasImages ? "và ảnh " : "") +
             "→ trả DUY NHẤT một object JSON đúng schema. Không markdown, không giải thích, không chữ nào ngoài JSON. " +
             "Mọi giá trị phải lấy nguyên văn từ danh sách cho phép (mã tiếng Anh), kể cả khi mô tả là tiếng Việt.\n" +
-            "Suy luận NGẮN GỌN — đây là tác vụ trích xuất, không phải giải đố.\n\n" +
+            "Suy luận NGẮN GỌN - đây là tác vụ trích xuất, không phải giải đố.\n\n" +
 
             "## QUY TẮC\n" +
             "- Không đoán. Field không được nhắc TƯỜNG MINH → null. \"cạnh cửa sổ\" KHÔNG cho biết hướng; " +
             "chỉ điền hướng khi user nói rõ (\"hướng đông\", \"bàn quay về tây\").\n" +
             imageRule +
             "- inputs là NGOẠI LỆ của luật trên: liệt kê CÀNG NHIỀU tín hiệu nhận ra càng tốt, không giới hạn " +
-            "1 cái mỗi loại (\"bàn gỗ, ghế da, bể cá, cây xanh\" → đủ 4 mục). Thà dư còn hơn sót — user sửa lại được.\n" +
+            "1 cái mỗi loại (\"bàn gỗ, ghế da, bể cá, cây xanh\" → đủ 4 mục). Thà dư còn hơn sót - user sửa lại được.\n" +
             "- mentionedFields: những field-key user CÓ nhắc, kể cả khi không map ra giá trị hợp lệ.\n" +
             "- hasDesk: true nếu có nhắc bàn làm việc (loại bàn / hướng bàn / workspaceType kiểu bàn-văn phòng); " +
             "false nếu rõ ràng là loại phòng không có bàn (bếp, phòng khách, phòng ngủ, phòng ăn, ban công, phòng tập) " +
             "và không nhắc bàn nào; null nếu không đủ căn cứ.\n" +
-            "- workPurpose: ngoại lệ DUY NHẤT được suy ra — khi workspaceType chắc chắn và chỉ có một công năng hiển nhiên " +
+            "- workPurpose: ngoại lệ DUY NHẤT được suy ra - khi workspaceType chắc chắn và chỉ có một công năng hiển nhiên " +
             "(Kitchen→Cooking, Bedroom→Sleep, Dining Room→Dining, Kids Room→Childcare, Home Gym→Exercise). " +
             "Home Office / Personal Desk... KHÔNG áp dụng, vẫn để null nếu không nói rõ.\n\n" +
 
