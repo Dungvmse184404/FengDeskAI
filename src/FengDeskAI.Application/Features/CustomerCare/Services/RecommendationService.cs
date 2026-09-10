@@ -72,7 +72,7 @@ public sealed class RecommendationService : IRecommendationService
             : null;
 
         // ── Vector phòng: ideal → intent → hiện trạng (chung với GetProductFitAsync) ──
-        var wctx = await BuildWorkspaceContextAsync(profile, ct, user.DateOfBirth, p);
+        var wctx = await BuildWorkspaceContextAsync(profile, p, user.DateOfBirth, ct);
         var wsType = wctx.WsType;
         var scope = wctx.Scope;
         var resolver = wctx.Resolver; // còn tái dùng cho vector sản phẩm bên dưới
@@ -364,7 +364,7 @@ public sealed class RecommendationService : IRecommendationService
             ? FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare)
             : null;
 
-        var wctx = await BuildWorkspaceContextAsync(profile, ct, user?.DateOfBirth, p);
+        var wctx = await BuildWorkspaceContextAsync(profile, p, user?.DateOfBirth, ct);
 
         var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(new[] { productId }, ct))
             .GroupBy(i => i.ProductId)
@@ -414,18 +414,24 @@ public sealed class RecommendationService : IRecommendationService
         // hai lớp radar lệch thang và "xem trước" trông như đã gỡ chủ nhân ra khỏi phòng.
         var person = PersonPresenceBuilder.Build(user?.DateOfBirth, wctx.Scope, p);
 
+        // Preview = phòng NHƯ ĐANG CÓ (kể cả đồ đã đặt) + đúng sản phẩm này. Bỏ đồ đã đặt ra thì lớp
+        // "xem trước" vẽ một căn phòng không tồn tại, và lệch luôn với lớp preview của trang Workspace.
+        var previewContribs = wctx.PlacedProducts
+            .Append(new ProductContribution(Guid.Empty, string.Empty, facts.Vector, voteWeight))
+            .ToList();
         var previewCurrent = WorkspaceVectorBuilder.BuildCurrentBreakdown(
-                wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements,
-                new[] { new ProductContribution(Guid.Empty, string.Empty, facts.Vector, voteWeight) },
-                person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha)
+                wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements, previewContribs,
+                person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha, p, wctx.Scope)
             .Current;
         var previewGapVec = wctx.Analysis.AdjustedIdeal.Subtract(previewCurrent);
 
         // Hiện trạng phòng có kèm "nguồn nào đóng góp bao nhiêu" — cùng phép tính với element-analysis,
         // chỉ khác là ở đây không tính sản phẩm đang xem vào (nó đã có mặt trong previewCurrent).
+        // Hiện trạng phòng có kèm "nguồn nào đóng góp bao nhiêu" — CÙNG phép tính với element-analysis,
+        // chỉ khác là không tính sản phẩm ĐANG XEM vào (nó đã có mặt trong previewCurrent).
         var currentBreakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
-            wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements, Array.Empty<ProductContribution>(),
-            person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha);
+            wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements, wctx.PlacedProducts,
+            person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha, p, wctx.Scope);
 
         var response = new ProductFitResponse
         {
@@ -578,9 +584,28 @@ public sealed class RecommendationService : IRecommendationService
         return new OccupationInfluence(delta, occupation.Code, occupation.NameVi);
     }
 
+    /// <summary>
+    /// Nạp + dựng vector cho sản phẩm đã đặt trong phòng. Phần I/O ở đây, còn luật dựng vector và đếm
+    /// phiếu nằm trong <see cref="PlacedProductBuilder"/> để không có bản sao thứ hai trôi khỏi bản gốc.
+    /// </summary>
+    private async Task<List<PlacedProductVector>> LoadPlacedProductsAsync(
+        Guid workspaceProfileId, ElementInputResolver resolver, ScoringParameters prms, CancellationToken ct)
+    {
+        var placements = await _uow.WorkspaceProfiles.GetPlacementsAsync(workspaceProfileId, ct);
+        if (placements.Count == 0) return new List<PlacedProductVector>();
+
+        var inputsByProduct = (await _uow.ScoringConfig.GetProductElementInputsAsync(
+                placements.Select(x => x.ProductId).Distinct().ToList(), ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+
+        return PlacedProductBuilder.Build(placements, inputsByProduct, resolver, prms);
+    }
+
     private sealed record WorkspaceScoringContext(
         WorkspaceType? WsType, WorkspaceScope Scope, ElementInputResolver Resolver, WorkspaceElementAnalysis Analysis,
-        IReadOnlyList<WorkspaceProfileInput> ProfileInputs, IReadOnlyList<WorkspaceTypeElement> TypeElements);
+        IReadOnlyList<WorkspaceProfileInput> ProfileInputs, IReadOnlyList<WorkspaceTypeElement> TypeElements,
+        IReadOnlyCollection<ProductContribution> PlacedProducts);
 
     /// <summary>Nạp data phòng + dựng 4 vector ngũ hành — dùng chung bởi GenerateAsync và GetProductFitAsync.</summary>
     // ─────────────────────────── v3.1 — trục cá nhân & mục tiêu ───────────────────────────
@@ -647,9 +672,17 @@ public sealed class RecommendationService : IRecommendationService
             + "gợi ý theo không gian và bản mệnh, chưa lọc theo mục tiêu đó.");
     }
 
+    /// <summary>
+    /// Vector phòng dùng chung cho danh sách gợi ý và trang Fit.
+    ///
+    /// <para>
+    /// <paramref name="prms"/> KHÔNG có giá trị mặc định — cố ý. Trước đây nó là <c>null</c> mặc
+    /// định, nghĩa là một caller quên truyền sẽ <b>im lặng tắt</b> cả phiếu chủ nhân (§12) lẫn nén
+    /// tương phản (§17) mà không có lỗi nào. Bắt buộc truyền để chuyện đó thành lỗi biên dịch.
+    /// </para>
+    /// </summary>
     private async Task<WorkspaceScoringContext> BuildWorkspaceContextAsync(
-        WorkspaceProfile profile, CancellationToken ct,
-        DateTime? ownerDateOfBirth = null, ScoringParameters? prms = null)
+        WorkspaceProfile profile, ScoringParameters prms, DateTime? ownerDateOfBirth, CancellationToken ct)
     {
         WorkspaceType? wsType = null;
         var typeElements = new List<WorkspaceTypeElement>();
@@ -667,12 +700,18 @@ public sealed class RecommendationService : IRecommendationService
         var resolver = new ElementInputResolver(await _uow.ScoringConfig.GetElementInputMapAsync(ct));
         var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
-        var person = prms is null ? null : PersonPresenceBuilder.Build(ownerDateOfBirth, scope, prms);
+        var person = PersonPresenceBuilder.Build(ownerDateOfBirth, scope, prms);
+
+        // Sản phẩm đã đặt trong phòng — CÙNG nguồn dữ liệu với radar trang Workspace.
+        var placedRows = await LoadPlacedProductsAsync(profile.Id, resolver, prms, ct);
+        var delivered = PlacedProductBuilder.DeliveredOf(placedRows);
+
         var analysis = WorkspaceElementAnalyzer.Analyze(
             typeElements, modifiers, profileInputs, resolver, person,
-            prms?.InteriorPriorVotes, prms?.EvidenceSaturationAlpha);
+            prms.InteriorPriorVotes, prms.EvidenceSaturationAlpha, delivered, prms, scope);
 
-        return new WorkspaceScoringContext(wsType, scope, resolver, analysis, profileInputs, typeElements);
+        return new WorkspaceScoringContext(
+            wsType, scope, resolver, analysis, profileInputs, typeElements, delivered);
     }
 
     /// <summary>MatchFacts + placementHint (gộp để không đổi schema RecommendationItem).</summary>

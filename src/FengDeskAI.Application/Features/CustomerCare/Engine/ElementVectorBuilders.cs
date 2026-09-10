@@ -76,7 +76,19 @@ public sealed record CurrentContribution(
     ElementVector Vector,
     ElementInputKind? InputKind = null,
     string? InputCode = null,
-    Guid? ProductId = null);
+    Guid? ProductId = null)
+{
+    /// <summary>
+    /// Tỉ trọng THẬT của nguồn này trong <c>current</c> (§19) — <c>ngân sách khối × phiếu/phiếu khối</c>.
+    ///
+    /// <para>
+    /// Khác <see cref="Votes"/>: phiếu là thứ user khai và không đổi, còn trọng số là thứ công thức
+    /// dùng. Từ §19 hai đại lượng này tách hẳn nhau — nền phòng vẫn ghi "3 phiếu" nhưng trọng số của
+    /// nó do ngân sách theo scope quyết định, không do 3 phiếu đó nữa.
+    /// </para>
+    /// </summary>
+    public decimal Weight { get; init; }
+}
 
 /// <summary>Kết quả dựng Current kèm breakdown theo nguồn (để FE vẽ radar "tag nào chiếm bao nhiêu %").</summary>
 public sealed record CurrentBreakdown(
@@ -113,7 +125,7 @@ public sealed record CurrentBreakdown(
     public decimal ShareOf(CurrentContribution source, FengShuiElement element)
     {
         decimal raw = RawMass[element];
-        return raw <= 0m ? 0m : Current[element] * (source.Votes * source.Vector[element] / raw);
+        return raw <= 0m ? 0m : Current[element] * (source.Weight * source.Vector[element] / raw);
     }
 
     /// <summary>Nguồn suy đoán (nền loại phòng, bản mệnh chủ nhân) — đối lập với bằng chứng user khai.</summary>
@@ -226,7 +238,9 @@ public static class WorkspaceVectorBuilder
         IReadOnlyCollection<ProductContribution> productContributions,
         PersonPresence? person = null,
         decimal? interiorVotes = null,
-        decimal? saturationAlpha = null)
+        decimal? saturationAlpha = null,
+        ScoringParameters? budgetParams = null,
+        WorkspaceScope? scope = null)
     {
         var contributions = new List<CurrentContribution>();
 
@@ -256,11 +270,9 @@ public static class WorkspaceVectorBuilder
                 InputCode: input.InputCode));
         }
 
-        // 2b) Chủ nhân phòng — cùng cơ chế phiếu, PRIOR chứ không phải bằng chứng.
-        //     Vì là số phiếu cố định (không phải tỉ trọng cố định), ảnh hưởng của chủ nhân LOÃNG DẦN
-        //     khi user khai thêm tag — đúng cách nền phòng đang cư xử. Tỉ trọng cố định thì dù khai
-        //     20 tag thật, bản mệnh vẫn giữ nguyên phần của nó, ngược triết lý "bằng chứng lấn át
-        //     suy đoán" của mô hình.
+        // 2b) Chủ nhân phòng — PRIOR, không phải bằng chứng.
+        //     `Votes` ở đây chỉ còn dùng cho `confidence` (bao nhiêu phần điều ta biết là QUAN SÁT
+        //     chứ không phải phỏng đoán); trọng số thật do ngân sách theo scope quyết định (§19).
         if (person is { Votes: > 0m } owner && owner.Vector.L1() > 0m)
         {
             contributions.Add(new CurrentContribution(
@@ -281,14 +293,54 @@ public static class WorkspaceVectorBuilder
                 ProductId: p.ProductId == Guid.Empty ? null : p.ProductId));
         }
 
-        // Cộng THÔ theo phiếu rồi chuẩn hóa 1 lần — giữ đúng tỉ lệ giữa các nguồn.
-        var total = ElementVector.Zero;
-        decimal totalVotes = 0m;
-        foreach (var c in contributions)
+        decimal totalVotes = contributions.Sum(c => c.Votes);
+
+        // Ngân sách phải giải Ở ĐÂY chứ không phải ở caller: chỉ tới lúc này mới biết phòng có bằng
+        // chứng nào không (tag có thể khai một mã không nằm trong element_input_map, sản phẩm có thể
+        // chưa có dữ liệu ngũ hành — cả hai đều rơi khỏi danh sách ở trên).
+        bool hasEvidence = contributions.Any(
+            c => c.Source is CurrentSourceKind.Tag or CurrentSourceKind.Product && c.Votes > 0m);
+        bool hasPerson = contributions.Any(c => c.Source == CurrentSourceKind.Person);
+        ElementBudget? budget = budgetParams is { } bp && scope is { } sc
+            ? bp.ElementBudgetFor(sc, hasPerson, hasEvidence)
+            : null;
+
+        // §19 — trọng số theo NGÂN SÁCH của khối, không theo phiếu. Trong mỗi khối vẫn chia theo phiếu,
+        // nên tag nặng/nhẹ và `voteWeight` của sản phẩm vẫn có tác dụng tương đối như cũ; thứ đổi là
+        // khối bằng chứng không còn nuốt được hai prior khi user khai thêm tag.
+        //
+        // Không truyền ngân sách ⇒ rơi về đúng mô hình phiếu của §12 (mỗi nguồn nặng bằng phiếu của nó,
+        // chuẩn hoá theo tổng phiếu) — giữ cho những caller thuần tính toán khỏi phải biết tới scope.
+        var weighted = new List<CurrentContribution>(contributions.Count);
+        if (budget is { } b)
         {
-            total = total.Add(c.Vector.Scale(c.Votes));
-            totalVotes += c.Votes;
+            decimal EvidenceVotes(CurrentContribution c) =>
+                c.Source is CurrentSourceKind.Tag or CurrentSourceKind.Product ? c.Votes : 0m;
+            decimal evidenceVotes = contributions.Sum(EvidenceVotes);
+
+            foreach (var c in contributions)
+            {
+                decimal weight = c.Source switch
+                {
+                    CurrentSourceKind.Interior => b.Interior,
+                    CurrentSourceKind.Person => b.Person,
+                    // Chia trong khối theo phiếu. evidenceVotes = 0 thì khối này rỗng và b.Evidence
+                    // cũng đã bằng 0, nên nhánh chia không bao giờ chạm số 0 ở mẫu.
+                    _ => evidenceVotes <= 0m ? 0m : b.Evidence * c.Votes / evidenceVotes,
+                };
+                weighted.Add(c with { Weight = weight });
+            }
         }
+        else
+        {
+            foreach (var c in contributions)
+                weighted.Add(c with { Weight = totalVotes <= 0m ? 0m : c.Votes / totalVotes });
+        }
+        contributions = weighted;
+
+        var total = ElementVector.Zero;
+        foreach (var c in contributions)
+            total = total.Add(c.Vector.Scale(c.Weight));
 
         // §17 — nén tương phản. Áp lên TỔNG của từng hành, sau khi đã cộng hết mọi nguồn, chứ không
         // áp lên từng nguồn: "phòng này đậm hành X tới đâu" là thuộc tính của khối lượng cuối cùng,

@@ -1,5 +1,7 @@
 ﻿using FengDeskAI.Domain.Entities.Recommendation;
 
+using FengDeskAI.Domain.Enums.Workspace;
+
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
 /// <summary>
@@ -31,15 +33,21 @@ public static class WorkspaceElementAnalyzer
         ElementInputResolver resolver,
         PersonPresence? person = null,
         decimal? interiorVotes = null,
-        decimal? saturationAlpha = null)
+        decimal? saturationAlpha = null,
+        IReadOnlyCollection<ProductContribution>? placedProducts = null,
+        ScoringParameters? budgetParams = null,
+        WorkspaceScope? scope = null)
     {
         var ideal = WorkspaceVectorBuilder.BuildIdeal(typeElements);
         var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, modifiers);
         // Chủ nhân phòng vào LUÔN current dùng để chấm điểm, không chỉ để vẽ radar — nếu chỉ vẽ thì
         // hình và điểm nói hai chuyện khác nhau về cùng một căn phòng.
+        // Sản phẩm ĐÃ GIAO là hiện trạng thật của phòng, phải có mặt ở đây chứ không chỉ trên radar:
+        // để trống thì bộ gợi ý tiếp tục đẩy đúng hành mà user vừa mua đồ về bù (xem PlacedProductBuilder).
         var current = WorkspaceVectorBuilder.BuildCurrentBreakdown(
-                profileInputs, resolver, typeElements, Array.Empty<ProductContribution>(),
-                person, interiorVotes, saturationAlpha)
+                profileInputs, resolver, typeElements,
+                placedProducts ?? Array.Empty<ProductContribution>(),
+                person, interiorVotes, saturationAlpha, budgetParams, scope)
             .Current;
         var gap = adjustedIdeal.Subtract(current);
         return new WorkspaceElementAnalysis(ideal, adjustedIdeal, current, gap);

@@ -25,6 +25,13 @@
     { "code": "OCCUPATION_SHARE", "value": 0.00, "description": "Tỉ trọng delta nghề nghiệp bẻ vào vector điểm quan hệ r (v3.2 §11). Seed 0 = kill-switch, vector byte-identical; bật lên sau khi chuyên gia duyệt bảng delta." },
     { "code": "EVIDENCE_SATURATION_ALPHA", "value": 0.60, "description": "Số mũ nén tương phản khi dựng current = normalize(khối lượng^α). Cảm nhận số lượng không tuyến tính (luỹ thừa Stevens): 12 tag Mộc không nghĩa là phòng gấp 12 lần gỗ. 1.0 = tắt." },
     { "code": "MINOR_CLASH_PENALTY", "value": 0.60, "description": "Phạt phần hành khắc bản mệnh KHÔNG trội của vật mang theo người, theo đúng tỉ trọng. Chỉ luồng Carry: vector dụng thần không có trục âm nên phần khắc phụ vốn vô hình. 0 = tắt." },
+    { "code": "BUDGET_INTERIOR_PRIVATE", "value": 0.30, "description": "Tỉ trọng nền phòng trong current ở không gian Private (v3.2 §19). Phần bằng chứng = 1 - nền - bản mệnh, suy ra chứ không seed." },
+    { "code": "BUDGET_PERSON_PRIVATE", "value": 0.40, "description": "Tỉ trọng bản mệnh chủ nhân ở không gian Private - phòng riêng thì chủ nhân nặng nhất." },
+    { "code": "BUDGET_INTERIOR_SHARED", "value": 0.40, "description": "Tỉ trọng nền phòng ở không gian Shared." },
+    { "code": "BUDGET_PERSON_SHARED", "value": 0.30, "description": "Tỉ trọng bản mệnh ở không gian Shared - nhẹ hơn Private vì phòng còn của người khác." },
+    { "code": "BUDGET_INTERIOR_PUBLIC", "value": 0.60, "description": "Tỉ trọng nền phòng ở không gian Public." },
+    { "code": "BUDGET_PERSON_PUBLIC", "value": 0.00, "description": "Tỉ trọng bản mệnh ở không gian Public - luôn 0, không gian chung không neo vào bản mệnh của một người (Q12)." },
+    { "code": "BUDGET_INTERIOR_NO_EVIDENCE", "value": 0.60, "description": "Tỉ trọng nền phòng khi phòng chưa có bằng chứng nào (không tag, không sản phẩm đã đặt); phần còn lại thuộc bản mệnh." },
     { "code": "MIN_SCORE_THRESHOLD", "value": -1.00, "description": "Điểm cuối dưới ngưỡng thì loại khỏi gợi ý. -1.0 = không cắt; nâng lên 0.0 khi tắt VIBE_FILTER_HARD." }
   ]
 }

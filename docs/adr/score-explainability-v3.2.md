@@ -1,4 +1,4 @@
-# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
+﻿# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
 
 > **Trạng thái:** **ACCEPTED** rev.5 — 13/13 quyết định đã chốt 08/09/2026 (bảng ở PHẦN E)
 > **Đã xong:** 12 doc liên quan + bộ test `RecommendationScorerTests.cs`. **Chưa xong:** code engine (P1).
@@ -1414,6 +1414,99 @@ Dòng phạt đổi cả mã, nhãn lẫn câu giải thích - im lặng trừ �
 
 `MINOR_CLASH_PENALTY = 0` ⇒ byte-identical như trước §18 (`SCORE-MC-03`). Seed **0.60**, ngang
 `USER_CONFLICT_PENALTY`; default trong code khớp seed (`SCORE-PARAM-04`).
+
+## 19. `current` chia theo NGÂN SÁCH TỈ TRỌNG, không theo phiếu
+
+### 19.1 Vì sao bỏ mô hình phiếu của §12
+
+§12 cho mỗi nguồn nặng bằng số phiếu của nó. Hệ quả: khối bằng chứng nuốt dần hai prior.
+
+| số tag | nền phòng | bản mệnh | bằng chứng |
+|---:|---:|---:|---:|
+| 1 | 50.0% | 33.3% | 16.7% |
+| 6 | 27.3% | 18.2% | 54.5% |
+| 20 | 12.0% | 8.0% | **80.0%** |
+
+Người dùng càng chăm khai càng **tự xoá bản mệnh của mình** khỏi phân tích — ở 20 tag, bản mệnh chỉ
+còn 8%. §17 (nén tương phản) không chữa được: nó ép tương phản GIỮA các hành, còn tỉ lệ giữa các
+NGUỒN thì nó cố ý giữ nguyên (§17.4).
+
+### 19.2 Công thức
+
+```
+evidence[e] = Σ (phiếu_i / Σ phiếu khối) · w_i[e]      // tag + sản phẩm đã đặt
+m[e]        = B_nền·interior[e] + B_mệnh·person[e] + B_bằngchứng·evidence[e]
+current     = normalize(m^α)                           // α = §17, không đổi
+```
+
+| scope | nền phòng | bản mệnh | bằng chứng |
+|---|---:|---:|---:|
+| `Private` | 30% | **40%** | 30% |
+| `Shared` | 40% | 30% | 30% |
+| `Public` | 60% | **0%** | 40% |
+| *chưa khai gì* | 60% | 40% | 0% |
+| *chưa khai gì · Public* | 100% | 0% | 0% |
+
+`B_bằngchứng = 1 − B_nền − B_mệnh` — **suy ra chứ không seed**, để Σ=1 là bất biến của công thức chứ
+không phải thứ trông chờ seed đúng.
+
+### 19.3 Đánh đổi đã biết và chấp nhận
+
+Ngân sách cố định chặn được cột 20 tag, nhưng đổi lại **một tag duy nhất nay gánh trọn 30%** thay vì
+1/6. Nhà bếp (phòng Hỏa) khai đúng một món đồ gỗ:
+
+| | Kim | Mộc | Thuỷ | Hoả | Thổ |
+|---|---:|---:|---:|---:|---:|
+| phiếu (§12) | 27.0% | 20.2% | 6.8% | **32.5%** | 13.5% |
+| ngân sách (§19) | 23.6% | **32.8%** | 5.8% | 26.0% | 11.8% |
+
+Một tag mà Mộc đã vượt Hỏa thành hành trội. Đã cân nhắc phương án **trần 30%** (giữ mô hình phiếu,
+chỉ chặn không cho khối bằng chứng vượt trần) — nó giữ được cột 1 tag ở 16.7% và vẫn về 30% ở cột 6
+và 20 tag. Chốt ngân sách cố định vì tính DỄ GIẢI THÍCH: nói được thẳng "nền 40 · bạn 30 · bạn khai
+30" trên UI, thay vì một quy tắc có điều kiện.
+
+### 19.4 Ba luật điều chỉnh, đúng thứ tự
+
+| | |
+|---|---|
+| 1. Chưa có bằng chứng nào | `(60%, 40%, 0)` — **luật riêng**, không phải chuẩn hoá ngân sách của scope. Private chuẩn hoá ra 43/57, khác hẳn 60/40 |
+| 2. Chưa có ngày sinh | phần bản mệnh về 0, chia lại cho hai khối kia theo tỉ lệ |
+| 3. Còn lại | chuẩn hoá Σ = 1 |
+
+⚠️ Luật 1 xét phần bản mệnh **SAU** khi scope đã ép về 0, không xét cờ `hasPerson` của caller. Truyền
+chủ nhân vào một phòng `Public` rồi rơi vào luật 60/40 là lễ tân mọc ra 40% bản mệnh của một người —
+đúng thứ Q12 cấm. `SCORE-BUD-05`/`SCORE-BUD-08` khoá chỗ này, và nó **đã bắt được lỗi thật** ở lần chạy đầu.
+
+### 19.5 Phiếu vẫn còn việc
+
+Phiếu không mất đi, chỉ đổi vai:
+
+| | trước §19 | từ §19 |
+|---|---|---|
+| Trọng số nguồn | phiếu / tổng phiếu | **ngân sách theo scope** |
+| Chia trong khối bằng chứng | phiếu | **phiếu** (không đổi) |
+| `confidence` | phiếu bằng chứng / tổng phiếu | **phiếu bằng chứng / tổng phiếu** (không đổi) |
+
+Nên `INTERIOR_PRIOR_VOTES` và `PERSON_PRESENCE_VOTES_*` vẫn có việc — chúng là **thang đo độ tin cậy**,
+không còn là trọng số. `confidence` phải tiếp tục tăng khi user khai thêm, dù trọng số đã khoá ở 30%:
+phòng khai 1 tag và phòng khai 20 tag không được báo cùng một mức tin cậy (`SCORE-BUD-07`).
+
+### 19.6 Sản phẩm đã đặt nằm trong khối BẰNG CHỨNG
+
+Cùng khối với tag, chia trong khối theo `voteWeight`. Lý do: cả hai đều là **quan sát** về căn phòng,
+đối lập với hai prior.
+
+⚠️ Hệ quả: mua và đặt thêm 10 món cũng không làm hiện trạng thật của phòng nặng thêm — cả khối vẫn
+30%. Đây là hệ quả trực tiếp của việc chọn ngân sách cố định, không phải chỗ bỏ sót.
+
+### 19.7 Ảnh hưởng lên UI
+
+Slider "số phiếu của chủ nhân" trên radar phòng **đã gỡ**. Từ §19 phiếu không quyết định trọng số
+nữa, nên giữ slider là mời user chỉnh một con số không còn tồn tại trong công thức — và phần mô phỏng
+của nó cũng sai, vì nó giả định các nguồn trộn theo phiếu.
+
+Thay bằng ba thanh tỉ lệ đọc thẳng từ `budget` mà API trả ra. Đổi lại được thứ đáng hơn: nói ra tỉ lệ,
+thay vì để user đoán qua thao tác kéo.
 
 ## P0 — Sửa dữ liệu *(0.5 ngày)*
 

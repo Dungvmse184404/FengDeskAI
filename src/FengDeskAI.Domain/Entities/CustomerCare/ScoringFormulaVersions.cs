@@ -1,4 +1,4 @@
-namespace FengDeskAI.Domain.Entities.CustomerCare;
+﻿namespace FengDeskAI.Domain.Entities.CustomerCare;
 
 /// <summary>
 /// Phiên bản công thức chấm điểm đã đóng dấu lên từng phiên gợi ý
@@ -20,6 +20,13 @@ public static class ScoringFormulaVersions
     /// </summary>
     public const string V32 = "3.2";
 
+    /// <summary>
+    /// <c>current = normalize(m^α)</c> — nén tương phản (§17) · <c>MINOR_CLASH_PENALTY</c> cho phần
+    /// khắc mệnh KHÔNG trội của vật mang theo người (§18) · nghề nghiệp bẻ <c>r</c> (§11) · sản phẩm
+    /// đã đặt trong phòng vào thẳng <c>current</c> dùng chấm điểm, không chỉ vào radar.
+    /// </summary>
+    public const string V33 = "3.3";
+
     /// <summary>Phiên bản mà engine đang chạy — đóng dấu lên mọi phiên gợi ý mới.</summary>
-    public const string Current = V32;
+    public const string Current = V33;
 }

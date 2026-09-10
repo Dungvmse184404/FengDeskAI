@@ -63,6 +63,15 @@ public sealed record WorkspaceElementAnalysisResponse
     /// </summary>
     public decimal SaturationAlpha { get; init; }
 
+    /// <summary>
+    /// §19 — ba khối nguồn chiếm bao nhiêu phần của <c>current</c>. Σ = 1.
+    /// <para>
+    /// Đây là TỈ TRỌNG CỐ ĐỊNH theo scope, không phải kết quả của số phiếu: khai thêm tag không làm
+    /// loãng nền phòng hay bản mệnh nữa. FE hiện thẳng ba con số này thay vì để user kéo thử.
+    /// </para>
+    /// </summary>
+    public ElementBudgetResponse Budget { get; init; } = new();
+
     // ===== v3.2 §10.3 — trục cá nhân trên radar phòng =====
 
     /// <summary>
@@ -82,6 +91,22 @@ public sealed record WorkspaceElementAnalysisResponse
     public decimal Confidence { get; init; }
 }
 
+/// <summary>§19 — ngân sách tỉ trọng của ba khối nguồn trong <c>current</c>.</summary>
+public sealed record ElementBudgetResponse
+{
+    /// <summary>Phần của nền phòng theo loại.</summary>
+    public decimal Interior { get; init; }
+
+    /// <summary>Phần của bản mệnh chủ nhân. <c>0</c> ở không gian Public hoặc khi chưa có ngày sinh.</summary>
+    public decimal Person { get; init; }
+
+    /// <summary>Phần của bằng chứng user khai — tag + sản phẩm đã đặt. <c>0</c> khi chưa khai gì.</summary>
+    public decimal Evidence { get; init; }
+
+    /// <summary>Câu giải thích ngắn cho chip trên radar.</summary>
+    public string ReasonVi { get; init; } = "";
+}
+
 /// <summary>Một nguồn đóng góp vào Current, đã quy ra %.</summary>
 public sealed record CurrentContributionRow
 {
@@ -95,8 +120,13 @@ public sealed record CurrentContributionRow
     public decimal SharePercent { get; init; }
 
     /// <summary>
-    /// Số PHIẾU của nguồn — đơn vị gốc của mô hình, <c>SharePercent = Votes / TotalVotes</c>.
-    /// FE hiện "3 phiếu" thay vì "23%": phiếu là con số ổn định, còn % thì đổi mỗi lần khai thêm tag.
+    /// Số PHIẾU của nguồn.
+    ///
+    /// <para>
+    /// Từ §19 phiếu KHÔNG còn quyết định trọng số nữa — trọng số do ngân sách theo scope quyết định.
+    /// Phiếu chỉ còn hai việc: chia tỉ lệ <b>bên trong</b> khối bằng chứng, và làm mẫu số cho
+    /// <c>confidence</c> ("bao nhiêu phần điều ta biết là quan sát, bao nhiêu là phỏng đoán").
+    /// </para>
     /// </summary>
     public decimal Votes { get; init; }
 

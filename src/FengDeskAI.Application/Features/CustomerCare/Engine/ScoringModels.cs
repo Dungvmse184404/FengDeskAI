@@ -6,6 +6,12 @@ using FengDeskAI.Domain.Enums.Workspace;
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
 /// <summary>Mã tham số engine v3 (khớp cột <c>scoring_params.code</c>). Xem PHẦN F của spec.</summary>
+/// <summary>
+/// §19 — tỉ trọng ba khối nguồn trong <c>current</c>. Σ luôn = 1; <c>Evidence</c> gộp cả tag user khai
+/// lẫn sản phẩm đã đặt trong phòng, vì cả hai đều là QUAN SÁT về căn phòng, đối lập với hai prior.
+/// </summary>
+public readonly record struct ElementBudget(decimal Interior, decimal Person, decimal Evidence);
+
 public static class ScoringParamCodes
 {
     public const string SelfShare = "SELF_SHARE";
@@ -43,6 +49,16 @@ public static class ScoringParamCodes
 
     // §18 — phạt phần hành khắc mệnh KHÔNG trội, chỉ ở luồng vật mang theo người.
     public const string MinorClashPenalty = "MINOR_CLASH_PENALTY";
+
+    // §19 — ngân sách tỉ trọng ba khối nguồn khi dựng `current`. Evidence = 1 − Interior − Person,
+    // suy ra chứ không seed: Σ=1 thành bất biến của công thức, không phải thứ trông chờ seed đúng.
+    public const string BudgetInteriorPrivate = "BUDGET_INTERIOR_PRIVATE";
+    public const string BudgetPersonPrivate = "BUDGET_PERSON_PRIVATE";
+    public const string BudgetInteriorShared = "BUDGET_INTERIOR_SHARED";
+    public const string BudgetPersonShared = "BUDGET_PERSON_SHARED";
+    public const string BudgetInteriorPublic = "BUDGET_INTERIOR_PUBLIC";
+    public const string BudgetPersonPublic = "BUDGET_PERSON_PUBLIC";
+    public const string BudgetInteriorNoEvidence = "BUDGET_INTERIOR_NO_EVIDENCE";
 
     /// <summary>Số phiếu của chủ nhân phòng theo scope — phòng càng riêng tư, chủ nhân càng nặng.</summary>
     public static string PersonPresenceVotesFor(WorkspaceScope scope) => scope switch
@@ -147,6 +163,84 @@ public sealed record ScoringParameters
     /// </para>
     /// </summary>
     public decimal OccupationShare { get; init; } = 0.00m;
+
+    /// <summary>Tỉ trọng NỀN PHÒNG trong <c>current</c> ở không gian riêng tư.</summary>
+    public decimal BudgetInteriorPrivate { get; init; } = 0.30m;
+
+    /// <summary>Tỉ trọng BẢN MỆNH chủ nhân ở không gian riêng tư — phòng của bạn thì bạn nặng nhất.</summary>
+    public decimal BudgetPersonPrivate { get; init; } = 0.40m;
+
+    /// <summary>Tỉ trọng NỀN PHÒNG ở không gian dùng chung.</summary>
+    public decimal BudgetInteriorShared { get; init; } = 0.40m;
+
+    /// <summary>Tỉ trọng BẢN MỆNH ở không gian dùng chung — nhẹ hơn Private vì phòng còn của người khác.</summary>
+    public decimal BudgetPersonShared { get; init; } = 0.30m;
+
+    /// <summary>Tỉ trọng NỀN PHÒNG ở không gian công cộng.</summary>
+    public decimal BudgetInteriorPublic { get; init; } = 0.60m;
+
+    /// <summary>
+    /// Tỉ trọng BẢN MỆNH ở không gian công cộng — <b>0</b>. Lễ tân không thuộc về ai, neo nó vào bản
+    /// mệnh của MỘT người là sai bản chất (Q12 · §14.3, cùng lý do <c>PERSONAL_WEIGHT_PUBLIC = 0</c>).
+    /// </summary>
+    public decimal BudgetPersonPublic { get; init; } = 0.00m;
+
+    /// <summary>
+    /// Tỉ trọng NỀN PHÒNG khi phòng <b>chưa có bằng chứng nào</b> (không tag, không sản phẩm đã đặt).
+    /// Phần còn lại thuộc bản mệnh. Không suy ra từ ngân sách của scope vì tỉ lệ mong muốn khác hẳn:
+    /// Private muốn 60/40 chứ không phải 30/40 chuẩn hoá thành 43/57.
+    /// </summary>
+    public decimal BudgetInteriorNoEvidence { get; init; } = 0.60m;
+
+    /// <summary>
+    /// §19 — chia <c>current</c> thành ba khối theo TỈ TRỌNG CỐ ĐỊNH thay vì theo phiếu.
+    ///
+    /// <para>
+    /// Vì sao đổi: mô hình phiếu (§12) để khối bằng chứng nuốt dần hai prior — khai 20 tag thì nền
+    /// phòng còn 12% và bản mệnh còn 8%, tức người dùng càng chăm khai càng tự xoá bản mệnh của mình
+    /// khỏi phân tích. Ngân sách cố định chặn đúng chuyện đó.
+    /// </para>
+    ///
+    /// <para>
+    /// Đánh đổi đã biết và chấp nhận: một tag duy nhất nay gánh trọn ngân sách bằng chứng (30%) thay
+    /// vì 1/6 như mô hình phiếu. Tỉ lệ <b>bên trong</b> khối bằng chứng vẫn chia theo phiếu, nên tag
+    /// nặng/nhẹ và sản phẩm <c>voteWeight</c> vẫn có tác dụng tương đối như cũ.
+    /// </para>
+    ///
+    /// <para>Ba luật điều chỉnh, theo đúng thứ tự:</para>
+    /// <list type="number">
+    /// <item>Chưa có bằng chứng nào ⇒ <c>(BudgetInteriorNoEvidence, phần còn lại, 0)</c>.</item>
+    /// <item>User chưa có ngày sinh ⇒ phần bản mệnh về 0, chia lại cho hai khối kia theo tỉ lệ.</item>
+    /// <item>Chuẩn hoá để Σ = 1 trong mọi trường hợp còn lại.</item>
+    /// </list>
+    /// </summary>
+    public ElementBudget ElementBudgetFor(WorkspaceScope scope, bool hasPerson, bool hasEvidence)
+    {
+        var (interior, person) = scope switch
+        {
+            WorkspaceScope.Shared => (BudgetInteriorShared, BudgetPersonShared),
+            WorkspaceScope.Public => (BudgetInteriorPublic, BudgetPersonPublic),
+            _ => (BudgetInteriorPrivate, BudgetPersonPrivate),
+        };
+        if (!hasPerson) person = 0m;
+        decimal evidence = Math.Max(0m, 1m - interior - person);
+
+        if (!hasEvidence)
+        {
+            // Không có gì để đổ vào khối bằng chứng. Public thì person vốn đã 0 nên ra nền phòng 100%,
+            // đúng ý: phòng chung chưa khai gì thì chỉ còn biết nó là loại phòng gì.
+            // Xét phần mệnh SAU khi scope đã ép (Public luôn 0), không xét cờ hasPerson của caller:
+            // truyền chủ nhân vào một phòng Public rồi rơi vào luật 60/40 là lễ tân mọc ra 40% bản
+            // mệnh của một người — đúng thứ Q12 cấm.
+            if (person <= 0m) return new ElementBudget(1m, 0m, 0m);
+            return new ElementBudget(BudgetInteriorNoEvidence, 1m - BudgetInteriorNoEvidence, 0m);
+        }
+
+        decimal sum = interior + person + evidence;
+        return sum <= 0m
+            ? new ElementBudget(1m, 0m, 0m)
+            : new ElementBudget(interior / sum, person / sum, evidence / sum);
+    }
 
     /// <summary>
     /// Phạt phần hành KHẮC bản mệnh <b>không phải hành trội</b> của vật mang theo người, tính theo
@@ -280,6 +374,13 @@ public sealed record ScoringParameters
             OccupationShare = V(ScoringParamCodes.OccupationShare, d.OccupationShare),
             EvidenceSaturationAlpha = V(ScoringParamCodes.EvidenceSaturationAlpha, d.EvidenceSaturationAlpha),
             MinorClashPenalty = V(ScoringParamCodes.MinorClashPenalty, d.MinorClashPenalty),
+            BudgetInteriorPrivate = V(ScoringParamCodes.BudgetInteriorPrivate, d.BudgetInteriorPrivate),
+            BudgetPersonPrivate = V(ScoringParamCodes.BudgetPersonPrivate, d.BudgetPersonPrivate),
+            BudgetInteriorShared = V(ScoringParamCodes.BudgetInteriorShared, d.BudgetInteriorShared),
+            BudgetPersonShared = V(ScoringParamCodes.BudgetPersonShared, d.BudgetPersonShared),
+            BudgetInteriorPublic = V(ScoringParamCodes.BudgetInteriorPublic, d.BudgetInteriorPublic),
+            BudgetPersonPublic = V(ScoringParamCodes.BudgetPersonPublic, d.BudgetPersonPublic),
+            BudgetInteriorNoEvidence = V(ScoringParamCodes.BudgetInteriorNoEvidence, d.BudgetInteriorNoEvidence),
         };
     }
 }

@@ -107,6 +107,7 @@ Phân tích ngũ hành của một workspace **không cần chạy cả phiên r
   "confidence": 0.5,
   "totalVotes": 11,
   "saturationAlpha": 0.60,
+  "budget": { "interior": 0.40, "person": 0.30, "evidence": 0.30, "reasonVi": "Hiện trạng chia 40% nền loại phòng · 30% bản mệnh của bạn · 30% những gì bạn đã khai..." },
   "elements": [
     { "element": "Thuy", "ideal": 0.20, "adjustedIdeal": 0.30, "current": 0.04, "gap":  0.26 },
     { "element": "Moc",  "ideal": 0.25, "adjustedIdeal": 0.25, "current": 0.24, "gap":  0.01 },
@@ -155,6 +156,7 @@ Phân tích ngũ hành của một workspace **không cần chạy cả phiên r
 | `evidenceCount` | int | Số bằng chứng thật (tag + sản phẩm đã giao). **0 = mọi con số suy ra từ nền loại phòng** |
 | `confidence` | decimal | `0..1` — tỉ lệ `current` đến từ dữ liệu user khai thay vì nền phòng |
 | `totalVotes` | decimal | Tổng phiếu mọi nguồn — mẫu số của mọi `sharePercent`; FE mô phỏng lại được "chủ nhân nặng N phiếu thì phòng ra sao" mà không gọi lại API |
+| `budget` | object | **(§19)** Ba khối nguồn chiếm bao nhiêu phần `current`, Σ=1: `interior` / `person` / `evidence`. **Tỉ trọng CỐ ĐỊNH theo scope**, không phải kết quả của số phiếu - khai thêm tag không làm loãng nền phòng hay bản mệnh nữa. `person` = 0 ở Public hoặc khi chưa có ngày sinh; `evidence` = 0 khi chưa khai gì |
 | `saturationAlpha` | decimal | Số mũ nén tương phản đã áp (`EVIDENCE_SATURATION_ALPHA`); `1` = tuyến tính. FE cần nó để mô phỏng đổi phiếu — xem mục dưới |
 | `contributions[].votes` | decimal | Số **phiếu** của nguồn — đơn vị gốc của mô hình. FE hiện "3 phiếu" thay vì "27%": phiếu ổn định, còn % đổi mỗi lần khai thêm tag |
 | `personalDirection` | object \| null | *(v3.2)* Trục cá nhân của căn phòng — xem bảng riêng bên dưới |

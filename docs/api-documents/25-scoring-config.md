@@ -196,6 +196,37 @@ một bảng chưa duyệt thì thứ hạng đổi mà không ai review.
 | `delta ∈ [−1, 1]` | `r` vốn nằm trong [−1,1]; delta lớn hơn chỉ ép mọi hành về biên, biến `OCCUPATION_SHARE` thành công tắc thay vì núm hiệu chỉnh |
 | `delta = 0` | Bị bỏ qua, không lưu dòng rác |
 
+### Ngân sách tỉ trọng khi dựng `current` *(v3.2 §19)*
+
+| Code | Seed | Ý nghĩa |
+|------|:---:|---------|
+| `BUDGET_INTERIOR_PRIVATE` | **0.30** | Phần nền phòng ở không gian Private |
+| `BUDGET_PERSON_PRIVATE` | **0.40** | Phần bản mệnh ở Private - phòng riêng thì chủ nhân nặng nhất |
+| `BUDGET_INTERIOR_SHARED` | **0.40** | Phần nền phòng ở Shared |
+| `BUDGET_PERSON_SHARED` | **0.30** | Phần bản mệnh ở Shared |
+| `BUDGET_INTERIOR_PUBLIC` | **0.60** | Phần nền phòng ở Public |
+| `BUDGET_PERSON_PUBLIC` | **0.00** | Phần bản mệnh ở Public - luôn 0 (Q12) |
+| `BUDGET_INTERIOR_NO_EVIDENCE` | **0.60** | Phần nền phòng khi phòng chưa khai gì; phần còn lại thuộc bản mệnh |
+
+```
+evidence[e] = Σ (phiếu_i / Σ phiếu khối) · w_i[e]      // tag + sản phẩm đã đặt
+m[e]        = B_nền·interior[e] + B_mệnh·person[e] + B_bằngchứng·evidence[e]
+current     = normalize(m^α)
+```
+
+**Phần bằng chứng = `1 − nền − bản mệnh`, suy ra chứ không seed** — Σ=1 là bất biến của công thức,
+không phải thứ trông chờ seed đúng.
+
+Sửa tật của mô hình phiếu: khai 20 tag thì nền phòng còn 12% và bản mệnh còn 8%, tức người dùng càng
+chăm khai càng tự xoá bản mệnh của mình khỏi phân tích.
+
+⚠️ **Phiếu không mất việc, chỉ đổi vai.** Nó vẫn chia tỉ lệ *bên trong* khối bằng chứng, và vẫn là
+mẫu số của `confidence`. Nên `INTERIOR_PRIOR_VOTES` / `PERSON_PRESENCE_VOTES_*` giờ là **thang đo độ
+tin cậy**, không còn là trọng số.
+
+⚠️ Ba luật điều chỉnh: chưa khai gì → `60/40/0` (luật riêng, không phải chuẩn hoá ngân sách scope);
+chưa có ngày sinh → phần bản mệnh về 0 chia lại theo tỉ lệ; `Public` chưa khai gì → nền phòng 100%.
+
 ### Phần khắc mệnh không trội của vật mang theo người *(v3.2 §18)*
 
 | Code | Seed | Ý nghĩa |

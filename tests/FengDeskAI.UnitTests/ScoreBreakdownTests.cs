@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Features.CustomerCare.Engine;
+﻿using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Domain.Entities.CustomerCare;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Workspace;
@@ -230,7 +230,9 @@ public sealed class ScoreBreakdownTests
         Assert.Contains(penalties, p => p.Code is ScoringParamCodes.VibeMismatchPenalty or ScoringParamCodes.VibeUnknownPenalty);
 
         Assert.All(scored.Breakdown!.Components, c => Assert.False(string.IsNullOrWhiteSpace(c.ReasonVi)));
-        Assert.Equal(ScoringFormulaVersions.V32, scored.Breakdown!.FormulaVersion);
+        // Ghim ĐÚNG phiên bản chứ không so với Current: bump công thức mà quên đóng dấu lại thì ca
+        // này phải đỏ, chứ so với Current thì nó tự đúng mãi và mất luôn tác dụng canh gác.
+        Assert.Equal(ScoringFormulaVersions.V33, scored.Breakdown!.FormulaVersion);
     }
 
     /// <summary>Bốn đẳng thức của §9.1, dùng chung cho mọi ca.</summary>

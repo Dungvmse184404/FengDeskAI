@@ -54,58 +54,39 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         // ── Sản phẩm đã mua đặt trong phòng: build vector từng món (tính lúc đọc, không lưu).
         // Delivered → vào Current thật; chưa giao → chỉ vào vector PREVIEW.
         var placements = await _uow.WorkspaceProfiles.GetPlacementsAsync(profile.Id, ct);
-        var placed = new List<PlacedProductResponse>();
-        var deliveredContribs = new List<ProductContribution>();
-        var previewContribs = new List<ProductContribution>();
+        var scoringParams = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
 
-        if (placements.Count > 0)
-        {
-            var productIds = placements.Select(p => p.ProductId).Distinct().ToList();
-            var inputsByProduct = (await _uow.ScoringConfig.GetProductElementInputsAsync(productIds, ct))
+        var inputsByProduct = placements.Count == 0
+            ? new Dictionary<Guid, IReadOnlyCollection<ProductElementInput>>()
+            : (await _uow.ScoringConfig.GetProductElementInputsAsync(
+                    placements.Select(x => x.ProductId).Distinct().ToList(), ct))
                 .GroupBy(i => i.ProductId)
                 .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
-            var prms = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
 
-            foreach (var pl in placements)
+        // Luật dựng vector + đếm phiếu + phân biệt đã giao/đang giao nằm TRỌN trong PlacedProductBuilder,
+        // dùng chung với luồng chấm điểm. Giữ bản sao ở đây từng làm radar và bộ gợi ý mô tả hai căn
+        // phòng khác nhau cho cùng một hồ sơ.
+        var placedRows = PlacedProductBuilder.Build(placements, inputsByProduct, ctx.Resolver, scoringParams);
+        var deliveredContribs = PlacedProductBuilder.DeliveredOf(placedRows);
+        var previewContribs = PlacedProductBuilder.PreviewOf(placedRows);
+
+        var vectorByPlacement = placedRows.ToDictionary(r => r.PlacementId);
+        var placed = new List<PlacedProductResponse>();
+        foreach (var pl in placements)
+        {
+            if (!vectorByPlacement.TryGetValue(pl.Id, out var row)) continue; // chưa có dữ liệu ngũ hành
+
+            placed.Add(new PlacedProductResponse
             {
-                var p = pl.Product;
-                ElementVector? overridden = p is { ElementTho: { } t, ElementKim: { } k, ElementThuy: { } w, ElementMoc: { } m, ElementHoa: { } h }
-                    ? new ElementVector(t, k, w, m, h)
-                    : null;
-                var inputs = inputsByProduct.TryGetValue(p.Id, out var list)
-                    ? list
-                    : Array.Empty<ProductElementInput>();
-
-                var vector = ProductVectorProvider.Build(
-                    p.IsVectorOverridden, overridden, inputs, ctx.Resolver,
-                    p.Elements.Select(e => (e.Element, e.IsPrimary)), prms);
-                if (vector.L1() <= 0m) continue; // sản phẩm chưa có data ngũ hành → bỏ qua
-
-                // Phiếu = Σ weight các DecorItem code của sản phẩm trong element_input_map
-                // (đồng bộ với tag hiện trạng cùng tên); không gắn DecorItem → 1 phiếu mặc định.
-                var decorCodes = inputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
-                var voteWeight = decorCodes.Count > 0
-                    ? decorCodes.Sum(c => ctx.Resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
-                    : 1.0m;
-                if (voteWeight <= 0m) voteWeight = 0m; // admin cố tình cho code weight 0 → sản phẩm không ảnh hưởng
-
-                var isDelivered = pl.OrderItem.Delivery?.Status == Domain.Enums.Sales.DeliveryStatus.Delivered;
-                var contrib = new ProductContribution(pl.ProductId, pl.OrderItem.ProductName, vector, voteWeight);
-                previewContribs.Add(contrib);
-                if (isDelivered) deliveredContribs.Add(contrib);
-
-                placed.Add(new PlacedProductResponse
-                {
-                    PlacementId = pl.Id,
-                    OrderItemId = pl.OrderItemId,
-                    ProductId = pl.ProductId,
-                    ProductName = pl.OrderItem.ProductName,
-                    ProductImage = p.Images.OrderBy(img => img.SortOrder).Select(img => img.Url).FirstOrDefault(),
-                    DeliveryStatus = pl.OrderItem.Delivery?.Status.ToString() ?? "Unknown",
-                    IsDelivered = isDelivered,
-                    VoteWeight = Math.Round(voteWeight, 2),
-                });
-            }
+                PlacementId = pl.Id,
+                OrderItemId = pl.OrderItemId,
+                ProductId = pl.ProductId,
+                ProductName = pl.OrderItem.ProductName,
+                ProductImage = pl.Product.Images.OrderBy(img => img.SortOrder).Select(img => img.Url).FirstOrDefault(),
+                DeliveryStatus = pl.OrderItem.Delivery?.Status.ToString() ?? "Unknown",
+                IsDelivered = row.IsDelivered,
+                VoteWeight = Math.Round(row.VoteWeight, 2),
+            });
         }
 
         // ── 3 vector: ideal/adjusted như cũ; current = hiện trạng + sản phẩm ĐÃ GIAO; preview = + cả đang giao.
@@ -113,17 +94,18 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, ctx.Modifiers);
         // Chủ nhân phòng là một nguồn ngũ hành, cùng cơ chế phiếu với nền phòng và tag. Phải truyền vào
         // CẢ current lẫn preview, nếu không hai lớp radar sẽ ở hai thang khác nhau.
-        var scoringParams = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
         var owner = await _uow.Users.GetByIdAsync(userId, ct);
         var person = PersonPresenceBuilder.Build(owner?.DateOfBirth, ctx.Scope, scoringParams);
 
         var breakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
             ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, deliveredContribs,
-            person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha);
+            person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha,
+            scoringParams, ctx.Scope);
         var current = breakdown.Current;
         var previewCurrent = WorkspaceVectorBuilder
             .BuildCurrentBreakdown(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, previewContribs,
-                person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha)
+                person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha,
+                scoringParams, ctx.Scope)
             .Current;
         var gap = adjustedIdeal.Subtract(current);
         var previewGap = adjustedIdeal.Subtract(previewCurrent);
@@ -167,6 +149,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             EvidenceCount = breakdown.EvidenceCount,
             TotalVotes = Math.Round(breakdown.TotalVotes, 3),
             SaturationAlpha = scoringParams.EvidenceSaturationAlpha,
+            Budget = BudgetResponseOf(breakdown, scoringParams, ctx.Scope),
             Confidence = CurrentBreakdownMapping.ConfidenceOf(breakdown),
             PersonalDirection = await BuildPersonalDirectionAsync(
                 ctx.Scope, user?.DateOfBirth, adjustedIdeal, gap, ct),
@@ -241,6 +224,41 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         List<WorkspaceProfileInput> ProfileInputs,
         string? WorkspaceTypeName,
         WorkspaceScope Scope);
+
+    /// <summary>
+    /// §19 — ba khối nguồn chiếm bao nhiêu phần của <c>current</c>, kèm câu giải thích.
+    ///
+    /// <para>
+    /// Giải LẠI từ chính <c>breakdown</c> chứ không từ scope suông: phòng chưa khai gì và phòng
+    /// Public rơi vào hai luật riêng, đọc ngược từ kết quả thì không thể lệch với thứ đã dùng để tính.
+    /// </para>
+    /// </summary>
+    private static ElementBudgetResponse BudgetResponseOf(
+        CurrentBreakdown breakdown, ScoringParameters prms, WorkspaceScope scope)
+    {
+        bool hasPerson = breakdown.Contributions.Any(c => c.Source == CurrentSourceKind.Person);
+        bool hasEvidence = breakdown.Contributions.Any(
+            c => c.Source is CurrentSourceKind.Tag or CurrentSourceKind.Product && c.Votes > 0m);
+        var budget = prms.ElementBudgetFor(scope, hasPerson, hasEvidence);
+
+        string reason = !hasEvidence
+            ? $"Bạn chưa khai hiện trạng nào, nên phòng đang được mô tả bằng nền loại phòng "
+              + $"({budget.Interior:P0})" + (budget.Person > 0m ? $" và bản mệnh của bạn ({budget.Person:P0})." : ".")
+            : budget.Person <= 0m
+                ? $"Không gian chung — hiện trạng chia {budget.Interior:P0} cho nền loại phòng và "
+                  + $"{budget.Evidence:P0} cho những gì bạn đã khai. Không neo vào bản mệnh của riêng ai."
+                : $"Hiện trạng chia {budget.Interior:P0} nền loại phòng · {budget.Person:P0} bản mệnh của bạn · "
+                  + $"{budget.Evidence:P0} những gì bạn đã khai. Khai thêm tag làm hình chính xác hơn "
+                  + "nhưng không lấn sang hai phần kia.";
+
+        return new ElementBudgetResponse
+        {
+            Interior = Math.Round(budget.Interior, 3),
+            Person = Math.Round(budget.Person, 3),
+            Evidence = Math.Round(budget.Evidence, 3),
+            ReasonVi = reason,
+        };
+    }
 
     private async Task<AnalysisContext> LoadAnalysisContextAsync(
         Domain.Entities.Workspace.WorkspaceProfile profile, CancellationToken ct)
