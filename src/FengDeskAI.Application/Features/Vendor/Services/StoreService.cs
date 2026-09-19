@@ -449,7 +449,10 @@ public class StoreService : IStoreService
 
     public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default)
     {
-        if (!await _uow.Stores.ExistsAsync(id, ct))
+        // ExistsAsync cố ý IgnoreQueryFilters (dùng cho FK), nên cửa hàng đã xoá mềm vẫn "tồn tại" — với
+        // người ngoài thì nó phải là 404, không lộ danh sách chủ (DEF-16).
+        var store = await _uow.Stores.GetByIdAsync(id, ct);
+        if (store is null || store.IsDeleted)
             return ServiceResult<List<StoreOwnerResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
 
         var owners = await _uow.Stores.GetOwnersAsync(id, ct);

@@ -39,9 +39,9 @@ builder.Services.AddControllers(options =>
 })
 .AddJsonOptions(options =>
 {
-    // Enum nhận/trả dưới dạng tên (vd "Moc", "Office") — vẫn chấp nhận số khi deserialize.
-    options.JsonSerializerOptions.Converters.Add(
-        new System.Text.Json.Serialization.JsonStringEnumConverter());
+    // Enum nhận/trả dưới dạng tên (vd "Moc", "Office") — vẫn chấp nhận số khi deserialize, nhưng số
+    // ngoài miền (999) bị từ chối bằng 400 thay vì lọt xuống DB (DEF-12).
+    options.JsonSerializerOptions.Converters.Add(new FengDeskAI.WebAPI.Common.StrictEnumConverterFactory());
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();

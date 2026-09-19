@@ -64,6 +64,9 @@ public class ProductService : IProductService
             return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.CreateForbidden);
         if (!await _uow.Categories.AllExistAsync(request.CategoryIds, ct))
             return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.CategoriesNotExist);
+        // Cùng một luật với AddItemAsync — hai đường vào không được khác nhau (DEF-10).
+        if (request.Items.Any(i => i.Price < 0))
+            return ServiceResult<ProductDetailResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Product.PriceInvalid);
         // Vibe/style độc lập với PrimaryElement (element là enum nên luôn hợp lệ) — kiểm code có trong bảng tra cứu,
         // cùng cách SetFengShuiAsync đang làm, để tránh lỗi FK 500 và trả 400 thân thiện.
         if (!await AllCodesExistAsync(_uow.Styles, request.Styles, ct))

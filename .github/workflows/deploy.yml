@@ -3,15 +3,21 @@ name: Deploy BE to VPS
 on:
   push:
     branches: [main]
+  workflow_dispatch:
 
 jobs:
-  # Cổng chặn: deploy chỉ chạy khi toàn bộ test xanh. Dùng lại test.yml qua workflow_call để
-  # không có hai bản cấu hình test lệch nhau.
+  # Test vẫn chạy trên mỗi push để có kết quả đỏ/xanh trên trang Actions, nhưng KHÔNG còn chặn deploy
+  # (quyết định 2026-09-20): test đỏ từng làm deploy bị skip âm thầm, server chạy bản cũ trong khi DB đã
+  # nâng ⇒ prod 500 mà không ai rõ vì sao. Đổi lại: test đỏ là tín hiệu để sửa, không phải cửa khoá.
+  # Dùng lại test.yml qua workflow_call để không có hai bản cấu hình test lệch nhau.
   test:
     uses: ./.github/workflows/test.yml
 
   deploy:
     needs: test
+    # always(): deploy chạy dù test đỏ. Vẫn giữ `needs` để deploy xếp SAU test (log đọc theo thứ tự) và
+    # để kết quả test hiện ngay cạnh lần deploy tương ứng.
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH
