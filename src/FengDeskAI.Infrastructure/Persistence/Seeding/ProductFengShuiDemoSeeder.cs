@@ -11,7 +11,16 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// Backfill thuộc tính phong thủy (hành + vibe + style + size từng SKU) cho sản phẩm demo còn thiếu,
 /// để engine gợi ý có ứng viên. Data đọc từ <c>catalog-demo.json</c> (xem <see cref="CatalogDemoFile"/>),
 /// khớp theo <b>tên đầy đủ</b>; sản phẩm không có trong file dùng <c>defaults</c>.
-/// Idempotent: chỉ chạm product chưa có <see cref="ProductElement"/> nào.
+///
+/// <para>
+/// Hai việc, hai luật idempotent khác nhau:
+/// <list type="bullet">
+/// <item><b>Backfill</b> (vibe/style/size + hành): chỉ product chưa có <see cref="ProductElement"/> nào —
+/// sản phẩm tạo tay đã khai gì thì giữ nguyên.</item>
+/// <item><b>Đồng bộ hành chính/phụ</b> cho sản phẩm <i>có trong file</i>: file là nguồn sự thật cho demo,
+/// lệch file thì kéo về (<see cref="DemoProductFengShuiSync"/>). Vector cache do seeder 22 tính lại.</item>
+/// </list>
+/// </para>
 /// </summary>
 public class ProductFengShuiDemoSeeder : IDataSeeder
 {
@@ -34,6 +43,12 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
+        var file = _loader.Load<CatalogDemoFile>(FileName);
+        var byName = file.ByName();
+        var d = file.Defaults;
+
+        await SyncDemoElementsAsync(byName, ct);
+
         var products = await _context.Set<Product>()
             .Include(p => p.Elements)
             .Include(p => p.Items)
@@ -45,10 +60,6 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
             _logger.LogInformation("Mọi product đã có thuộc tính phong thủy — bỏ qua backfill.");
             return;
         }
-
-        var file = _loader.Load<CatalogDemoFile>(FileName);
-        var byName = file.ByName();
-        var d = file.Defaults;
 
         // Chỉ gắn code đã tồn tại trong bảng tra cứu — tránh nổ FK khi file lệch với seed lookup.
         var knownVibes = (await _context.Set<Vibe>().Select(v => v.Code).ToListAsync(ct))
@@ -106,6 +117,32 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
         _logger.LogInformation("Backfill thuộc tính phong thủy cho {Count} product.", products.Count);
     }
 
+    /// <summary>Sản phẩm demo đã có hành nhưng lệch file (vd thiếu hành phụ) → kéo về đúng file.</summary>
+    private async Task SyncDemoElementsAsync(
+        IReadOnlyDictionary<string, CatalogDemoFile.ProductRow> byName, CancellationToken ct)
+    {
+        var names = byName.Keys.ToList();
+        var demoProducts = await _context.Set<Product>()
+            .Include(p => p.Elements)
+            .Where(p => names.Contains(p.Name) && p.Elements.Any())
+            .ToListAsync(ct);
+
+        int synced = 0;
+        foreach (var p in demoProducts)
+        {
+            var row = byName[p.Name];
+            var primary = ParseElement(row.PrimaryElement);
+            var secondaries = row.SecondaryElements.Select(ParseElement).OfType<FengShuiElement>();
+            if (DemoProductFengShuiSync.SyncElements(p, primary, secondaries)) synced++;
+        }
+
+        if (synced > 0)
+        {
+            await _context.SaveChangesAsync(ct);
+            _logger.LogInformation("Đồng bộ hành chính/phụ theo {File} cho {Count} product demo.", FileName, synced);
+        }
+    }
+
     private static FengShuiElement? ParseElement(string? code)
-        => Enum.TryParse<FengShuiElement>(code, ignoreCase: true, out var e) ? e : null;
+        => DemoProductFengShuiSync.ParseElement(code);
 }

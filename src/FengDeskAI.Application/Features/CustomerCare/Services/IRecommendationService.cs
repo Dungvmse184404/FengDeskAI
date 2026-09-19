@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Common.Results;
+﻿using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Services;
@@ -7,6 +7,14 @@ public interface IRecommendationService
 {
     /// <summary>Chấm điểm + gọi AI diễn giải cho một workspace của user, lưu lại phiên gợi ý.</summary>
     Task<IServiceResult<RecommendationResponse>> GenerateAsync(
+        Guid userId, GenerateRecommendationRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Chấm điểm topN sản phẩm cho một workspace y như <see cref="GenerateAsync"/> nhưng KHÔNG gọi AI diễn giải
+    /// và KHÔNG lưu phiên — dành cho trang hồ sơ workspace gọi mỗi lần mở, rẻ và không để lại vết.
+    /// <c>Id = Guid.Empty</c>, <c>Explanation = null</c> ở mọi item.
+    /// </summary>
+    Task<IServiceResult<RecommendationResponse>> PreviewAsync(
         Guid userId, GenerateRecommendationRequest request, CancellationToken ct = default);
 
     /// <summary>

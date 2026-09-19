@@ -26,11 +26,11 @@ Quản trị cấu hình engine chấm điểm gợi ý **v3**: tham số điể
 | GET | `/api/admin/scoring/workspace-type-elements` | Vector Ideal/Interior theo loại phòng |
 | PUT | `/api/admin/scoring/workspace-type-elements` | Thêm/sửa 1 dòng vector |
 | DELETE | `/api/admin/scoring/workspace-type-elements/{id}` | Xóa 1 dòng vector |
-| GET | `/api/occupations` | **Public** — danh sách nghề đang bật (không kèm delta) cho màn hồ sơ |
-| GET | `/api/admin/scoring/occupations` | Danh sách nghề **kèm bảng delta** |
+| GET | `/api/occupations` | **Public** — danh sách nghề đang bật (không kèm hồ sơ) cho màn hồ sơ |
+| GET | `/api/admin/scoring/occupations` | Danh sách nghề **kèm hồ sơ ngũ hành Σ=1** |
 | POST | `/api/admin/scoring/occupations` | Thêm nghề mới |
-| PUT | `/api/admin/scoring/occupations/{code}` | Sửa tên/mô tả/trạng thái (KHÔNG đụng delta) |
-| PUT | `/api/admin/scoring/occupations/{code}/modifiers` | **Ghi đè trọn gói bảng delta** — chỗ chuyên gia nhập số |
+| PUT | `/api/admin/scoring/occupations/{code}` | Sửa tên/mô tả/trạng thái (KHÔNG đụng hồ sơ) |
+| PUT | `/api/admin/scoring/occupations/{code}/profile` | **Ghi đè trọn gói hồ sơ ngũ hành** (Σ share = 1) — chỗ chuyên gia sửa số |
 | DELETE | `/api/admin/scoring/occupations/{code}` | Xóa nghề (chặn khi còn user đang chọn) |
 
 ---
@@ -74,8 +74,8 @@ Quản trị cấu hình engine chấm điểm gợi ý **v3**: tham số điể
 
 | Code | Seed | Ý nghĩa |
 |------|:---:|---------|
-| `PERSONAL_WEIGHT_PRIVATE` | **0.00** | Tỉ trọng `personalScore` ở không gian `Private`. Đích **0.50** |
-| `PERSONAL_WEIGHT_SHARED` | **0.00** | Ở không gian `Shared` (phòng khách, bếp, phòng họp). Đích **0.30** |
+| `PERSONAL_WEIGHT_PRIVATE` | **0.30** | Tỉ trọng `personalScore` ở không gian `Private` — v3.5 hạ từ 0.50 (migration `ScoringParamsV35`) |
+| `PERSONAL_WEIGHT_SHARED` | **0.20** | Ở không gian `Shared` (phòng khách, bếp, phòng họp) — v3.5 hạ từ 0.30 |
 | `PERSONAL_WEIGHT_PUBLIC` | 0.00 | Ở không gian `Public` (lễ tân, khu mở) — **luôn 0** |
 
 ```
@@ -118,6 +118,10 @@ current = normalize( Σᵢ vᵢ · wᵢ )
 
 Mỗi tag user khai bỏ vào Σ `weight` của code (chuẩn **1 phiếu**), mỗi sản phẩm đã đặt bỏ vào `voteWeight`.
 
+| Code | Seed | Ý nghĩa |
+|------|:---:|---------|
+| `TAG_VOTES_CAP` | **5.00** | v3.5 — trần cho **tổng** phiếu tag: `Σ > cap` ⇒ mọi tag nhân `cap / Σ`. Tag là nguồn duy nhất không có trần; 5 = tối đa ngang nền + chủ nhân ở Private. `≤ 0` = tắt. Response trả `tagVotesScale` |
+
 **Vì sao là phiếu chứ không phải tỉ trọng %:** nền phòng và bản mệnh đều là **prior** — suy đoán khi chưa
 có dữ liệu. Chúng phải **loãng dần** khi user khai thêm tag thật. Tỉ trọng cố định thì khai 20 tag mà prior
 vẫn giữ nguyên phần của nó — ngược với "bằng chứng lấn át suy đoán".
@@ -142,59 +146,52 @@ và điểm nói hai chuyện khác nhau về cùng một căn phòng.
 > chủ nhân **72.7%** hiện trạng — hệ thống sẽ đi bù cho chính bản mệnh thay vì cho căn phòng.
 > Xem [score-explainability-v3.2.md §12](../adr/score-explainability-v3.2.md).
 
-### Nghề nghiệp *(v3.2 §11 — P5)*
+### Nghề nghiệp — trục thứ ba *(v3.4 · N3)*
 
 | Code | Seed | Ý nghĩa |
 |------|:---:|---------|
-| `OCCUPATION_SHARE` | **0.00** | Hệ số nhân cho delta nghề nghiệp. **Seed 0 = kill-switch**: mọi delta × 0 ⇒ kết quả y hệt khi chưa có P5, kể cả khi bảng delta đã đầy dữ liệu |
+| `OCCUPATION_WEIGHT` | **0.20** | `Wo` — phần nghề chiếm trong hướng chấm điểm. **MỘT** tham số cho cả luồng phòng lẫn Carry, mọi scope. **Seed 0 = kill-switch**: trục nghề không dựng ⇒ `d` byte-identical v3.3 dù hồ sơ đã có trong DB. Đích **0.20** sau golden set |
 
 ```
-r'[e] = clamp(r[e] + delta[e] · OCCUPATION_SHARE, −1, 1)
-d     = (1 − Wp)·ĝ + Wp·r'
+δ  = profile − 0.2                 hồ sơ Σ=1 trừ phân bố đều ⇒ Σδ = 0, cùng hình dạng gap phòng
+ô  = δ / (|δ|₁ / 2)                mỗi trục ∈ [−1, +1] — chuẩn hoá nửa-L1 y hệt ĝ
+ô[e] = min(ô[e], 0)                khi hành e KHẮC bản mệnh (chỉ khi biết mệnh)
+
+d  = (1 − Wp − Wo)·ĝ + Wp·r + Wo·ô    (phòng)   · Wo kẹp ≤ 1 − Wp
+d  = (1 − Wo)·n̂ + Wo·ô                (Carry)
 ```
 
-Nghề nghiệp bẻ **`r`** (vector điểm quan hệ) chứ không bẻ `personalVector`: engine chỉ đọc
-`.Dominant()` của `personalVector` nên delta nhỏ bị nuốt mất, còn delta đủ lớn thì *lật đỉnh* — nhảy
-bậc chứ không mượt. `r` mới là thứ nhân thật với vector sản phẩm.
+Ví dụ: Tài chính = Kim 0.5 · Thủy 0.3 · Thổ 0.1 · Hỏa 0.05 · Mộc 0.05 ⇒ `ô` = Kim **+0.75**, Thủy +0.25,
+Thổ −0.25, Hỏa/Mộc −0.375. Sản phẩm 100% Kim ⇒ `ô·p = 0.75` ⇒ **88%**.
 
-⚠️ **Nghề nghiệp không đổi được bản mệnh.** Hành đang `BiKhac` bị chặn trần ở **−0.1** dù delta khai
-tới đâu, và phần **phạt điểm** khi sản phẩm khắc mệnh đi đường `GetRelation` riêng, không đọc `r'`:
+⚠️ **Nghề không đổi được bản mệnh.** Hành `BiKhac` bị chặn về ≤ 0 trong `ô`, và mọi penalty
+(`USER_CONFLICT_PENALTY`, `MINOR_CLASH_PENALTY`…) đi đường `GetRelation`/`personalVector`, không đọc `ô`.
+Mệnh Mộc làm Tài chính thì Kim vẫn khắc — nghề chỉ không được **cộng** vào Kim.
 
-| Đại lượng | Bản chất | Nghề bẻ được? |
-|---|---|:-:|
-| `r` → `personalScore` | **liên tục** — mức độ hợp | ✅ |
-| `BiKhac` → `USER_CONFLICT_PENALTY` | **phạm trù** — kiêng kỵ | ❌ |
+`OTHER` = 0.2 đều ⇒ `|δ|₁ = 0` ⇒ trục tự tắt, không cần luật riêng.
 
-Người mệnh Mộc làm nghề cần Kim thì Kim vẫn khắc mệnh — chỉ bớt khó chịu, không thành hợp.
+> **Hồ sơ seed SẴN bản nháp** (`seed-data/occupation-element-profiles.json`, 8 nghề) — khác P5 để trống.
+> Trọng số đã **bật 0.20** (P6.6, 2026-09-19) sau khi soát golden set với 8 hồ sơ (`OccupationGoldenSetTests`).
+> FINANCE/CONSTRUCT do người ra đề soạn; 6 nghề còn lại là nháp, **cần chuyên gia duyệt** trước khi nâng weight.
 
-⚠️ **Luồng `Carry` KHÔNG chịu tác động.** Nhánh dụng thần không dựng `r` nên N1 không có chỗ bám.
-Muốn nghề nghiệp vào luồng đó thì phải bẻ chính vector dụng thần — một quyết định nghiệp vụ khác,
-chưa chốt.
+**Tắt khẩn cấp:** `PUT /api/admin/scoring/params/OCCUPATION_WEIGHT { value: 0 }` — `d` byte-identical v3.3, không cần deploy.
 
-> 🔴 **Bảng delta seed RỖNG có chủ ý.** Seeder chỉ tạo 8 dòng *danh sách nghề*; `delta` là một phát
-> biểu phong thủy nên phải qua chuyên gia duyệt rồi nhập bằng
-> `PUT /api/admin/scoring/occupations/{code}/modifiers`, đúng cách `feng_shui_rules` đã làm. Bản nháp
-> để chuyên gia bắt đầu nằm ở [score-explainability-v3.2.md §11.5](../adr/score-explainability-v3.2.md).
-> Nghề chưa có delta = engine bỏ qua, không đoán.
+#### Ghi đè hồ sơ ngũ hành
 
-**Thứ tự bật:** duyệt bảng delta → `PUT .../modifiers` cho từng nghề → đối chiếu golden set →
-mới nâng `OCCUPATION_SHARE`. Nâng trước khi có delta thì không có gì xảy ra, nhưng nâng sau khi nhập
-một bảng chưa duyệt thì thứ hạng đổi mà không ai review.
-
-#### Ghi đè bảng delta
-
-`PUT /api/admin/scoring/occupations/{code}/modifiers`
+`PUT /api/admin/scoring/occupations/{code}/profile`
 
 ```json
-{ "modifiers": [ { "element": "Thuy", "delta": 0.15 }, { "element": "Hoa", "delta": -0.08 } ] }
+{ "entries": [ { "element": "Kim", "share": 0.50 }, { "element": "Thuy", "share": 0.30 },
+               { "element": "Tho", "share": 0.10 }, { "element": "Hoa", "share": 0.05 }, { "element": "Moc", "share": 0.05 } ] }
 ```
 
 | Quy tắc | |
 |---|---|
-| **Thay thế toàn bộ** | Hành có trong DB mà thiếu ở body sẽ bị **xóa** — bảng delta là một phát biểu trọn vẹn, sửa lẻ dễ để lại bộ nửa cũ nửa mới |
+| **Thay thế toàn bộ** | Hành có trong DB mà thiếu ở body coi như 0 và bị **xóa** — hồ sơ là một phân bố trọn vẹn, sửa lẻ là phá Σ=1 |
 | Mỗi hành 1 lần | Trùng hành → 400 |
-| `delta ∈ [−1, 1]` | `r` vốn nằm trong [−1,1]; delta lớn hơn chỉ ép mọi hành về biên, biến `OCCUPATION_SHARE` thành công tắc thay vì núm hiệu chỉnh |
-| `delta = 0` | Bị bỏ qua, không lưu dòng rác |
+| `share ∈ [0, 1]` | Ngoài miền → 400 |
+| **Σ share = 1 ± 0.001** | Lệch → 400 kèm tổng thực tế. Rỗng `[]` = xóa hồ sơ (nghề về "chưa có hồ sơ", engine bỏ qua) |
+| `share = 0` | Bị bỏ qua, không lưu dòng rác |
 
 ### Phần khắc mệnh không trội của vật mang theo người *(v3.2 §18)*
 
@@ -266,6 +263,37 @@ Hệ quả: nén ép tương phản **giữa các hành**, còn tỉ lệ **gi�
 > Xem [vibe-soft-scoring.md](../adr/vibe-soft-scoring.md) cho quy trình rollout.
 
 > ⚠️ Thiếu row nào → engine dùng **default trong code**, không lỗi.
+
+## Tham số nào đang THỰC SỰ chạy — trace 2026-09-19
+
+Đường đi chung của mọi tham số: `scoring_params` → `ScoringParameters.FromRows` (25/25 code đều map, code
+thiếu dùng default trong code) → property → nơi đọc. Bảng dưới là **nơi đọc thật** và **điều kiện để giá trị
+có tác dụng**; "ngủ" = code có đọc nhưng với dữ liệu/cấu hình hiện tại nhánh đó không bao giờ chạy.
+
+| Code | Đọc ở | Điều kiện có tác dụng | Trạng thái dev DB |
+|---|---|---|---|
+| `SELF/SUPPORT/CHILD_SHARE` | `FengShuiCalculator.BuildPersonalVector` ← `PersonPresenceBuilder`, `PersonalTargetBuilder` (fallback Nạp Âm), 4 chỗ `RecommendationService`, `WorkspaceProfileService` | user có DOB | **chạy** (3/5 user có DOB) |
+| `MATERIAL_SHARE`, `COLOR_SHARE` | `ProductVectorProvider.Build` tầng 2 (+ `ProductVectorApplier`/`ProductVectorService` khi seller lưu) | sản phẩm có `product_element_inputs`, không override | **chạy** (13/13 sản phẩm) |
+| `FALLBACK_PRIMARY/SECONDARY` | `ProductVectorProvider.Build` tầng 3 | sản phẩm **không** có input, không override | ngủ (0 sản phẩm), sẵn sàng khi seller tạo hàng chưa khai chất liệu |
+| `PERSONAL_WEIGHT_PRIVATE/SHARED` | `ResolvePersonalWeight` → `ScoringContext.PersonalWeight` → `RecommendationScorer` (`wp` trong `blended`, `ElementDirection.ForWorkspaceGap`, và **nhân vào `USER_CONFLICT_PENALTY`** khi `Scaled`); `WorkspaceProfileService` cho `personalDirection` (hiển thị) | DOB **và** scope Private/Shared **và** placement Desk/Living | **chạy** (2 phòng Private, 2 Shared, chủ có DOB). ⚠️ DB test từng ở `0.000` (seed v3.1 kill-switch, đổi seed không migration) — `ScoringParamsV35` kéo cả `0.000` lẫn `0.500` về 0.30 |
+| `TAG_VOTES_CAP` | `BuildCurrentBreakdown` bước 2a qua 5 call site | Σ phiếu tag > cap | **chạy** (phòng "Bàn học gỗ" 8 tag ⇒ `k = 0.625`) |
+| `PERSONAL_WEIGHT_PUBLIC` | như trên | scope Public | ngủ theo thiết kế (= 0) |
+| `USER_CONFLICT_PENALTY` | `ScoreOne` bước 2b | hành trội sản phẩm khắc mệnh; Public → không áp; Private/Shared có DOB → **× Wp** (`Scaled`); không DOB → mức đầy (`ByScope`); Carry → mức đầy | **chạy**; lưu ý hạ `Wp` 0.5 → 0.3 kéo phạt hiệu dụng 0.30 → 0.18 |
+| `MINOR_CLASH_PENALTY` | `ScoreOne` 2b nhánh else | chỉ `Carry` (`PersonalNeed`), hành trội không khắc nhưng phần phụ khắc | **chạy** ở luồng personal |
+| `DIRECTION_PENALTY` | `ValidateDirection` | `PlacementPolicy.Direction == Soft` (chỉ **Desk**) và mọi hướng hợp đều bị chắn (`dark_directions`/cửa/WC) | **chạy** cho Desk, không bao giờ cho Living/Carry |
+| `VIBE_FILTER_HARD` | `ScoreOne` 2a | `TargetVibe(purpose)` có (Office/Study/…) và `policy.UsePurposeVibe` | **chạy** = 1.0 ⇒ lệch vibe bị **loại thẳng** ở Rank; Fit không loại, không trừ |
+| `VIBE_MISMATCH_PENALTY`, `VIBE_UNKNOWN_PENALTY` | cùng chỗ | **chỉ khi `VIBE_FILTER_HARD < 0.5`** | **ngủ** — seed 1.0 nên hai số này chưa từng vào điểm; đổi chúng không có tác dụng gì cho tới khi hạ cờ |
+| `MIN_SCORE_THRESHOLD` | `ScoreOne` sau clamp, chỉ `Rank` | `score < ngưỡng` | **ngủ** theo thiết kế (−1.0 = không cắt) |
+| `CARRY_PRIMARY/SECONDARY_SHARE` | `PersonalTargetBuilder` nhánh Tứ Trụ | user có **giờ sinh** (`birth_time`) | chạy khi có giờ sinh; thiếu giờ → fallback Nạp Âm dùng `SELF/SUPPORT/CHILD` |
+| `INTERIOR_PRIOR_VOTES`, `EVIDENCE_SATURATION_ALPHA` | `BuildCurrentBreakdown` qua 5 call site (`RecommendationService` ×3, `WorkspaceProfileService` ×2) | luôn | **chạy** |
+| `PERSON_PRESENCE_VOTES_PRIVATE/SHARED` | `PersonPresenceBuilder.Build` → `BuildCurrentBreakdown` | DOB và scope | **chạy** |
+| `PERSON_PRESENCE_VOTES_PUBLIC` | như trên | scope Public | ngủ theo thiết kế (= 0) |
+| `OCCUPATION_WEIGHT` | `LoadOccupationAsync` (≤ 0 ⇒ null), `OccupationWeightFor(Wp)`, `OccupationAxis.Build` | > 0 **và** user có `occupation_id` **và** hồ sơ nghề Σ=1 | **chạy** từ 19/09 (seed 0.20) — nhưng 0/5 user dev đã khai nghề nên chưa có phiên nào đi qua |
+
+Tóm lại, với cấu hình hiện tại **2 tham số không có tác dụng dù đổi giá trị**: `VIBE_MISMATCH_PENALTY`,
+`VIBE_UNKNOWN_PENALTY` (bị `VIBE_FILTER_HARD = 1.0` che). Ba tham số
+`= 0` theo thiết kế (`*_PUBLIC`, `MIN_SCORE_THRESHOLD = −1`). Còn lại đều đang chạy. Bảy dòng `BUDGET_*` từng
+nằm trong DB không được code nào đọc — đã gỡ (migration `ElementInputMapWeightScaleRevert`).
 
 ## Map ngũ hành — `element_input_map`
 

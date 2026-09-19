@@ -16,7 +16,15 @@ public sealed record WorkspaceElementAnalysisResponse
     /// <summary>Từng hành, sắp giảm dần theo Gap (thiếu nhất → thừa nhất).</summary>
     public List<ElementAnalysisRow> Elements { get; init; } = new();
 
-    /// <summary>% phòng đúng chuẩn lý tưởng đã điều chỉnh theo mục đích + bản mệnh (0-100).</summary>
+    /// <summary>
+    /// <c>round(100·(1 − |gap|₁/2))</c> — phòng đang giống <c>adjustedIdeal</c> bao nhiêu (0-100).
+    /// Cả hai vector Σ=1 nên <c>|gap|₁ ∈ [0,2]</c>, kết quả tự nằm trong [0,100].
+    /// <para>
+    /// ⚠️ KHÔNG phải "% hợp bản mệnh". Phía MỤC TIÊU chỉ bẻ theo mục đích làm việc; bản mệnh chủ nhân
+    /// nằm ở phía <c>current</c> (một nguồn phiếu). Nên chủ phòng mệnh Kim ở một phòng đã thừa Kim sẽ
+    /// làm con số này GIẢM. Xem <c>docs/glossary-scoring.md</c> §4.
+    /// </para>
+    /// </summary>
     public int CompatibilityPercent { get; init; }
 
     /// <summary>3 nhận định (trait/status/action) sinh ở BE theo case A/B/C.</summary>
@@ -62,6 +70,13 @@ public sealed record WorkspaceElementAnalysisResponse
     /// </para>
     /// </summary>
     public decimal SaturationAlpha { get; init; }
+
+    /// <summary>
+    /// v3.5 — hệ số đã nhân vào phiếu của mọi tag do <c>TAG_VOTES_CAP</c>: <c>1</c> = không cap,
+    /// <c>&lt; 1</c> = "N tag đang tính bằng cap phiếu". <c>contributions[].votes</c> và
+    /// <see cref="TotalVotes"/> đã mang phiếu sau khi nhân — con số này chỉ để FE ghi chú, không cần dùng để tính.
+    /// </summary>
+    public decimal TagVotesScale { get; init; } = 1m;
 
     // ===== v3.2 §10.3 — trục cá nhân trên radar phòng =====
 

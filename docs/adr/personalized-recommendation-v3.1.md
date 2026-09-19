@@ -2,7 +2,7 @@
 
 > **Status:** **Đã code (2026-08-26)** — CHƯA chạy migration, CHƯA build/test.
 > Việc còn lại: `dotnet ef migrations add PersonalizedRecommendationV31`, `database update`, `seed`, `dotnet build`, chạy golden set (§14).
-> **Tiền đề (đọc trước):** `recommendation-scoring-v3.md` (engine gap-matching), `product-placement-personal-recommendation.md` (trục `ProductPlacement` + `PlacementPolicy`, Implemented 2026-08-14), `vibe-soft-scoring.md` (vibe mềm + `MIN_SCORE_THRESHOLD`, Implemented 2026-08-15).
+> **Tiền đề (đọc trước):** [`recommendation-scoring-v3.md`](./recommendation-scoring-v3.md) (engine gap-matching), [`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md) (trục `ProductPlacement` + `PlacementPolicy`, Implemented 2026-08-14), [`vibe-soft-scoring.md`](./vibe-soft-scoring.md) (vibe mềm + `MIN_SCORE_THRESHOLD`, Implemented 2026-08-15).
 > **Phạm vi:** chỉ đụng nhánh `ScoringTarget.WorkspaceGap` (placement `Desk` / `Living`). **Không** đụng nhánh `Carry` — nhánh đó đã chấm 100% theo cá nhân qua `PersonalTargetBuilder`.
 > **Không bao gồm:** v4 Polarity (Proposal riêng). `Architectural` đã bị bỏ khỏi enum (28/08) — gộp vào `Desk`.
 
@@ -12,7 +12,7 @@
 
 Yêu cầu mới: **đưa thông tin cá nhân người dùng vào tư vấn & đề xuất**.
 
-Sau `product-placement-personal-recommendation.md`, hệ thống đã có **một** luồng cá nhân hóa đầy đủ — nhưng chỉ cho vật mang theo người:
+Sau [`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md), hệ thống đã có **một** luồng cá nhân hóa đầy đủ — nhưng chỉ cho vật mang theo người:
 
 | Luồng | Vector mục tiêu | Cá nhân tham gia thế nào |
 | --- | --- | --- |
@@ -164,7 +164,7 @@ public enum PersonalConflictMode
 
 `PlacementPolicy.For` chỉ đổi khi `Wp > 0`: `Desk`/`Living`/`WorkspaceFit` chuyển `ByScope → None`. Vì `PlacementPolicy` là **bảng khai báo**, thay đổi gói gọn trong `ScoringModels.cs` — `ScoreOne` không mọc thêm nhánh `if`.
 
-**Lưới an toàn thay cho hard-filter:** sản phẩm khắc mệnh nhận `personalScore ≈ −1` nên tự rơi xuống đáy. Admin muốn cắt hẳn thì nâng **`MIN_SCORE_THRESHOLD`** (đã có từ `vibe-soft-scoring.md`) lên `0.0` — cùng một cơ chế, không cần bộ lọc riêng, và **không bao giờ trả danh sách rỗng** vì cắt theo điểm tổng chứ không theo một thuộc tính.
+**Lưới an toàn thay cho hard-filter:** sản phẩm khắc mệnh nhận `personalScore ≈ −1` nên tự rơi xuống đáy. Admin muốn cắt hẳn thì nâng **`MIN_SCORE_THRESHOLD`** (đã có từ [`vibe-soft-scoring.md`](./vibe-soft-scoring.md)) lên `0.0` — cùng một cơ chế, không cần bộ lọc riêng, và **không bao giờ trả danh sách rỗng** vì cắt theo điểm tổng chứ không theo một thuộc tính.
 
 ### 3.5 Delta
 
@@ -182,7 +182,7 @@ public enum PersonalConflictMode
 
 ## 4. `Aspiration` — tham số runtime, không lưu trên `User`
 
-`product-placement-personal-recommendation.md` §7 để lại đúng mục này trong "Không làm": *"Lọc theo ý định (cầu tài / bình an / sức khỏe / thi cử)"*. v3.1 làm nốt.
+[`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md#7-không-làm-out-of-scope) §7 để lại đúng mục này trong "Không làm": *"Lọc theo ý định (cầu tài / bình an / sức khỏe / thi cử)"*. v3.1 làm nốt.
 
 ### 4.1 Vì sao KHÔNG lưu vào `User`
 
@@ -555,24 +555,24 @@ dotnet run --project src/FengDeskAI.WebAPI -- seed
 3. Nâng `PERSONAL_WEIGHT_PRIVATE = 0.50`, `PERSONAL_WEIGHT_SHARED = 0.30` qua API `scoring-config`. Chấm tay lại golden set — hai user khác mệnh **phải** ra thứ hạng khác nhau.
 4. Nếu ranking lệch ngoài ý muốn → hạ về `0.35 / 0.20`, hoặc `0` để tắt hẳn. Không cần deploy.
 5. Đọc `recommendation_logs` stage `AiResponded` để quyết có khóa `FinalRank` hay không (§7.2).
-6. Cập nhật `docs/api-documents/18-recommendations.md`, `25-scoring-config.md`, `02-products.md` theo quy tắc đồng bộ tài liệu (`AGENTS.md` §3).
+6. Cập nhật [`docs/api-documents/18-recommendations.md`](../api-documents/18-recommendations.md), [`25-scoring-config.md`](../api-documents/25-scoring-config.md), [`02-products.md`](../api-documents/02-products.md) theo quy tắc đồng bộ tài liệu ([`AGENTS.md`](../AGENTS.md#3-documentation-synchronization-rule) §3).
 
 ---
 
 ## 15. Nợ tài liệu phát hiện kèm (không thuộc v3.1, nhưng phải trả)
 
-`AGENTS.md` §3 yêu cầu docs đi cùng code. Ba thay đổi đã **Implemented** ngày 14–15/08 nhưng tài liệu tham chiếu **chưa được cập nhật**:
+[`AGENTS.md`](../AGENTS.md#3-documentation-synchronization-rule) §3 yêu cầu docs đi cùng code. Ba thay đổi đã **Implemented** ngày 14–15/08 nhưng tài liệu tham chiếu **chưa được cập nhật**:
 
 | File | Thiếu gì |
 | --- | --- |
-| `docs/api-documents/18-recommendations.md` | **Không có** `POST /api/recommendations/personal`; không có `recommendationKind`; `workspaceProfileId` giờ nullable; `personalWeight` đã bị bỏ khỏi payload tool |
-| `docs/api-documents/25-scoring-config.md` | Thiếu **6 param**: `CARRY_PRIMARY_SHARE`, `CARRY_SECONDARY_SHARE`, `VIBE_MISMATCH_PENALTY`, `VIBE_UNKNOWN_PENALTY`, `VIBE_FILTER_HARD`, `MIN_SCORE_THRESHOLD` |
-| `docs/api-documents/02-products.md` | **0 lần** nhắc `placement` dù vendor bắt buộc khai; `sizeClass` vẫn mô tả nằm trên `Product` |
-| `docs/api-documents/99-appendix-models.md` | `sizeClass` sai vị trí (`Product` → `ProductItem`); thiếu `placement` |
-| `docs/ard/bounded-contexts/customer-care.md` | **0 lần** nhắc `placement` — mô tả engine đã lỗi thời (vẫn là công thức v3 thuần) |
-| `docs/ard/bounded-contexts/catalog.md` | `sizeClass` sai vị trí; thiếu `placement` |
-| `docs/adr/recommendation-scoring-v3.md` | §4 mô tả `ScoreOne` chưa có `PlacementPolicy` lẫn vibe mềm — nên thêm dòng "đã được bổ sung bởi …" ở đầu file |
-| **`docs/adr/product-item-size-class.md`** | ⚠️ **File KHÔNG tồn tại** nhưng đang được XML comment của `ProductItem.SizeClass` tham chiếu |
+| [`docs/api-documents/18-recommendations.md`](../api-documents/18-recommendations.md) | **Không có** `POST /api/recommendations/personal`; không có `recommendationKind`; `workspaceProfileId` giờ nullable; `personalWeight` đã bị bỏ khỏi payload tool |
+| [`docs/api-documents/25-scoring-config.md`](../api-documents/25-scoring-config.md) | Thiếu **6 param**: `CARRY_PRIMARY_SHARE`, `CARRY_SECONDARY_SHARE`, `VIBE_MISMATCH_PENALTY`, `VIBE_UNKNOWN_PENALTY`, `VIBE_FILTER_HARD`, `MIN_SCORE_THRESHOLD` |
+| [`docs/api-documents/02-products.md`](../api-documents/02-products.md) | **0 lần** nhắc `placement` dù vendor bắt buộc khai; `sizeClass` vẫn mô tả nằm trên `Product` |
+| [`docs/api-documents/99-appendix-models.md`](../api-documents/99-appendix-models.md) | `sizeClass` sai vị trí (`Product` → `ProductItem`); thiếu `placement` |
+| [`docs/ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md) | **0 lần** nhắc `placement` — mô tả engine đã lỗi thời (vẫn là công thức v3 thuần) |
+| [`docs/ard/bounded-contexts/catalog.md`](../ard/bounded-contexts/catalog.md) | `sizeClass` sai vị trí; thiếu `placement` |
+| [`docs/adr/recommendation-scoring-v3.md`](./recommendation-scoring-v3.md) | §4 mô tả `ScoreOne` chưa có `PlacementPolicy` lẫn vibe mềm — nên thêm dòng "đã được bổ sung bởi …" ở đầu file |
+| **[`docs/adr/product-item-size-class.md`](./product-item-size-class.md)** | ⚠️ **File KHÔNG tồn tại** nhưng đang được XML comment của `ProductItem.SizeClass` tham chiếu |
 
 ### Ngoài ra — nhiễu CRLF làm review không đọc được
 

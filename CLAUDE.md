@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 Hướng dẫn cho Claude khi làm việc trong repo backend **FengDeskAI**.
 
@@ -69,6 +69,10 @@ Các context: `Identity, Workspace, Catalog, Vendor, Geography, Sales, Payment, 
 ### Feng-shui engine (cốt lõi nghiệp vụ)
 `Application/Features/CustomerCare/Engine/` — deterministic. Khi sửa logic gợi ý, sửa ở đây.
 
+📖 **Nói tên là hiểu**: [`docs/glossary-scoring.md`](docs/glossary-scoring.md) — "mệnh user", "mệnh workspace",
+"mệnh workspace + user", "% tương thích" ứng với đại lượng nào + công thức. Riêng "mệnh workspace + user"
+trỏ tới **ba** đại lượng khác nhau (`current` / `d` / `T`) — đọc trước khi trả lời câu hỏi về điểm số.
+
 - `ElementVector` + `ElementVectorBuilders` + `WorkspaceElementAnalyzer` — dựng vector phòng/sản phẩm.
 - `PersonalTargetBuilder` — vector "người đang cần hành gì" (dụng thần Tứ Trụ, fallback Nạp Âm).
 - **`ScoringModels`** — `ScoringParameters` (nạp từ bảng `scoring_params`, thiếu row thì dùng default trong code) + **`PlacementPolicy`: BẢNG luật theo `ProductPlacement`**. Thêm luật = thêm một dòng bảng, đừng rải `switch` vào `RecommendationScorer`.
@@ -106,6 +110,11 @@ EF migrations (DbContext ở Infrastructure, startup ở WebAPI):
 dotnet ef migrations add <Name> -p src/FengDeskAI.Infrastructure -s src/FengDeskAI.WebAPI
 dotnet ef database update          -p src/FengDeskAI.Infrastructure -s src/FengDeskAI.WebAPI
 ```
+
+Migration đã được **gộp** 2026-09: `20260802073311_InitialSchema` là baseline thay 43 migration đầu và cố ý mang
+attribute id cũ `…_NormalizeModel3DQueueFlow` để DB đã có dòng history đó bỏ qua nó — **đừng "sửa" id cho khớp
+tên file**. Đổi số trong `scoring_params` phải đi bằng data migration (seeder chỉ chèn row thiếu). Quy trình gộp
+tiếp: [`docs/adr/migration-squash-2026-09.md`](docs/adr/migration-squash-2026-09.md).
 
 Docker:
 
@@ -150,6 +159,6 @@ Connection string tìm theo thứ tự: biến môi trường `ConnectionStrings
 
 Python AI recommendation service (contract có ở `FengDeskAI.Contracts`, service chưa tồn tại — chấm điểm chạy in-process .NET), analytics dashboard, Redis distributed cache (đang `AddDistributedMemoryCache`), SignalR hub cho notification (chỉ có `ChatHub`).
 
-**Hai điều doc cũ ghi SAI, đừng lặp lại:** Meshy **không** mock (gọi HTTP thật); GHN/Ahamove **đã** tích hợp thật (provider + webhook 2 chiều, môi trường sandbox). Danh sách được kiểm chứng và giữ cập nhật ở `docs/ard/architecture-core/05-open-items.md`.
+**Hai điều doc cũ ghi SAI, đừng lặp lại:** Meshy **không** mock (gọi HTTP thật); GHN/Ahamove **đã** tích hợp thật (provider + webhook 2 chiều, môi trường sandbox). Danh sách được kiểm chứng và giữ cập nhật ở [`docs/ard/architecture-core/05-open-items.md`](./docs/ard/architecture-core/05-open-items.md).
 
-Chưa phủ test: trợ lý hội thoại `/api/chat` (phụ thuộc LLM), `parse-description` của workspace (worker bị gỡ trong test nên job không chạy), speech-to-text (đang tắt trong test). Xem bảng "Đang CHƯA phủ" trong README của ApiTests.
+Chưa phủ test: trợ lý hội thoại `/api/chat` (phụ thuộc LLM), `parse-description` của workspace (worker bị gỡ trong test nên job không chạy), speech-to-text (đang tắt trong test). Xem bảng "Đang CHƯA phủ" trong [README của ApiTests](tests/FengDeskAI.ApiTests/README.md).

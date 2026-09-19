@@ -35,14 +35,18 @@ public static class ScoringParamCodes
     public const string PersonPresenceVotesShared = "PERSON_PRESENCE_VOTES_SHARED";
     public const string PersonPresenceVotesPublic = "PERSON_PRESENCE_VOTES_PUBLIC";
 
-    // P5 — nghề nghiệp bẻ vector điểm quan hệ `r` (xem §11.3, phương án N1).
-    public const string OccupationShare = "OCCUPATION_SHARE";
+    // N3 — nghề nghiệp là trục thứ ba của `d` (ADR occupation-product-fit-v1.md §3). MỘT tham số cho cả
+    // luồng phòng lẫn Carry, mọi scope: hợp nghề là tính chất phòng/vật × nghề, không phụ thuộc cá nhân.
+    public const string OccupationWeight = "OCCUPATION_WEIGHT";
 
     // §17 — nén tương phản khi dựng `current` (định luật luỹ thừa Stevens).
     public const string EvidenceSaturationAlpha = "EVIDENCE_SATURATION_ALPHA";
 
     // §18 — phạt phần hành khắc mệnh KHÔNG trội, chỉ ở luồng vật mang theo người.
     public const string MinorClashPenalty = "MINOR_CLASH_PENALTY";
+
+    // v3.5 — trần TỔNG phiếu tag trong `current` (ADR current-tag-votes-cap-v3.5.md).
+    public const string TagVotesCap = "TAG_VOTES_CAP";
 
     /// <summary>Số phiếu của chủ nhân phòng theo scope — phòng càng riêng tư, chủ nhân càng nặng.</summary>
     public static string PersonPresenceVotesFor(WorkspaceScope scope) => scope switch
@@ -107,13 +111,19 @@ public sealed record ScoringParameters
 
     /// <summary>
     /// Tỉ trọng <c>personalScore</c> trong điểm cuối ở không gian <see cref="WorkspaceScope.Private"/>
-    /// (phần còn lại <c>1 − Wp</c> dành cho gap phòng). <b>Seed 0</b> = kill-switch: giữ nguyên hành vi
-    /// trước v3.1 (hard-filter khắc mệnh + <see cref="UserConflictPenalty"/>). Giá trị đích 0.50.
+    /// (phần còn lại <c>1 − Wp − Wo</c> dành cho gap phòng). <c>0</c> = kill-switch: giữ nguyên hành vi
+    /// trước v3.1 (hard-filter khắc mệnh + <see cref="UserConflictPenalty"/>).
+    /// <para>
+    /// v3.5 hạ 0.50 → <b>0.30</b>: ở 0.50 mệnh gánh nửa điểm nên sản phẩm phòng đã <i>thừa</i> hành đó vẫn
+    /// "Phù hợp 61%" chỉ vì tỷ hòa mệnh — điểm nói ngược radar. Phòng phải luôn là số hạng lớn nhất.
+    /// Lưu ý <see cref="UserConflictPenalty"/> nhân với Wp ở chế độ <c>Scaled</c> nên phạt khắc mệnh
+    /// hiệu dụng cũng theo xuống 0.30 → 0.18.
+    /// </para>
     /// </summary>
-    public decimal PersonalWeightPrivate { get; init; } = 0.50m;
+    public decimal PersonalWeightPrivate { get; init; } = 0.30m;
 
-    /// <summary>Như trên, cho <see cref="WorkspaceScope.Shared"/> (phòng khách, bếp, phòng họp). Đích 0.30.</summary>
-    public decimal PersonalWeightShared { get; init; } = 0.30m;
+    /// <summary>Như trên, cho <see cref="WorkspaceScope.Shared"/> (phòng khách, bếp, phòng họp). v3.5: 0.30 → 0.20.</summary>
+    public decimal PersonalWeightShared { get; init; } = 0.20m;
 
     /// <summary>
     /// Như trên, cho <see cref="WorkspaceScope.Public"/> (lễ tân, khu mở). Luôn 0 — không gian chung
@@ -138,15 +148,26 @@ public sealed record ScoringParameters
     };
 
     /// <summary>
-    /// Hệ số nhân cho delta nghề nghiệp: <c>r'[e] = clamp(r[e] + delta[e]·OccupationShare, −1, 1)</c>.
+    /// <c>Wo</c> — phần nghề nghiệp chiếm trong hướng chấm điểm:
+    /// <c>d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô</c> (phòng) · <c>d = (1−Wo)·n̂ + Wo·ô</c> (Carry).
     ///
     /// <para>
-    /// <b>Seed 0.00</b> = kill-switch: mọi delta × 0 ⇒ kết quả <b>y hệt</b> khi chưa có P5, kể cả khi bảng
-    /// nghề đã có dữ liệu. Bật lên sau khi chuyên gia phong thủy duyệt bảng delta — cùng quy trình
-    /// <c>PERSONAL_WEIGHT_*</c> và <c>VIBE_FILTER_HARD</c> đã đi.
+    /// <c>0</c> = kill-switch: trục nghề không dựng ⇒ <c>d</c> <b>byte-identical</b> v3.3, kể cả khi hồ sơ
+    /// nghề đã có trong DB. <b>Seed 0.20</b> từ P6.6 (2026-09-19) sau khi soát golden set với 8 hồ sơ nghề
+    /// (<c>OccupationGoldenSetTests</c>): 160 lượt, đổi top-1 35 — toàn ca sát nút (chênh ≤ 0.15) và không
+    /// lần nào đẩy hành khắc mệnh lên đầu. Đủ thấy trong waterfall mà chưa lật được dấu của gap phòng
+    /// (ADR §2.1). Luồng phòng còn kẹp <c>Wo ≤ 1 − Wp</c> để hệ số của <c>ĝ</c> không âm.
     /// </para>
     /// </summary>
-    public decimal OccupationShare { get; init; } = 0.00m;
+    public decimal OccupationWeight { get; init; } = 0.20m;
+
+    /// <summary>
+    /// <c>Wo</c> cho luồng phòng, kẹp <c>≤ 1 − Wp</c> để hệ số của <c>ĝ</c> không âm (ADR §3.4). KHÔNG gate
+    /// theo scope hay ngày sinh — hợp nghề là tính chất phòng × nghề, không phụ thuộc cá nhân. Luồng
+    /// Carry không có <c>Wp</c> nên đọc thẳng <see cref="OccupationWeight"/>.
+    /// </summary>
+    public decimal OccupationWeightFor(decimal personalWeight)
+        => Math.Clamp(Math.Min(OccupationWeight, 1m - personalWeight), 0m, 1m);
 
     /// <summary>
     /// Phạt phần hành KHẮC bản mệnh <b>không phải hành trội</b> của vật mang theo người, tính theo
@@ -245,6 +266,21 @@ public sealed record ScoringParameters
             _ => PersonPresenceVotesPrivate,
         };
 
+    /// <summary>
+    /// v3.5 — trần cho <b>tổng</b> phiếu tag khi dựng <c>current</c>: <c>Σ votes_tag &gt; cap</c> thì mọi
+    /// tag nhân cùng hệ số <c>cap / Σ</c>. Tag là nguồn duy nhất không có trần, nên khai nhiều tag đè nền
+    /// phòng (3), chủ nhân (3/2/0) và sản phẩm (1/món) về gần 0 — sản phẩm xem trước không còn nhích được
+    /// trên radar. Cap = 5 ⇒ tag tối đa ngang <i>nền + chủ nhân</i> ở Private (5 / 11 khối lượng).
+    /// <para>
+    /// Cap theo Σ phiếu chứ không theo số tag (admin giảm weight tag thì phiếu giảm theo); một hệ số cho mọi
+    /// tag nên tỉ lệ giữa các tag giữ nguyên; liên tục tại cap; <c>≤ 0</c> = tắt. Sản phẩm đã đặt, nền,
+    /// chủ nhân KHÔNG vào cap. <c>EvidenceCount</c>/<c>Confidence</c> không đổi (đếm bằng chứng, không đếm phiếu).
+    /// Đây là sửa §12 có chủ đích: "bằng chứng lấn át suy đoán" → "bằng chứng tối đa ngang nền + chủ nhân".
+    /// Xem ADR <c>current-tag-votes-cap-v3.5.md</c>.
+    /// </para>
+    /// </summary>
+    public decimal TagVotesCap { get; init; } = 5.00m;
+
     public static ScoringParameters Default { get; } = new();
 
     /// <summary>Dựng từ các row DB; code lạ bị bỏ qua, code thiếu giữ default.</summary>
@@ -277,9 +313,10 @@ public sealed record ScoringParameters
             PersonalWeightPrivate = V(ScoringParamCodes.PersonalWeightPrivate, d.PersonalWeightPrivate),
             PersonalWeightShared = V(ScoringParamCodes.PersonalWeightShared, d.PersonalWeightShared),
             PersonalWeightPublic = V(ScoringParamCodes.PersonalWeightPublic, d.PersonalWeightPublic),
-            OccupationShare = V(ScoringParamCodes.OccupationShare, d.OccupationShare),
+            OccupationWeight = V(ScoringParamCodes.OccupationWeight, d.OccupationWeight),
             EvidenceSaturationAlpha = V(ScoringParamCodes.EvidenceSaturationAlpha, d.EvidenceSaturationAlpha),
             MinorClashPenalty = V(ScoringParamCodes.MinorClashPenalty, d.MinorClashPenalty),
+            TagVotesCap = V(ScoringParamCodes.TagVotesCap, d.TagVotesCap),
         };
     }
 }
@@ -314,6 +351,12 @@ public sealed record ScoringContext
     /// </summary>
     public ElementVector? PersonalNeedVector { get; init; }
 
+    /// <summary>
+    /// v3.6 — kỵ thần của người (<see cref="PersonalTarget.AvoidSet"/>), chỉ nhánh Carry. Phần sản phẩm
+    /// rơi vào các hành này bị trừ thẳng (<c>avoidHit = Σ p[e]</c>). Rỗng = không trừ.
+    /// </summary>
+    public IReadOnlySet<FengShuiElement> PersonalAvoid { get; init; } = new HashSet<FengShuiElement>();
+
     public required WorkspaceScope Scope { get; init; }
     public required WorkPurpose Purpose { get; init; }
 
@@ -336,13 +379,18 @@ public sealed record ScoringContext
     public IReadOnlyDictionary<(FengShuiElement Subject, FengShuiElement Object), decimal>? RuleScores { get; init; }
 
     /// <summary>
-    /// Delta ngũ hành theo NGHỀ NGHIỆP của user (P5/N1) — cộng vào <c>r</c>, không cộng vào
-    /// <see cref="PersonalVector"/>. <c>null</c> = user chưa khai nghề hoặc nghề đó chưa có dòng delta nào.
-    /// <para>Không áp cho nhánh <see cref="ScoringTarget.PersonalNeed"/>: nhánh đó không có <c>r</c> để bẻ.</para>
+    /// Hồ sơ ngũ hành Σ=1 của nghề user khai (N3). <c>null</c> = chưa khai nghề, nghề bị tắt, hoặc nghề
+    /// chưa có hồ sơ — engine bỏ qua, không đoán. Áp cho CẢ hai nhánh (phòng và Carry).
     /// </summary>
-    public ElementVector? OccupationDelta { get; init; }
+    public ElementVector? OccupationProfile { get; init; }
 
-    /// <summary>Mã nghề đã áp, vd <c>"IT"</c> — để breakdown chỉ đúng dòng cấu hình. <c>null</c> khi không áp.</summary>
+    /// <summary>
+    /// <c>Wo</c> đã kẹp (<c>≤ 1 − Wp</c> ở luồng phòng). Service tính, engine chỉ đọc — cùng cách
+    /// <see cref="PersonalWeight"/> được resolve bên ngoài rồi truyền vào.
+    /// </summary>
+    public decimal OccupationWeight { get; init; }
+
+    /// <summary>Mã nghề, vd <c>"IT"</c> — để breakdown chỉ đúng dòng cấu hình. <c>null</c> khi không có nghề.</summary>
     public string? OccupationCode { get; init; }
 
     /// <summary>Tên nghề tiếng Việt — hiển thị cho user trong breakdown.</summary>
@@ -358,12 +406,6 @@ public sealed record ScoringContext
     public IReadOnlyList<AspirationDirection> AspirationDirections { get; init; } = Array.Empty<AspirationDirection>();
 
     public ScoringParameters Params { get; init; } = ScoringParameters.Default;
-
-    /// <summary>
-    /// Nghề nghiệp có đang tác động không: cần cả delta lẫn hệ số &gt; 0. Delta bẻ <c>r</c>, mà <c>r</c>
-    /// chỉ tồn tại khi trục cá nhân bật — nên nghề nghiệp kèm theo điều kiện đó.
-    /// </summary>
-    public bool OccupationActive => OccupationDelta is not null && Params.OccupationShare > 0m && PersonalBlendActive;
 
     /// <summary>Trục cá nhân có đang bật không: cần cả trọng số &gt; 0 lẫn vector mệnh (user có ngày sinh).</summary>
     public bool PersonalBlendActive => PersonalWeight > 0m && PersonalVector is not null;
@@ -513,8 +555,21 @@ public static class ScoreComponentCodes
     public const string GapScore = "GAP_SCORE";
     public const string PersonalScore = "PERSONAL_SCORE";
 
-    /// <summary>Nhánh <see cref="ScoringTarget.PersonalNeed"/> (vật mang theo người) — thành phần DUY NHẤT.</summary>
+    /// <summary>
+    /// Nhánh <see cref="ScoringTarget.PersonalNeed"/> (vật mang theo người) — thành phần chính.
+    /// v3.6: <c>value = needCover = Σ min(n̂[e], p[e])</c> (phần nhu cầu được phủ), không còn là <c>n̂·p</c>.
+    /// </summary>
     public const string PersonalNeedScore = "PERSONAL_NEED_SCORE";
+
+    /// <summary>
+    /// v3.6 — nhánh Carry: <c>value = −avoidHit = −Σ_{e ∈ kỵ} p[e]</c>, phần sản phẩm rơi vào kỵ thần.
+    /// Là số hạng CỘNG mang giá trị âm (không phải penalty) vì nó là nửa kia của cùng phép đo với
+    /// <see cref="PersonalNeedScore"/>; chỉ xuất hiện khi user có kỵ thần.
+    /// </summary>
+    public const string PersonalAvoidScore = "PERSONAL_AVOID_SCORE";
+
+    /// <summary>N3 — <c>ô · p</c>, "Hợp nghề của bạn". Có ở CẢ hai nhánh khi trục nghề bật.</summary>
+    public const string OccupationScore = "OCCUPATION_SCORE";
 }
 
 /// <summary>
@@ -534,12 +589,18 @@ public sealed record ScoreComponent(
 /// <see cref="Applied"/> = <c>false</c> — user cần thấy "cái này đã được xét và không bị trừ",
 /// khác hẳn "cái này không tồn tại".
 /// </summary>
+/// <param name="ParamValue">Giá trị tham số <c>scoring_params</c> (vd <c>USER_CONFLICT_PENALTY = 0.60</c>) — mức phạt gốc.</param>
+/// <param name="Factor">Hệ số nhân vào tham số khi có (<c>Wp</c> ở chế độ Scaled, <c>clashShare</c> ở §18); <c>null</c> = trừ nguyên mức.</param>
+/// <param name="FactorLabelVi">Tên của hệ số để FE in công thức, vd "tỉ trọng hành khắc mệnh".</param>
 public sealed record ScorePenalty(
     string Code,
     string LabelVi,
     decimal Value,
     bool Applied,
-    string ReasonVi);
+    string ReasonVi,
+    decimal ParamValue = 0m,
+    decimal? Factor = null,
+    string? FactorLabelVi = null);
 
 /// <summary>
 /// v3.2 §13 — phòng đang thiếu đúng hành KHẮC bản mệnh. Engine tự giải bằng
@@ -597,14 +658,11 @@ public sealed record ScoreBreakdown(
     /// </summary>
     ElementVector NormalizedGap,
 
-    /// <summary>
-    /// <c>r'[e]</c> — điểm quan hệ ĐÃ tính nghề nghiệp, CÓ DẤU. <c>null</c> khi trục cá nhân tắt.
-    /// Bằng <see cref="BaseRuleScoreVector"/> khi nghề nghiệp không áp.
-    /// </summary>
+    /// <summary><c>r[e]</c> — điểm quan hệ với bản mệnh, CÓ DẤU. <c>null</c> khi trục cá nhân tắt.</summary>
     ElementVector? RuleScoreVector,
 
     /// <summary>
-    /// <c>d = (1−Wp)·ĝ + Wp·r'</c> — thứ thật sự nhân với <see cref="ProductVector"/>.
+    /// <c>d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô</c> — thứ thật sự nhân với <see cref="ProductVector"/>.
     /// <b>Đây là vector radar cần vẽ</b> (§10.3), không phải <c>personalVector</c>.
     /// </summary>
     ElementVector CombinedDirection,
@@ -633,28 +691,38 @@ public sealed record ScoreBreakdown(
     FengShuiElement? DestinyElement,
 
     /// <summary>
-    /// <c>r</c> TRƯỚC khi cộng delta nghề nghiệp (P5). <c>null</c> khi nghề nghiệp không áp — khi đó
-    /// <see cref="RuleScoreVector"/> đã là <c>r</c> gốc rồi.
+    /// <c>ô</c> — hướng nghề nghiệp ĐÃ chặn hành khắc mệnh (N3, §3.2). <c>null</c> khi trục nghề tắt.
+    /// Lớp radar "Nghề cần" vẽ từ đây.
     /// </summary>
-    ElementVector? BaseRuleScoreVector = null,
+    ElementVector? OccupationDirection = null,
 
-    /// <summary>Mã nghề đã áp, vd <c>"IT"</c>. <c>null</c> khi user chưa khai nghề hoặc kill-switch đang tắt.</summary>
+    /// <summary>
+    /// <c>ô</c> TRƯỚC khi chặn. Khác <see cref="OccupationDirection"/> đúng ở những hành nghề muốn kéo
+    /// lên nhưng khắc mệnh — user phải thấy phần nghề <i>không</i> kéo được, chứ không chỉ con số cuối.
+    /// </summary>
+    ElementVector? OccupationRawDirection = null,
+
+    /// <summary>Mã nghề, vd <c>"IT"</c>. <c>null</c> khi trục nghề tắt.</summary>
     string? OccupationCode = null,
 
-    /// <summary>Tên nghề tiếng Việt — nhãn cho lớp radar nghề nghiệp.</summary>
+    /// <summary>Tên nghề tiếng Việt — nhãn cho lớp radar và dòng waterfall.</summary>
     string? OccupationNameVi = null,
 
-    /// <summary><c>OCCUPATION_SHARE</c> đã áp. <c>0</c> khi nghề nghiệp không tác động.</summary>
-    decimal OccupationShare = 0m)
-{
-    /// <summary>
-    /// <c>r' − r</c> — phần nghề nghiệp THẬT SỰ dịch được sau khi đã chặn hành khắc mệnh. <c>null</c>
-    /// khi nghề nghiệp không áp. Hiển thị con số này chứ không phải <c>delta·share</c>: user cần thấy
-    /// nghề của mình không kéo nổi một hành kiêng kỵ lên, chứ không phải con số danh nghĩa.
-    /// </summary>
-    public ElementVector? OccupationShift =>
-        BaseRuleScoreVector is { } b && RuleScoreVector is { } r ? r.Subtract(b) : null;
+    /// <summary><c>Wo</c> đã áp. <c>0</c> khi trục nghề tắt.</summary>
+    decimal OccupationWeight = 0m,
 
+    /// <summary>Mã dòng <c>scoring_params</c> quyết định <see cref="OccupationWeight"/>. <c>null</c> khi tắt.</summary>
+    string? OccupationWeightCode = null,
+
+    /// <summary>v3.6 — kỵ thần đã áp ở nhánh Carry (rỗng ở luồng phòng).</summary>
+    IReadOnlyList<FengShuiElement>? PersonalAvoidElements = null,
+
+    /// <summary>v3.6 — <c>Σ min(n̂, p)</c>; <c>null</c> ở luồng phòng.</summary>
+    decimal? PersonalNeedCover = null,
+
+    /// <summary>v3.6 — <c>Σ_{kỵ} p</c>; <c>null</c> ở luồng phòng.</summary>
+    decimal? PersonalAvoidHit = null)
+{
     /// <summary>
     /// <c>normalize(max(d, 0))</c> — Σ=1, vẽ chồng được lên radar cùng thang với
     /// <c>adjustedIdeal</c>/<c>current</c> (§10.3). Trả lời *"sau khi tính bản mệnh của bạn, hệ thống

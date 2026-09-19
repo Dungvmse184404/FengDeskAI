@@ -4,11 +4,11 @@ using FengDeskAI.Domain.Enums.Workspace;
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
 /// <summary>
-/// Bộ vector "hệ thống đang ưu tiên hành nào" — v3.2 §9/§10.3.
+/// Bộ vector "hệ thống đang ưu tiên hành nào" — v3.2 §9/§10.3, thêm trục nghề N3 ở v3.4.
 ///
 /// <para>
-/// <b>Không phụ thuộc sản phẩm.</b> <c>ĝ</c> đến từ gap của PHÒNG, <c>r</c> đến từ BẢN MỆNH — chấm sản
-/// phẩm nào cũng ra cùng bộ này. Vì thế nó tách khỏi <see cref="RecommendationScorer"/>: radar phân
+/// <b>Không phụ thuộc sản phẩm.</b> <c>ĝ</c> đến từ gap của PHÒNG, <c>r</c> đến từ BẢN MỆNH, <c>ô</c> đến
+/// từ NGHỀ — chấm sản phẩm nào cũng ra cùng bộ này. Vì thế nó tách khỏi <see cref="RecommendationScorer"/>: radar phân
 /// tích phòng (chưa có sản phẩm nào) cần đúng bộ vector này, và nếu tính lại ở chỗ khác thì sớm muộn
 /// hai màn hình vẽ hai đa giác khác nhau cho cùng một căn phòng.
 /// </para>
@@ -18,31 +18,24 @@ public sealed record ElementDirection(
     ElementVector NormalizedGap,
 
     /// <summary>
-    /// <c>r'[e]</c> — điểm quan hệ <b>đã tính nghề nghiệp</b>, CÓ DẤU, là thứ thật sự nhân với vector
-    /// sản phẩm. <c>null</c> khi trục cá nhân tắt. Bằng <see cref="BaseRuleScoreVector"/> khi nghề
-    /// nghiệp không áp.
+    /// <c>r[e] = ruleScore(bản mệnh, e)</c> — điểm quan hệ với mệnh, CÓ DẤU. <c>null</c> khi trục cá nhân tắt.
+    /// Từ v3.4 KHÔNG còn bị nghề bẻ (N1 gỡ): nghề đi trục riêng <see cref="Occupation"/>.
     /// </summary>
     ElementVector? RuleScoreVector,
 
-    /// <summary><c>d = (1−Wp)·ĝ + Wp·r'</c> — thứ nhân với vector sản phẩm để ra điểm.</summary>
+    /// <summary>
+    /// <c>d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô</c> (phòng) · <c>d = (1−Wo)·n̂ + Wo·ô</c> (Carry) — thứ nhân với
+    /// vector sản phẩm để ra điểm.
+    /// </summary>
     ElementVector CombinedDirection,
 
     ConflictResolution? ConflictResolution,
 
-    /// <summary>
-    /// <c>r[e] = ruleScore(bản mệnh, e)</c> — <b>trước</b> khi cộng delta nghề nghiệp. Giữ lại để
-    /// breakdown nói được "nghề của bạn đã dịch hành này bao nhiêu" thay vì chỉ đưa ra con số cuối.
-    /// </summary>
-    ElementVector? BaseRuleScoreVector = null)
+    /// <summary>Trục nghề đã áp — <c>null</c> khi trục tắt (kill-switch, chưa khai nghề, nghề OTHER).</summary>
+    OccupationAxis? Occupation = null)
 {
-    /// <summary>
-    /// <c>r' − r</c> — phần nghề nghiệp thật sự dịch được, <b>sau</b> khi đã clamp. Khác
-    /// <c>delta·OccupationShare</c> ở những hành bị chặn — và đó chính là thứ cần hiển thị: user phải
-    /// thấy nghề của mình <i>không</i> kéo nổi một hành khắc mệnh lên, chứ không phải con số danh nghĩa.
-    /// <c>null</c> khi nghề nghiệp không áp.
-    /// </summary>
-    public ElementVector? OccupationShift =>
-        BaseRuleScoreVector is { } b && RuleScoreVector is { } r ? r.Subtract(b) : null;
+    /// <summary><c>ô</c> đã chặn hành khắc mệnh — lớp radar "Nghề cần". <c>null</c> khi trục tắt.</summary>
+    public ElementVector? OccupationDirection => Occupation?.Direction;
 
     /// <summary>
     /// <c>normalize(max(d, 0))</c>, Σ=1 — chồng được lên <c>adjustedIdeal</c>/<c>current</c> vì cùng
@@ -54,13 +47,16 @@ public sealed record ElementDirection(
     /// Nhánh chấm theo PHÒNG. <paramref name="ruleScoreOf"/> tra bảng <c>feng_shui_rules</c> (admin
     /// chỉnh được) chứ không dùng thẳng hằng số trong code.
     /// </summary>
+    /// <param name="occupation">
+    /// Trục nghề N3, đã kẹp <c>Wo ≤ 1 − Wp</c> bởi service. <c>null</c> ⇒ công thức y hệt v3.3. Áp
+    /// <b>độc lập</b> với trục cá nhân: khách chưa có ngày sinh (<c>Wp = 0</c>) vẫn có <c>Wo·ô</c>.
+    /// </param>
     public static ElementDirection ForWorkspaceGap(
         ElementVector gap,
         FengShuiElement? destiny,
         decimal personalWeight,
         Func<FengShuiElement, FengShuiElement, decimal> ruleScoreOf,
-        ElementVector? occupationDelta = null,
-        decimal occupationShare = 0m)
+        OccupationAxis? occupation = null)
     {
         decimal gapL1 = gap.L1();
 
@@ -69,35 +65,37 @@ public sealed record ElementDirection(
         decimal denom = gapL1 / 2m;
         var normalizedGap = denom == 0m ? ElementVector.Zero : gap.Divide(denom);
 
-        // Trục cá nhân tắt (Wp = 0, hoặc chưa có ngày sinh) ⇒ d ≡ ĝ, và không có gì để hoá giải.
-        if (destiny is not { } mine || personalWeight <= 0m)
-            return new ElementDirection(normalizedGap, null, normalizedGap, null);
+        decimal wo = occupation?.Weight ?? 0m;
 
-        var baseRuleScore = new ElementVector(
+        // Trục cá nhân tắt (Wp = 0, hoặc chưa có ngày sinh) ⇒ d = (1−Wo)·ĝ + Wo·ô, không có gì để hoá giải.
+        if (destiny is not { } mine || personalWeight <= 0m)
+        {
+            var gapOnly = WithOccupation(normalizedGap.Scale(1m - wo), occupation);
+            return new ElementDirection(normalizedGap, null, gapOnly, null, occupation);
+        }
+
+        var ruleScoreVector = new ElementVector(
             Tho: ruleScoreOf(mine, FengShuiElement.Tho),
             Kim: ruleScoreOf(mine, FengShuiElement.Kim),
             Thuy: ruleScoreOf(mine, FengShuiElement.Thuy),
             Moc: ruleScoreOf(mine, FengShuiElement.Moc),
             Hoa: ruleScoreOf(mine, FengShuiElement.Hoa));
 
-        var ruleScoreVector = ApplyOccupation(baseRuleScore, mine, occupationDelta, occupationShare);
+        var combined = WithOccupation(
+            normalizedGap.Scale(1m - personalWeight - wo).Add(ruleScoreVector.Scale(personalWeight)),
+            occupation);
 
-        // Chỉ khai báo "có nghề nghiệp" khi nó DỊCH ĐƯỢC thật. Kill-switch bằng 0, delta toàn 0, hay
-        // delta chỉ trỏ vào những hành đang khắc mệnh (bị chặn hết) đều ra r' ≡ r — khi đó phải trả
-        // null để `OccupationShift` không đẻ ra một lớp radar phẳng lì và một dòng breakdown vô nghĩa.
-        bool occupationApplied = ruleScoreVector != baseRuleScore;
-
-        var combined = normalizedGap
-            .Scale(1m - personalWeight)
-            .Add(ruleScoreVector.Scale(personalWeight));
-
-        // DetectConflict đọc `ruleScoreOf` GỐC chứ không đọc r': "hành này khắc bản mệnh" là một PHẠM
-        // TRÙ do mệnh quyết định, nghề nghiệp không được phép xóa một cảnh báo xung khắc chỉ vì nó cộng dương.
+        // DetectConflict đọc `ruleScoreOf` gốc: "hành này khắc bản mệnh" là một PHẠM TRÙ do mệnh quyết
+        // định, nghề nghiệp không được phép xóa một cảnh báo xung khắc chỉ vì nó cộng dương vào hành đó.
         return new ElementDirection(
             normalizedGap, ruleScoreVector, combined,
             DetectConflict(normalizedGap, mine, ruleScoreOf),
-            occupationApplied ? baseRuleScore : null);
+            occupation);
     }
+
+    /// <summary><c>baseDirection + Wo·ô</c>; giữ nguyên <c>baseDirection</c> khi trục nghề tắt.</summary>
+    private static ElementVector WithOccupation(ElementVector baseDirection, OccupationAxis? occupation)
+        => occupation is { } o ? baseDirection.Add(o.Direction.Scale(o.Weight)) : baseDirection;
 
     /// <summary>
     /// <b>Mục tiêu đã tính bản mệnh</b>: <c>T = (1−Wp)·adjustedIdeal + Wp·personalVector</c>.
@@ -122,54 +120,16 @@ public sealed record ElementDirection(
     /// <summary>
     /// Nhánh vật mang theo người: mục tiêu là vector dụng thần (Σ=1, không âm) nên mẫu số GIỮ
     /// <c>|target|₁</c> — không có "hai nửa" để chia đôi. <c>Wp</c> không áp: mục tiêu vốn đã 100% cá nhân.
+    /// Trục nghề (N3) vào bằng <c>d = (1−Wo)·n̂ + Wo·ô</c> — dùng <c>ô</c> CÓ DẤU chứ không trộn hồ sơ
+    /// Σ=1 thẳng vào <c>n</c>, để <c>OCCUPATION_SCORE</c> ở Carry và ở phòng cùng một thang (ADR §3.3).
     /// </summary>
-    public static ElementDirection ForPersonalNeed(ElementVector personalNeed)
+    public static ElementDirection ForPersonalNeed(ElementVector personalNeed, OccupationAxis? occupation = null)
     {
         decimal l1 = personalNeed.L1();
         var normalized = l1 == 0m ? ElementVector.Zero : personalNeed.Divide(l1);
-        return new ElementDirection(normalized, null, normalized, null);
-    }
-
-    /// <summary>
-    /// <b>N1</b> — nghề nghiệp bẻ <c>r</c>: <c>r'[e] = clamp(r[e] + delta[e]·share, −1, 1)</c>.
-    ///
-    /// <para>
-    /// Bẻ vào đây chứ không bẻ vào <c>personalVector</c>: engine chỉ đọc <c>.Dominant()</c> của
-    /// <c>personalVector</c> nên delta nhỏ sẽ bị nuốt mất, còn delta đủ lớn thì <i>lật đỉnh</i> — nhảy
-    /// bậc, không mượt. <c>r</c> mới là thứ nhân thật với vector sản phẩm, nên tác động ở đây tuyến
-    /// tính và liên tục.
-    /// </para>
-    ///
-    /// <para>
-    /// ⚠️ <b>Nghề nghiệp không đổi được bản mệnh.</b> Hành đang <c>BiKhac</c> bị chặn trần ở <c>−0.1</c>:
-    /// người mệnh Mộc làm nghề cần Kim thì Kim vẫn khắc mệnh — chỉ bớt khó chịu, không thành hợp. Không
-    /// có chặn này thì một dòng delta gõ sai có thể làm hệ thống gợi ý đúng thứ người dùng phải kiêng.
-    /// </para>
-    ///
-    /// <para>Phạt điểm khi sản phẩm khắc mệnh đi đường <c>GetRelation</c> riêng, không đọc <c>r'</c> — xem §14.4.</para>
-    /// </summary>
-    private static ElementVector ApplyOccupation(
-        ElementVector ruleScore,
-        FengShuiElement destiny,
-        ElementVector? delta,
-        decimal share)
-    {
-        if (delta is not { } d || share <= 0m) return ruleScore;
-
-        decimal Adjust(FengShuiElement e)
-        {
-            decimal v = Math.Clamp(ruleScore[e] + d[e] * share, -1m, 1m);
-            return FengShuiCalculator.GetRelation(destiny, e) == FengShuiRelation.BiKhac
-                ? Math.Min(v, -0.1m)
-                : v;
-        }
-
-        return new ElementVector(
-            Tho: Adjust(FengShuiElement.Tho),
-            Kim: Adjust(FengShuiElement.Kim),
-            Thuy: Adjust(FengShuiElement.Thuy),
-            Moc: Adjust(FengShuiElement.Moc),
-            Hoa: Adjust(FengShuiElement.Hoa));
+        decimal wo = occupation?.Weight ?? 0m;
+        var combined = WithOccupation(normalized.Scale(1m - wo), occupation);
+        return new ElementDirection(normalized, null, combined, null, occupation);
     }
 
     /// <summary>
@@ -191,9 +151,12 @@ public sealed record ElementDirection(
             return null;
 
         var bridge = FengShuiCalculator.GetGeneratedElement(roomNeed);
+        // Câu này hiện thẳng cho khách — dùng tên có dấu, không dùng enum name (Thuy/Moc).
+        var (needVi, destinyVi, bridgeVi) =
+            (ElementSemantics.ElementName(roomNeed), ElementSemantics.ElementName(destiny), ElementSemantics.ElementName(bridge));
         return new ConflictResolution(roomNeed, destiny, bridge,
-            $"Phòng đang thiếu {roomNeed}, nhưng {roomNeed} khắc bản mệnh {destiny} của bạn. "
-            + $"Hệ thống ưu tiên vật hành {bridge} - {roomNeed} sinh {bridge}, {bridge} sinh {destiny} - "
+            $"Phòng đang thiếu {needVi}, nhưng {needVi} khắc bản mệnh {destinyVi} của bạn. "
+            + $"Hệ thống ưu tiên vật hành {bridgeVi} - {needVi} sinh {bridgeVi}, {bridgeVi} sinh {destinyVi} - "
             + $"bù cho phòng mà vẫn nuôi bản mệnh.");
     }
 }

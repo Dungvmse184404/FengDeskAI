@@ -17,15 +17,23 @@ public interface IScoringConfigRepository
     Task<List<ProductElementInput>> GetProductElementInputsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default);
 
     /// <summary>
-    /// Delta ngũ hành của một nghề (P5). Rỗng khi nghề chưa được chuyên gia nhập delta — engine coi
-    /// như không có nghề nghiệp, đúng ý: thiếu dữ liệu thì đừng đoán.
+    /// Như trên nhưng đã nhóm theo <c>ProductId</c> — dạng mà
+    /// <c>PlacedProductVectorBuilder.Build</c> nhận. Đặt ở repo để phần nhóm không bị chép ở mỗi
+    /// service gọi tới: đó đúng là kiểu trùng lặp đã làm radar và bộ gợi ý trôi khỏi nhau (§19).
     /// </summary>
-    Task<List<OccupationElementModifier>> GetOccupationModifiersAsync(Guid occupationId, CancellationToken ct = default);
+    Task<Dictionary<Guid, IReadOnlyCollection<ProductElementInput>>> GetProductElementInputsByProductAsync(
+        IReadOnlyCollection<Guid> productIds, CancellationToken ct = default);
 
-    /// <summary>Danh sách nghề đang bật, kèm delta — cho màn hình chọn nghề và màn quản trị.</summary>
+    /// <summary>
+    /// Hồ sơ ngũ hành Σ=1 của một nghề (N3). Rỗng khi nghề chưa có hồ sơ — engine coi như không có
+    /// nghề nghiệp, đúng ý: thiếu dữ liệu thì đừng đoán.
+    /// </summary>
+    Task<List<OccupationElementProfile>> GetOccupationProfileAsync(Guid occupationId, CancellationToken ct = default);
+
+    /// <summary>Danh sách nghề đang bật, kèm hồ sơ — cho màn hình chọn nghề và màn quản trị.</summary>
     Task<List<Occupation>> GetOccupationsAsync(bool includeInactive = false, CancellationToken ct = default);
 
-    /// <summary>Một nghề theo mã bất biến, kèm delta. <c>null</c> khi không có.</summary>
+    /// <summary>Một nghề theo mã bất biến, kèm hồ sơ. <c>null</c> khi không có.</summary>
     Task<Occupation?> GetOccupationByCodeAsync(string code, CancellationToken ct = default);
 
     /// <summary>Thay toàn bộ input (màu/vật liệu/hình khối) của 1 sản phẩm. Chưa commit — caller lưu qua UoW.</summary>

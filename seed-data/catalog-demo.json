@@ -1,4 +1,4 @@
-﻿{
+{
   "_comment": "Dữ liệu demo cho Catalog - MỘT nguồn duy nhất cho 3 seeder (CatalogDemo → ProductFengShuiDemo → ProductElementInputDemo). Tên sản phẩm chỉ khai ở đây; trước kia mỗi seeder giữ bảng riêng khớp theo chuỗi con trong tên nên đổi tên là 2 seeder kia âm thầm hỏng.",
 
   "vendor": {
@@ -23,6 +23,7 @@
   "imageUrlTemplate": "https://picsum.photos/seed/{slug}/600",
 
   "_defaultsNote": "Áp cho sản phẩm KHÔNG có trong danh sách dưới (vd tạo tay lúc test) mà chưa khai phong thủy.",
+  "_elementsNote": "Không vật nào là MỘT hành thuần: mỗi sản phẩm khai ≥ 2 kênh (chất liệu thân + chất liệu đế/chậu, màu, hình) trỏ về ≥ 2 hành, và hành trội của vector tính ra phải TRÙNG primaryElement (seeder cảnh báo nếu lệch). File này là nguồn sự thật cho sản phẩm demo: seeder đồng bộ lại elements + inputs mỗi lần khởi động.",
   "defaults": { "primaryElement": "Tho", "vibe": "Focus", "style": "Modern", "sizeClass": "Medium" },
 
   "products": [
@@ -32,11 +33,14 @@
       "category": "Cây để bàn",
       "placement": "Living",
       "primaryElement": "Moc",
+      "secondaryElements": ["Tho"],
       "vibes": ["Focus"],
       "styles": ["Scandinavian"],
       "elementInputs": [
         { "kind": "Material", "code": "Wood" },
-        { "kind": "Color", "code": "Green" }
+        { "kind": "Material", "code": "Ceramic" },
+        { "kind": "Color", "code": "Green" },
+        { "kind": "Shape", "code": "Column" }
       ],
       "items": [
         { "name": "Chậu sứ trắng", "price": 250000, "stock": 30, "sku": "KT-WHITE", "sizeClass": "Small" },
@@ -49,11 +53,14 @@
       "category": "Cây để bàn",
       "placement": "Living",
       "primaryElement": "Moc",
+      "secondaryElements": ["Tho", "Hoa"],
       "vibes": ["Calm"],
       "styles": ["Minimal"],
       "elementInputs": [
         { "kind": "Material", "code": "Wood" },
-        { "kind": "Color", "code": "Green" }
+        { "kind": "Material", "code": "Ceramic" },
+        { "kind": "Color", "code": "Green" },
+        { "kind": "Shape", "code": "Pointed" }
       ],
       "items": [
         { "name": "Size nhỏ", "price": 150000, "stock": 50, "sku": "LH-S", "sizeClass": "Small" }
@@ -65,11 +72,13 @@
       "category": "Đá phong thủy",
       "placement": "Desk",
       "primaryElement": "Tho",
+      "secondaryElements": ["Hoa", "Kim"],
       "vibes": ["Calm"],
       "styles": ["Modern"],
       "elementInputs": [
-        { "kind": "Material", "code": "Crystal" },
-        { "kind": "Color", "code": "White" }
+        { "kind": "Material", "code": "Stone" },
+        { "kind": "Color", "code": "Purple" },
+        { "kind": "Shape", "code": "Sphere" }
       ],
       "items": [
         { "name": "Đường kính 6cm", "price": 450000, "stock": 15, "sku": "TA-6", "sizeClass": "Small" },
@@ -82,11 +91,13 @@
       "category": "Tượng phong thủy",
       "placement": "Desk",
       "primaryElement": "Kim",
+      "secondaryElements": ["Tho", "Hoa"],
       "vibes": ["Focus"],
       "styles": ["Classic"],
       "elementInputs": [
-        { "kind": "Material", "code": "Metal" },
-        { "kind": "Color", "code": "White" }
+        { "kind": "Material", "code": "Brass" },
+        { "kind": "Material", "code": "Stone" },
+        { "kind": "Color", "code": "Copper" }
       ],
       "items": [
         { "name": "Cao 10cm", "price": 890000, "stock": 8, "sku": "TH-10", "sizeClass": "Small" }
@@ -98,6 +109,7 @@
       "category": "Đèn trang trí",
       "placement": "Desk",
       "primaryElement": "Hoa",
+      "secondaryElements": ["Tho", "Kim"],
       "vibes": ["Relax"],
       "styles": ["Bohemian"],
       "elementInputs": [

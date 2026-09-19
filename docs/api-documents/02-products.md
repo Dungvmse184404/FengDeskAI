@@ -151,7 +151,7 @@ Xóa mềm sản phẩm.
 
 ## Model 3D (sinh từ ảnh qua Meshy AI — multi-image, 1–4 ảnh)
 
-> Thiết kế đầy đủ: `docs/adr/refactor-model3d-request-flow.md`. **Request đầu tiên** (Initial, sản
+> Thiết kế đầy đủ: [`docs/adr/refactor-model3d-request-flow.md`](../adr/refactor-model3d-request-flow.md). **Request đầu tiên** (Initial, sản
 > phẩm chưa có model) chạy **tự động** (worker nền gọi Meshy, tự retry nếu Meshy hết credit).
 > **Request tiếp theo** (Regenerate, sản phẩm đã có model) vào hàng chờ, chỉ **staff sàn** xử lý
 > thủ công — xem [26-model3d-requests.md](./26-model3d-requests.md).

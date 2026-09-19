@@ -75,6 +75,9 @@ public sealed record PersonalTargetResponse
     /// <summary>Các hành đang cần được bồi (tên tiếng Việt), theo thứ tự ưu tiên.</summary>
     public List<string> Elements { get; init; } = new();
 
+    /// <summary>v3.6 — kỵ thần (tên tiếng Việt): phần sản phẩm rơi vào đây bị trừ thẳng. Rỗng khi không suy được.</summary>
+    public List<string> AvoidElements { get; init; } = new();
+
     public string Note { get; init; } = null!;
 }
 
@@ -150,6 +153,9 @@ public sealed record ProductFitResponse
 
     /// <summary>Tỉ lệ <c>Current</c> đến từ dữ liệu user khai thay vì nền phòng (0..1).</summary>
     public decimal Confidence { get; init; }
+
+    /// <summary>v3.5 — hệ số cap phiếu tag đã áp (1 = không cap). Cùng nghĩa với <c>WorkspaceElementAnalysisResponse.tagVotesScale</c>.</summary>
+    public decimal TagVotesScale { get; init; } = 1m;
 }
 
 /// <summary>
@@ -172,6 +178,15 @@ public sealed record PersonalFitResponse
 
     /// <summary>Vector "người đang cần hành gì" (dụng thần Tứ Trụ, fallback Nạp Âm) — Σ=1.</summary>
     public List<ProductElementRow> PersonalNeedVector { get; init; } = new();
+
+    /// <summary><c>TuTru</c> (có giờ sinh) | <c>NapAm</c> (chỉ năm sinh) — vector trên dựng từ đâu.</summary>
+    public string PersonalNeedSource { get; init; } = null!;
+
+    /// <summary>Câu của <c>PersonalTargetBuilder</c>: thân vượng/nhược, nhật chủ… hoặc lời mời bổ sung giờ sinh.</summary>
+    public string PersonalNeedNoteVi { get; init; } = null!;
+
+    /// <summary>v3.6 — kỵ thần (mã <c>Kim|Moc|Thuy|Hoa|Tho</c>). Phần sản phẩm rơi vào đây là dòng <c>PERSONAL_AVOID_SCORE</c>.</summary>
+    public List<string> PersonalAvoidElements { get; init; } = new();
 
     /// <summary>Vector ngũ hành của sản phẩm (Σ=1).</summary>
     public List<ProductElementRow> ProductVector { get; init; } = new();

@@ -44,7 +44,7 @@ Onboarding steps (from AhaMove "Overall Process"):
 2. Integrate on staging, complete the recommended test cases, submit the [UAT Completion Form](https://forms.gle/HAo3hVUw6XEq4M1a8).
 3. Once approved → receive **production API key** → golive.
 
-**Config (never commit secrets — follow `CLAUDE.md` §"Cấu hình & bảo mật"):**
+**Config (never commit secrets — follow [`CLAUDE.md`](../../CLAUDE.md#cấu-hình--bảo-mật) §"Cấu hình & bảo mật"):**
 
 ```jsonc
 // appsettings.json — empty defaults only

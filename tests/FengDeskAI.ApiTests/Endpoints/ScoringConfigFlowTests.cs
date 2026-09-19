@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Features.CustomerCare.Engine;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -51,6 +52,20 @@ public sealed class ScoringConfigFlowTests
         Assert.Contains("SELF_SHARE", codes);
         Assert.Contains("SUPPORT_SHARE", codes);
         Assert.Contains("MIN_SCORE_THRESHOLD", codes);
+        Assert.Contains("TAG_VOTES_CAP", codes);
+    }
+
+    [Fact(DisplayName = "SCORE-01b [Normal] v3.5 seeds: TAG_VOTES_CAP = 5, PERSONAL_WEIGHT_PRIVATE = 0.30, SHARED = 0.20")]
+    public async Task GetParams_AfterSeeding_CarriesV35Values()
+    {
+        var rows = (await ApiEnvelope.DataAsync(await Manager().GetAsync("/api/admin/scoring/params")))
+            .EnumerateArray()
+            .ToDictionary(p => p.GetProperty("code").GetString()!, p => p.GetProperty("value").GetDecimal());
+
+        // Cùng con số với ScoringParameters.Default — DB thiếu row thì engine vẫn chấm y hệt.
+        Assert.Equal(5.00m, rows["TAG_VOTES_CAP"]);
+        Assert.Equal(0.30m, rows["PERSONAL_WEIGHT_PRIVATE"]);
+        Assert.Equal(0.20m, rows["PERSONAL_WEIGHT_SHARED"]);
     }
 
     [Fact(DisplayName = "SCORE-02 [Normal] Updating a parameter overwrites its value")]
@@ -375,6 +390,96 @@ public sealed class ScoringConfigFlowTests
         var response = await Manager().DeleteAsync($"/api/admin/scoring/workspace-type-elements/{Guid.NewGuid()}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    // ===================== Hồ sơ ngũ hành nghề (N3) =====================
+
+    [Fact(DisplayName = "SCORE-OCC-01 [Normal] Seeded occupations carry a Σ=1 profile")]
+    public async Task GetOccupations_AfterSeeding_ProfilesSumToOne()
+    {
+        var response = await Manager().GetAsync("/api/admin/scoring/occupations");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var rows = (await ApiEnvelope.DataAsync(response)).EnumerateArray().ToList();
+        var finance = rows.Single(r => r.GetProperty("code").GetString() == "FINANCE");
+        var profile = finance.GetProperty("profile").EnumerateArray().ToList();
+
+        Assert.Equal(5, profile.Count);
+        Assert.Equal(1m, profile.Sum(e => e.GetProperty("share").GetDecimal()));
+        Assert.Equal(0.5m, profile.Single(e => e.GetProperty("element").GetString() == "Kim").GetProperty("share").GetDecimal());
+    }
+
+    [Fact(DisplayName = "SCORE-OCC-02 [Normal] Replacing a profile overwrites it wholesale")]
+    public async Task ReplaceOccupationProfile_ValidSum_Overwrites()
+    {
+        var code = await CreateOccupationAsync();
+
+        var first = await Manager().PutAsJsonAsync($"/api/admin/scoring/occupations/{code}/profile", new
+        {
+            entries = new[] { new { element = "Kim", share = 0.6m }, new { element = "Thuy", share = 0.4m } },
+        });
+        Assert.Equal(HttpStatusCode.OK, first.StatusCode);
+
+        var second = await Manager().PutAsJsonAsync($"/api/admin/scoring/occupations/{code}/profile", new
+        {
+            entries = new[] { new { element = "Moc", share = 1.0m } },
+        });
+        Assert.Equal(HttpStatusCode.OK, second.StatusCode);
+
+        var profile = (await ApiEnvelope.DataAsync(second)).GetProperty("profile").EnumerateArray().ToList();
+        Assert.Single(profile);
+        Assert.Equal("Moc", profile[0].GetProperty("element").GetString());
+    }
+
+    [Theory(DisplayName = "SCORE-OCC-03 [Abnormal] A profile whose shares do not sum to 1 is rejected")]
+    [InlineData(0.6, 0.3)]
+    [InlineData(0.7, 0.4)]
+    public async Task ReplaceOccupationProfile_WrongSum_IsRejected(double kim, double thuy)
+    {
+        var code = await CreateOccupationAsync();
+
+        var response = await Manager().PutAsJsonAsync($"/api/admin/scoring/occupations/{code}/profile", new
+        {
+            entries = new[] { new { element = "Kim", share = (decimal)kim }, new { element = "Thuy", share = (decimal)thuy } },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Contains("Tổng share", await ApiEnvelope.MessageAsync(response));
+    }
+
+    [Fact(DisplayName = "SCORE-OCC-04 [Abnormal] A profile with a duplicated element is rejected")]
+    public async Task ReplaceOccupationProfile_DuplicateElement_IsRejected()
+    {
+        var code = await CreateOccupationAsync();
+
+        var response = await Manager().PutAsJsonAsync($"/api/admin/scoring/occupations/{code}/profile", new
+        {
+            entries = new[] { new { element = "Kim", share = 0.5m }, new { element = "Kim", share = 0.5m } },
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact(DisplayName = "SCORE-OCC-05 [Normal] OCCUPATION_WEIGHT is seeded at 0.20 (P6.6) and matches the code default")]
+    public async Task GetParams_ContainsOccupationWeightAtTarget()
+    {
+        var response = await Manager().GetAsync("/api/admin/scoring/params");
+        var rows = (await ApiEnvelope.DataAsync(response)).EnumerateArray().ToList();
+
+        // Cùng số với ScoringParameters.Default — DB thiếu row thì engine vẫn chấm y hệt.
+        var row = rows.Single(r => r.GetProperty("code").GetString() == "OCCUPATION_WEIGHT");
+        Assert.Equal(0.20m, row.GetProperty("value").GetDecimal());
+        Assert.Equal(ScoringParameters.Default.OccupationWeight, row.GetProperty("value").GetDecimal());
+        Assert.DoesNotContain(rows, r => r.GetProperty("code").GetString() == "OCCUPATION_SHARE");
+    }
+
+    private async Task<string> CreateOccupationAsync()
+    {
+        var code = NewCode("OCC");
+        var response = await Manager().PostAsJsonAsync("/api/admin/scoring/occupations",
+            new { code, nameVi = "Nghề test", isActive = true, sortOrder = 999 });
+        Assert.True(response.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(response, "tạo nghề"));
+        return code;
     }
 
     // ===================== Helper =====================

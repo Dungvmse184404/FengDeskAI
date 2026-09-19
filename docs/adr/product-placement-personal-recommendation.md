@@ -1,13 +1,13 @@
 # ARD — ProductPlacement & gợi ý vật phẩm mang theo người
 
 > **Status:** Implemented (2026-08-14).
-> **Tiền đề:** engine v3 (`recommendation-scoring-v3.md`) đang chạy. Thay đổi này **không đụng công thức v3** cho đồ để bàn — chỉ thêm một trục phân loại sản phẩm và một chế độ chấm điểm thứ hai.
+> **Tiền đề:** engine v3 ([`recommendation-scoring-v3.md`](./recommendation-scoring-v3.md)) đang chạy. Thay đổi này **không đụng công thức v3** cho đồ để bàn — chỉ thêm một trục phân loại sản phẩm và một chế độ chấm điểm thứ hai.
 > **Cập nhật 28/08/2026 — bỏ `Architectural`.** Giá trị này chấm y hệt `Desk` (xem §3, cột "v1 tạm"),
 > tức một nhánh luật trùng lặp giữ chỗ cho tính năng "hướng bắt buộc của vật trấn yểm" ở §7 mà chưa làm.
 > Enum còn **4 giá trị**; vật trấn yểm nay khai `Desk`. Muốn làm §7 thì thêm lại **kèm** cột hướng bắt buộc
 > trên `products` — thêm enum suông chỉ nhân đôi nhánh test mà không đổi hành vi.
 >
-> **Không xung đột** với `recommendation-scoring-v4-polarity.md` (vẫn ở trạng thái Proposal): v4 thêm trục Âm/Dương chạy song song, ADR này thêm trục Placement — hai việc độc lập, ghép được.
+> **Không xung đột** với [`recommendation-scoring-v4-polarity.md`](./recommendation-scoring-v4-polarity.md) (vẫn ở trạng thái Proposal): v4 thêm trục Âm/Dương chạy song song, ADR này thêm trục Placement — hai việc độc lập, ghép được.
 
 ---
 
@@ -119,7 +119,7 @@ Clamp **ở tầng tool**: `topN` mặc định 4, kẹp 3..5. `RecommendationSe
 ## 7. Không làm (out of scope)
 
 - **Nhánh hướng cứng cho `Architectural`.** Giá trị enum được thêm ngay để tránh migration lần hai, nhưng v1 nó chấm y hệt `Desk`. Hướng bắt buộc của vật trấn yểm (gương bát quái phải chiếu ra ngoài) là **thuộc tính của chính vật phẩm**, không suy ra được từ hành trội như `ValidateDirection` đang làm → cần thêm cột hướng bắt buộc trên `products` + nhánh loại-cứng. **Rủi ro trong giai đoạn này:** nếu catalog có gương bát quái thật, nó vẫn nhận hint hướng suy-ra-từ-ngũ-hành, tức vẫn có thể sai. Phương án an toàn: chưa bán nhóm đó cho tới khi làm nhánh cứng.
-- **Lọc theo ý định (cầu tài / bình an / sức khỏe / thi cử).** `VibeCodes` hiện chỉ có Focus/Relax/Creative/Calm/Energize — là vibe của *không gian*. Thêm nhóm vibe mới đòi khai lại data cho toàn bộ sp `Carry`. V1 chấm thuần ngũ hành cá nhân — vốn là tiêu chí chính khi chọn vật đeo. *(Bộ lọc vibe cứng nêu ở đây đã được mềm hóa ngay sau đó — xem `vibe-soft-scoring.md`.)*
+- **Lọc theo ý định (cầu tài / bình an / sức khỏe / thi cử).** `VibeCodes` hiện chỉ có Focus/Relax/Creative/Calm/Energize — là vibe của *không gian*. Thêm nhóm vibe mới đòi khai lại data cho toàn bộ sp `Carry`. V1 chấm thuần ngũ hành cá nhân — vốn là tiêu chí chính khi chọn vật đeo. *(Bộ lọc vibe cứng nêu ở đây đã được mềm hóa ngay sau đó — xem [`vibe-soft-scoring.md`](./vibe-soft-scoring.md).)*
 - **Gọi AI microservice diễn giải cho phiên cá nhân.** `Contracts/Recommendation` có `AiWorkspaceInfo` bắt buộc — gửi một workspace giả là dữ liệu sai cho AI. Mở rộng contract kéo theo sửa cả service Python. Phiên cá nhân dừng ở `Status = Scored`, không `Summary`; LLM chat (người tiêu thụ thật) tự diễn giải từ `matchFacts`/`cautionFacts`.
 - **Trục `ProductNature`** (Living/Consumable như thuộc tính độc lập với vị trí) — đã gộp vào enum phẳng, xem §2.
 - **Engine đọc `WorkspaceProfile.Lighting`.** Hiện `Lighting` chỉ được nhét vào payload gửi AI diễn giải, **không tham gia chấm điểm**. Đưa ánh sáng vào công thức (đặc biệt cho `Living`) là tính năng riêng đáng làm nhưng độc lập với thay đổi này.

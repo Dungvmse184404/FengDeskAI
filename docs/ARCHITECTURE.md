@@ -1,6 +1,6 @@
 # SEP490 · FengDeskAI — System Architecture
 
-> **Scope:** Kiến trúc tổng thể của toàn workspace `SEP490` (không phải của riêng repo con). Tập trung vào *quan hệ giữa các thành phần* và *nơi tìm cái gì* — chi tiết layer từng repo xem `FengDeskAI/CLAUDE.md`, `FengDeskAI/docs/PROJECT-GUIDE.md`, `FengDeskAI_FE/README.md`.
+> **Scope:** Kiến trúc tổng thể của toàn workspace `SEP490` (không phải của riêng repo con). Tập trung vào *quan hệ giữa các thành phần* và *nơi tìm cái gì* — chi tiết layer từng repo xem [`FengDeskAI/CLAUDE.md`](../CLAUDE.md), `FengDeskAI/docs/PROJECT-GUIDE.md`, `FengDeskAI_FE/README.md`.
 >
 > Mã đề tài `SU26SE093` (Capstone SU26). Domain: **e-commerce phong thủy bàn làm việc + gợi ý bằng AI**.
 
@@ -172,7 +172,7 @@ src/
 | **TanStack Query** | Server cache theo query key: `["shop-staff", storeId]`, `["my-store-invitations"]`, `["addresses"]`, `["products", filter]`… Mutation dùng `invalidateQueries` để đồng bộ. |
 | **Component state** | Modal open/close, form draft, dropdown highlight. |
 
-**Rule** (theo `AGENTS.md`): **không fetch API trực tiếp trong UI component**, luôn qua `api/*.ts` + hook.
+**Rule** (theo [`AGENTS.md`](./AGENTS.md)): **không fetch API trực tiếp trong UI component**, luôn qua `api/*.ts` + hook.
 
 ### 4.4 Routing + guards
 
@@ -212,9 +212,9 @@ Access token 60′, refresh 14 ngày, rotation mỗi lần refresh (`httpClient`
 4. Trả `RecommendationResponse` + log `recommendation_logs`.
 
 Engine **là source of truth về tập sản phẩm** — AI không được thêm/bớt (`ApplyAiResponse` loại `ProductId` lạ).
-⚠️ AI **vẫn hoán vị được `FinalRank`** trong topN — xem `docs/adr/personalized-recommendation-v3.1.md` §7.2.
+⚠️ AI **vẫn hoán vị được `FinalRank`** trong topN — xem [`docs/adr/personalized-recommendation-v3.1.md`](./adr/personalized-recommendation-v3.1.md#7-bug-sửa-kèm) §7.2.
 
-Chi tiết: `docs/ard/bounded-contexts/customer-care.md` · `docs/api-documents/18-recommendations.md`.
+Chi tiết: [`docs/ard/bounded-contexts/customer-care.md`](./ard/bounded-contexts/customer-care.md) · [`docs/api-documents/18-recommendations.md`](./api-documents/18-recommendations.md).
 
 ### 5.3 Chat (người ↔ AI + người ↔ người)
 
@@ -235,7 +235,7 @@ POST /api/orders (checkout)
 
 Vendor xử lý Delivery lifecycle: `Pending → Preparing → Shipped → Delivered / Returned`. Webhook nhà vận chuyển POST `/api/shipping/webhook` (header `X-Webhook-Secret`) → cập nhật `delivery_progress_logs`.
 
-### 5.5 Garden Staff — invitation flow (mới, xem `FengDeskAI/docs/refactor-garden-staff-management.md`)
+### 5.5 Garden Staff — invitation flow (mới, xem [`docs/adr/refactor-garden-staff-management.md`](./adr/refactor-garden-staff-management.md))
 
 ```
 Owner  POST /api/stores/{id}/staff  {staffId}
@@ -323,15 +323,15 @@ Không có global `GardenStaff`. Quyền trên 1 store cụ thể check qua:
 
 | Câu hỏi | Nơi trả lời |
 |---|---|
-| Convention BE / thêm entity mới / EF migration flow | `FengDeskAI/docs/PROJECT-GUIDE.md` §10, `FengDeskAI/CLAUDE.md` |
+| Convention BE / thêm entity mới / EF migration flow | `FengDeskAI/docs/PROJECT-GUIDE.md` §10, [`FengDeskAI/CLAUDE.md`](../CLAUDE.md) |
 | API contract chi tiết | `FengDeskAI/docs/api-documents/` (đánh số theo feature) |
 | ERD & state diagrams | `FengDeskAI/docs/erd/SEP490_FengDeskAI.drawio` |
 | Kiến trúc tổng thể (chi tiết, cập nhật) | `FengDeskAI/docs/ard/architecture-core/` |
 | Từng phân hệ nghiệp vụ (bounded context) | `FengDeskAI/docs/ard/bounded-contexts/` |
 | Lịch sử thay đổi: feature design, refactor, fix, tích hợp | `FengDeskAI/docs/adr/*.md` |
 | Deliverables trường (Review1/2) | `Documents/1_SEP490/`, `Documents/2_SEP490/` |
-| Branching + Conventional Commits | `CONTRIBUTING.md` (workspace root) |
-| Rule cho AI agents | `AGENTS.md` (workspace root) |
+| Branching + Conventional Commits | [`CONTRIBUTING.md`](./CONTRIBUTING.md) (workspace root) |
+| Rule cho AI agents | [`AGENTS.md`](./AGENTS.md) (workspace root) |
 | Code intel (call graph, symbol search) | `.codegraph/codegraph.db` (dev-only, dùng codegraph MCP) |
 | FE feature layout / API layer | `FengDeskAI_FE/src/features/README.md`, `src/lib/httpClient.ts` |
 

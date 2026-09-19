@@ -551,9 +551,9 @@ Chạy thử để xem model nhỏ có bám mã được không **trước khi**
 
 ## 12. Tài liệu phải cập nhật sau khi merge
 
-- `docs/api-documents/20-chat.md` — mô tả tool + tham số.
-- `docs/api-documents/09-orders.md` — luồng đặt hàng qua AI.
+- [`docs/api-documents/20-chat.md`](../api-documents/20-chat.md) — mô tả tool + tham số.
+- [`docs/api-documents/09-orders.md`](../api-documents/09-orders.md) — luồng đặt hàng qua AI.
 - `docs/erd/SEP490_FengDeskAI.drawio` — thêm bảng `ai_order_drafts`.
-- `ARCHITECTURE.md` §3.4 — thêm `AiOrderDraftCleanupWorker` vào danh sách background worker.
-- `docs/adr/ai-order-tool-design.md` — ADR cũ mô tả draft trong cache: đánh dấu superseded bởi file này.
-- `CLAUDE.md` mục "AI tools" — ghi rõ quy ước handle.
+- [`ARCHITECTURE.md`](../ARCHITECTURE.md#34-cross-cutting) §3.4 — thêm `AiOrderDraftCleanupWorker` vào danh sách background worker.
+- [`docs/adr/ai-order-tool-design.md`](./ai-order-tool-design.md) — ADR cũ mô tả draft trong cache: đánh dấu superseded bởi file này.
+- [`CLAUDE.md`](../../CLAUDE.md#ai-tools) mục "AI tools" — ghi rõ quy ước handle.

@@ -1,5 +1,6 @@
-using FengDeskAI.Application.Features.CustomerCare.DTOs;
+﻿using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.CustomerCare.Services;
+using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -25,6 +26,18 @@ public class RecommendationsController : ApiControllerBase
     [HttpPost]
     public async Task<IActionResult> Generate([FromBody] GenerateRecommendationRequest request, CancellationToken ct)
         => ToActionResult(await _service.GenerateAsync(CurrentUserId, request, ct));
+
+    /// <summary>
+    /// Xem trước gợi ý cho một workspace: chỉ engine chấm điểm, không AI diễn giải, không lưu phiên.
+    /// Trang hồ sơ workspace gọi để hiện danh sách "sản phẩm đề xuất" kèm hover-preview radar.
+    /// </summary>
+    [HttpGet("preview")]
+    public async Task<IActionResult> Preview(
+        [FromQuery] Guid workspaceProfileId, [FromQuery] int? topN, [FromQuery] Aspiration? aspiration, CancellationToken ct)
+        => ToActionResult(await _service.PreviewAsync(
+            CurrentUserId,
+            new GenerateRecommendationRequest { WorkspaceProfileId = workspaceProfileId, TopN = topN, Aspiration = aspiration },
+            ct));
 
     /// <summary>Gợi ý vật phẩm mang theo người (đeo tay, mặt dây, treo xe) — chấm theo bản mệnh, không cần workspace.</summary>
     [HttpPost("personal")]

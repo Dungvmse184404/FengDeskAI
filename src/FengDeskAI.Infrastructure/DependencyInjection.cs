@@ -293,6 +293,7 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, ScoringParamSeeder>();
         services.AddScoped<IDataSeeder, OccupationSeeder>();
+        services.AddScoped<IDataSeeder, OccupationElementProfileSeeder>();
         services.AddScoped<IDataSeeder, ElementInputMapSeeder>();
         services.AddScoped<IDataSeeder, WorkPurposeModifierSeeder>();
         services.AddScoped<IDataSeeder, WorkspaceTypeSeeder>();

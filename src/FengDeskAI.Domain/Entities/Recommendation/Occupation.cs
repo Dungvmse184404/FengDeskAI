@@ -30,5 +30,6 @@ public class Occupation : BaseEntity
 
     public int SortOrder { get; set; }
 
-    public ICollection<OccupationElementModifier> Modifiers { get; set; } = new List<OccupationElementModifier>();
+    /// <summary>Hồ sơ ngũ hành Σ=1 (5 dòng). Rỗng = nghề chưa có hồ sơ ⇒ engine bỏ qua, không đoán.</summary>
+    public ICollection<OccupationElementProfile> Profile { get; set; } = new List<OccupationElementProfile>();
 }

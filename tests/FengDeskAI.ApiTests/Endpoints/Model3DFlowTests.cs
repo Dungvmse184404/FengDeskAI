@@ -1,4 +1,4 @@
-using System.Net;
+﻿using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FengDeskAI.ApiTests.Infrastructure;
@@ -108,7 +108,15 @@ public sealed class Model3DFlowTests
         var productId = await ProductWithImageAsync();
         var requestId = await RequestIdAsync(productId);
 
-        var response = await Staff().GetAsync("/api/model3d-requests?status=AwaitingStaff&take=100");
+        // Hàng chờ sắp theo `created_at` TĂNG DẦN, nên request vừa tạo luôn nằm Ở CUỐI. DB test
+        // dùng chung và không dọn giữa các lần chạy, nên lấy trang đầu rồi tìm là sai sớm muộn: ca này
+        // từng xanh, rồi đỏ khi số dòng AwaitingStaff tích luỹ vượt quá `take`. Nhảy thẳng tới trang cuối.
+        var firstPage = await Staff().GetAsync("/api/model3d-requests?status=AwaitingStaff&take=1");
+        Assert.Equal(HttpStatusCode.OK, firstPage.StatusCode);
+        int total = (await ApiEnvelope.DataAsync(firstPage)).GetProperty("total").GetInt32();
+
+        var response = await Staff().GetAsync(
+            $"/api/model3d-requests?status=AwaitingStaff&skip={Math.Max(0, total - 5)}&take=5");
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var data = await ApiEnvelope.DataAsync(response);

@@ -1,7 +1,7 @@
 # ARD — Bản mẫu sản phẩm (product template): nguồn phong thủy dùng chung giữa các shop
 
 > **Status:** Proposal — chưa code. Cần chốt 4 điểm ở §8 trước khi làm.
-> **Tiền đề:** engine v3 + `ProductPlacement` (`product-placement-personal-recommendation.md`). Không đụng công thức chấm điểm, chỉ đổi **nguồn dữ liệu đầu vào** của sản phẩm.
+> **Tiền đề:** engine v3 + `ProductPlacement` ([`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md)). Không đụng công thức chấm điểm, chỉ đổi **nguồn dữ liệu đầu vào** của sản phẩm.
 
 ---
 

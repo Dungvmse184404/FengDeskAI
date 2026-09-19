@@ -45,7 +45,7 @@ tab **"Quản lý cửa hàng"** → create/select a shop and fill its address �
 
 GHN has **no Bearer/JWT and no token expiry flow like AhaMove** — the Token is a long-lived API key. Keep it secret.
 
-**Config (empty defaults, real values from env — per `CLAUDE.md` §"Cấu hình & bảo mật"):**
+**Config (empty defaults, real values from env — per [`CLAUDE.md`](../../CLAUDE.md#cấu-hình--bảo-mật) §"Cấu hình & bảo mật"):**
 
 ```jsonc
 // appsettings.json
@@ -122,7 +122,7 @@ dotnet ef migrations add GhnShippingFields -p src/FengDeskAI.Infrastructure -s s
 dotnet ef database update                  -p src/FengDeskAI.Infrastructure -s src/FengDeskAI.WebAPI
 ```
 
-Remember to update the ERD (`Documents/ERD/SEP490_FengDeskAI.drawio`) per `CLAUDE.md`.
+Remember to update the ERD (`Documents/ERD/SEP490_FengDeskAI.drawio`) per [`CLAUDE.md`](../../CLAUDE.md).
 
 ---
 

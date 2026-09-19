@@ -35,7 +35,7 @@ public interface IScoringConfigAdminService
     // occupations + occupation_element_modifiers (P5)
     Task<IServiceResult<List<OccupationAdminDto>>> GetOccupationsAsync(bool includeInactive, CancellationToken ct = default);
     Task<IServiceResult<OccupationAdminDto>> UpsertOccupationAsync(string? code, UpsertOccupationRequest request, CancellationToken ct = default);
-    Task<IServiceResult<OccupationAdminDto>> ReplaceOccupationModifiersAsync(string code, ReplaceOccupationModifiersRequest request, CancellationToken ct = default);
+    Task<IServiceResult<OccupationAdminDto>> ReplaceOccupationProfileAsync(string code, ReplaceOccupationProfileRequest request, CancellationToken ct = default);
     Task<IServiceResult> DeleteOccupationAsync(string code, CancellationToken ct = default);
 
     // workspace_type_elements

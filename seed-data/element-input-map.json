@@ -1,5 +1,5 @@
 {
-  "weightScale": 8.0,
+  "weightScale": 1.0,
   "rows": [
     { "kind": "Color",       "code": "Red",               "labelVi": "Đỏ",                      "element": "Hoa",   "weight": 1.0 },
     { "kind": "Color",       "code": "Orange",            "labelVi": "Cam",                     "element": "Hoa",   "weight": 0.7 },

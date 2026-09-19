@@ -58,54 +58,41 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var deliveredContribs = new List<ProductContribution>();
         var previewContribs = new List<ProductContribution>();
 
+        var scoringParams = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+
         if (placements.Count > 0)
         {
-            var productIds = placements.Select(p => p.ProductId).Distinct().ToList();
-            var inputsByProduct = (await _uow.ScoringConfig.GetProductElementInputsAsync(productIds, ct))
-                .GroupBy(i => i.ProductId)
-                .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
-            var prms = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+            // Vector + số phiếu dựng bằng PlacedProductVectorBuilder — CÙNG hàm mà engine xếp hạng
+            // gợi ý và trang chấm điểm một sản phẩm dùng. Chép logic này ra nhiều chỗ từng là nguyên
+            // nhân radar và bộ gợi ý nói hai chuyện khác nhau về cùng một căn phòng (§19).
+            var placedVectors = PlacedProductVectorBuilder.Build(
+                placements,
+                await _uow.ScoringConfig.GetProductElementInputsByProductAsync(
+                    placements.Select(pl => pl.ProductId).Distinct().ToList(), ct),
+                ctx.Resolver,
+                scoringParams);
 
-            foreach (var pl in placements)
+            deliveredContribs.AddRange(placedVectors.DeliveredContributions());
+            previewContribs.AddRange(placedVectors.PreviewContributions());
+
+            var imageByProduct = placements
+                .GroupBy(pl => pl.ProductId)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.First().Product.Images
+                        .OrderBy(img => img.SortOrder).Select(img => img.Url).FirstOrDefault());
+
+            placed.AddRange(placedVectors.Select(r => new PlacedProductResponse
             {
-                var p = pl.Product;
-                ElementVector? overridden = p is { ElementTho: { } t, ElementKim: { } k, ElementThuy: { } w, ElementMoc: { } m, ElementHoa: { } h }
-                    ? new ElementVector(t, k, w, m, h)
-                    : null;
-                var inputs = inputsByProduct.TryGetValue(p.Id, out var list)
-                    ? list
-                    : Array.Empty<ProductElementInput>();
-
-                var vector = ProductVectorProvider.Build(
-                    p.IsVectorOverridden, overridden, inputs, ctx.Resolver,
-                    p.Elements.Select(e => (e.Element, e.IsPrimary)), prms);
-                if (vector.L1() <= 0m) continue; // sản phẩm chưa có data ngũ hành → bỏ qua
-
-                // Phiếu = Σ weight các DecorItem code của sản phẩm trong element_input_map
-                // (đồng bộ với tag hiện trạng cùng tên); không gắn DecorItem → 1 phiếu mặc định.
-                var decorCodes = inputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
-                var voteWeight = decorCodes.Count > 0
-                    ? decorCodes.Sum(c => ctx.Resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
-                    : 1.0m;
-                if (voteWeight <= 0m) voteWeight = 0m; // admin cố tình cho code weight 0 → sản phẩm không ảnh hưởng
-
-                var isDelivered = pl.OrderItem.Delivery?.Status == Domain.Enums.Sales.DeliveryStatus.Delivered;
-                var contrib = new ProductContribution(pl.ProductId, pl.OrderItem.ProductName, vector, voteWeight);
-                previewContribs.Add(contrib);
-                if (isDelivered) deliveredContribs.Add(contrib);
-
-                placed.Add(new PlacedProductResponse
-                {
-                    PlacementId = pl.Id,
-                    OrderItemId = pl.OrderItemId,
-                    ProductId = pl.ProductId,
-                    ProductName = pl.OrderItem.ProductName,
-                    ProductImage = p.Images.OrderBy(img => img.SortOrder).Select(img => img.Url).FirstOrDefault(),
-                    DeliveryStatus = pl.OrderItem.Delivery?.Status.ToString() ?? "Unknown",
-                    IsDelivered = isDelivered,
-                    VoteWeight = Math.Round(voteWeight, 2),
-                });
-            }
+                PlacementId = r.PlacementId,
+                OrderItemId = r.OrderItemId,
+                ProductId = r.ProductId,
+                ProductName = r.ProductName,
+                ProductImage = imageByProduct.TryGetValue(r.ProductId, out var url) ? url : null,
+                DeliveryStatus = r.DeliveryStatus,
+                IsDelivered = r.IsDelivered,
+                VoteWeight = Math.Round(r.VoteWeight, 2),
+            }));
         }
 
         // ── 3 vector: ideal/adjusted như cũ; current = hiện trạng + sản phẩm ĐÃ GIAO; preview = + cả đang giao.
@@ -113,17 +100,16 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         var adjustedIdeal = WorkspaceVectorBuilder.ApplyIntent(ideal, ctx.Modifiers);
         // Chủ nhân phòng là một nguồn ngũ hành, cùng cơ chế phiếu với nền phòng và tag. Phải truyền vào
         // CẢ current lẫn preview, nếu không hai lớp radar sẽ ở hai thang khác nhau.
-        var scoringParams = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
         var owner = await _uow.Users.GetByIdAsync(userId, ct);
         var person = PersonPresenceBuilder.Build(owner?.DateOfBirth, ctx.Scope, scoringParams);
 
         var breakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
             ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, deliveredContribs,
-            person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha);
+            person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha, scoringParams.TagVotesCap);
         var current = breakdown.Current;
         var previewCurrent = WorkspaceVectorBuilder
             .BuildCurrentBreakdown(ctx.ProfileInputs, ctx.Resolver, ctx.TypeElements, previewContribs,
-                person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha)
+                person, scoringParams.InteriorPriorVotes, scoringParams.EvidenceSaturationAlpha, scoringParams.TagVotesCap)
             .Current;
         var gap = adjustedIdeal.Subtract(current);
         var previewGap = adjustedIdeal.Subtract(previewCurrent);
@@ -167,6 +153,7 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             EvidenceCount = breakdown.EvidenceCount,
             TotalVotes = Math.Round(breakdown.TotalVotes, 3),
             SaturationAlpha = scoringParams.EvidenceSaturationAlpha,
+            TagVotesScale = Math.Round(breakdown.TagVotesScale, 3),
             Confidence = CurrentBreakdownMapping.ConfidenceOf(breakdown),
             PersonalDirection = await BuildPersonalDirectionAsync(
                 ctx.Scope, user?.DateOfBirth, adjustedIdeal, gap, ct),

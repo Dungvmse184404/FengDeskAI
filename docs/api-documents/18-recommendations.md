@@ -49,15 +49,15 @@ d     = (1 − Wp)·ĝ + Wp·r          // vector hướng tổng hợp, mỗi t
 score = clamp( productVector · d − userPenalty − dirPenalty − vibePenalty , −1, 1 )
 ```
 
-| `WorkspaceScope` | `Wp` (`PERSONAL_WEIGHT_*`) — **giá trị đích** | Seed hiện tại |
+| `WorkspaceScope` | `Wp` (`PERSONAL_WEIGHT_*`) — seed v3.5 | v3.1–v3.4 |
 |---|---:|---:|
-| `Private` | 0.50 | **0.00** |
-| `Shared` | 0.30 | **0.00** |
+| `Private` | **0.30** | 0.50 (và 0.00 ở môi trường seed trước khi bật) |
+| `Shared` | **0.20** | 0.30 |
 | `Public` | 0.00 | 0.00 |
 
-> ⚠️ **Seed cả ba = 0.00** — trục cá nhân đang **TẮT**, điểm hiện là 100% nhu cầu phòng. Bật bằng
-> `PUT /api/admin/scoring/params/PERSONAL_WEIGHT_PRIVATE` (và `_SHARED`) sau khi đối chiếu golden set;
-> không cần deploy. Đừng đọc cột "giá trị đích" như thể nó đang chạy.
+> v3.5 hạ `Wp` để phòng luôn là số hạng lớn nhất: ở 0.50, sản phẩm phòng đã **thừa** hành đó vẫn "Phù hợp
+> 61%" chỉ vì tỷ hòa mệnh — điểm nói ngược radar. Migration `ScoringParamsV35` kéo mọi môi trường về cùng số
+> (kể cả DB còn `0.00` do đổi seed v3.1 không migration). Chỉnh runtime: `PUT /api/admin/scoring/params/…`.
 
 `Wp = 0` **bắt buộc** khi user chưa có `dateOfBirth` → điểm = 100% nhu cầu phòng. Đây cũng là công tắc
 TẮT của v3.1/v3.2: ở `Wp = 0` luật khắc bản mệnh rơi trọn về v3 (`Private` loại cứng), **trừ**
@@ -116,24 +116,25 @@ Vector mục tiêu là **thứ NGƯỜI đang cần**, không phải phòng:
     { "code": "GAP_SCORE",      "labelVi": "Khớp nhu cầu của phòng", "value": 0.600, "weight": 0.50, "contribution": 0.300, "reasonVi": "…" },
     { "code": "PERSONAL_SCORE", "labelVi": "Hợp bản mệnh của bạn",   "value": 1.000, "weight": 0.50, "contribution": 0.500, "reasonVi": "…" }
   ],
-  "penalties": [
-    { "code": "USER_CONFLICT_PENALTY", "labelVi": "Khắc bản mệnh",     "value": 0.000, "applied": false, "reasonVi": "…" },
-    { "code": "DIRECTION_PENALTY",     "labelVi": "Hướng hợp bị chắn", "value": 0.000, "applied": false },
-    { "code": "VIBE_MISMATCH_PENALTY", "labelVi": "Lệch vibe mục đích","value": 0.000, "applied": false }
+  "penalties": [                         // paramValue × factor = value (factor null = trừ nguyên mức) — FE in công thức từ 3 số này
+    { "code": "USER_CONFLICT_PENALTY", "labelVi": "Khắc bản mệnh",     "value": 0.000, "applied": false, "reasonVi": "…",
+      "paramValue": 0.60, "factor": 0.30, "factorLabelVi": "trọng số cá nhân Wp" },
+    { "code": "DIRECTION_PENALTY",     "labelVi": "Hướng hợp bị chắn", "value": 0.000, "applied": false, "paramValue": 0.30, "factor": null, "factorLabelVi": null },
+    { "code": "VIBE_MISMATCH_PENALTY", "labelVi": "Lệch vibe mục đích","value": 0.000, "applied": false, "paramValue": 0.40, "factor": null, "factorLabelVi": null }
   ],
   "rawScore": 0.800, "clamped": false, "score": 0.800,
-  "personalWeight": { "value": 0.50, "code": "PERSONAL_WEIGHT_PRIVATE", "scope": "Private", "reasonVi": "Phòng riêng tư — ưu tiên bản mệnh chủ nhân ngang với nhu cầu phòng." },
+  "personalWeight": { "value": 0.30, "code": "PERSONAL_WEIGHT_PRIVATE", "scope": "Private", "reasonVi": "Phòng riêng tư - 30% điểm đến từ bản mệnh của bạn, phần còn lại từ nhu cầu của phòng." },
   "vectors": {
     "product":         [ { "element": "Moc", "value": 1.00 }, … ],
     "normalizedGap":     [ … ],   // ĝ = gap / (|gap|₁/2), mỗi trục ∈ [−1,+1]
-    "ruleScore":         [ … ],   // r' = điểm quan hệ ĐÃ tính nghề nghiệp — null khi trục cá nhân tắt
-    "baseRuleScore":     null,    // r TRƯỚC delta nghề — null khi nghề nghiệp không áp
-    "occupationShift":   null,    // r' − r — lớp radar nghề nghiệp, null khi nghề nghiệp không áp
-    "combinedDirection": [ … ],   // d = (1−Wp)·ĝ + Wp·r' — thứ thật sự nhân với productVector
+    "ruleScore":         [ … ],   // r = điểm quan hệ với bản mệnh, CÓ DẤU — null khi trục cá nhân tắt
+    "occupationDirection":    null,  // ô đã chặn khắc mệnh — null khi trục nghề tắt
+    "occupationRawDirection": null,  // ô trước khi chặn — để thấy phần nghề KHÔNG kéo được
+    "combinedDirection": [ … ],   // d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô — thứ thật sự nhân với productVector
     "priorityVector":    [ … ],   // normalize(max(d, 0)) — lớp radar "Ưu tiên của bạn", Σ=1
     "personalNeed":      null     // chỉ luồng Carry
   },
-  "occupation": null,           // null khi nghề nghiệp không đổi được gì — xem mục dưới
+  "occupation": null,           // null khi trục nghề tắt — xem mục dưới
   "conflictResolution": {       // null khi không có xung khắc
     "roomNeed": "Kim", "destiny": "Moc", "bridge": "Thuy",
     "reasonVi": "Phòng đang thiếu Kim, nhưng Kim khắc bản mệnh Mộc của bạn. Hệ thống ưu tiên vật hành Thủy — Kim sinh Thủy, Thủy sinh Mộc — bù cho phòng mà vẫn nuôi bản mệnh."
@@ -151,40 +152,84 @@ round(clamp(rawScore, −1, 1), 3)                         == score
 
 `displayPercent` = `(clamp(score) + 1) / 2 × 100`, BE tính sẵn để không lệch cách làm tròn với FE.
 
-### Nghề nghiệp bẻ `r` *(v3.2 §11 — P5)*
+### `current` dùng để chấm điểm *(v3.2 §19)*
 
 ```
-r'[e] = clamp(r[e] + delta[e] · OCCUPATION_SHARE, −1, 1)
-r'[e] = min(r'[e], −0.1)   khi hành e KHẮC bản mệnh
+m[e]     = 3·interior[e] + Σ tag vᵢ·wᵢ[e] + phiếuChủNhân·personal[e]
+           + Σ sản phẩm ĐÃ GIAO đang đặt trong phòng (voteWeight · vector[e])
+current  = normalize(m^α)
 ```
 
-Khi nghề có tác động, breakdown trả thêm:
+**Sản phẩm user đã mua và đặt vào phòng có mặt ở đây.** Trước §19 chỉ radar trang Workspace tính
+chúng, còn `/recommendations` và `/recommendations/fit` thì không — cùng một phòng ra hai kết luận
+"thiếu hành gì" trái nhau, và bộ gợi ý cứ đẩy tiếp đúng hành mà user vừa mua về đặt vào phòng.
+
+⚠️ Chỉ hàng **đã giao**. Hàng đang giao chỉ vào `previewCurrent` (nét đứt trên radar).
+
+⚠️ `formulaVersion` của phiên mới là **`"3.6"`** (3.5 = trần phiếu tag `TAG_VOTES_CAP` trong `current`, thêm
+`tagVotesScale`; 3.6 = luồng Carry đo `Σ min(n̂,p) − Σ_{kỵ} p` thay `n̂·p`, thêm `personalAvoidElements` và dòng
+`PERSONAL_AVOID_SCORE`). Điểm của hai phiên bản công thức KHÔNG so sánh trực tiếp được với nhau.
+
+### Nghề nghiệp — trục thứ ba *(v3.4 · N3)*
+
+```
+ô[e] = (profile[e] − 0.2) / (|profile − 0.2|₁ / 2)      ∈ [−1, +1]
+ô[e] = min(ô[e], 0)                                      khi hành e KHẮC bản mệnh
+d    = (1 − Wp − Wo)·ĝ + Wp·r + Wo·ô     (phòng)  ·  d = (1 − Wo)·n̂ + Wo·ô     (Carry)
+```
+
+Khi trục nghề bật, `components[]` có thêm dòng và breakdown trả thêm khối `occupation`:
 
 ```json
+"components": [
+  { "code": "GAP_SCORE",        "labelVi": "Khớp nhu cầu của phòng", "value": 0.60, "weight": 0.30, "contribution": 0.18, "reasonVi": "…" },
+  { "code": "PERSONAL_SCORE",   "labelVi": "Hợp bản mệnh của bạn",   "value": 1.00, "weight": 0.50, "contribution": 0.50, "reasonVi": "…" },
+  { "code": "OCCUPATION_SCORE", "labelVi": "Hợp nghề Tài chính / Kế toán", "value": 0.75, "weight": 0.20, "contribution": 0.15,
+    "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề bạn cần." }
+],
 "occupation": {
-  "code": "IT", "nameVi": "CNTT / Lập trình",
-  "share": 0.30, "shareCode": "OCCUPATION_SHARE",
-  "reasonVi": "Nghề CNTT / Lập trình nâng Thuy và hạ Hoa. Nghề nghiệp chỉ đổi mức ƯA THÍCH, không đổi bản mệnh: hành đang khắc mệnh vẫn ở lại phía âm."
+  "code": "FINANCE", "nameVi": "Tài chính / Kế toán",
+  "weight": 0.20, "weightCode": "OCCUPATION_WEIGHT",
+  "reasonVi": "Nghề Tài chính / Kế toán cần Kim, Thuy và tránh Hoa, Moc, Tho."
 }
 ```
 
 | Field | Ghi chú |
 |---|---|
-| `vectors.occupationShift` | `r' − r`, **đo SAU khi chặn**. Vẽ lớp radar nghề nghiệp từ đây |
-| `vectors.baseRuleScore` | `r` gốc — để FE so được "trước/sau nghề nghiệp" |
-| `occupation.share` | `OCCUPATION_SHARE` đang áp |
+| `components[OCCUPATION_SCORE].value` | `ô · p` — **cùng con số** với `GET /api/products/{id}/occupation-fit` (mặt A) |
+| `vectors.occupationDirection` | `ô` ĐÃ chặn — vẽ bằng thanh có dấu (`OccupationDirectionPanel`), không chồng lên radar Σ=1 |
+| `vectors.occupationRawDirection` | `ô` trước chặn — FE đánh dấu hành "khắc mệnh" ở chỗ `raw > 0` mà `direction ≤ 0` |
+| `occupation.weight` | `Wo` đã kẹp `≤ 1 − Wp` (luồng phòng) |
 
-⚠️ `occupationShift` **không bằng** `delta × share`. Ở hành khắc bản mệnh nó nhỏ hơn hẳn vì bị chặn —
-và đó chính là con số phải hiện: một lớp radar nói *"nghề của bạn nâng Kim"* trong khi Kim vẫn khắc
-mệnh là nói dối bằng đồ hoạ.
+**`occupation = null` khi** user chưa khai nghề · nghề chưa có hồ sơ hoặc là `OTHER` (0.2 đều) ·
+`OCCUPATION_WEIGHT = 0`. Cả ba đều nghĩa là *nghề không đổi gì*, BE trả `null` thay vì một khối rỗng.
 
-**`occupation = null` khi** user chưa khai nghề · nghề chưa được chuyên gia nhập delta ·
-`OCCUPATION_SHARE = 0` · delta chỉ trỏ vào những hành đang khắc mệnh nên bị chặn sạch. Cả bốn đều
-nghĩa là *nghề nghiệp không đổi gì*, nên BE trả `null` thay vì một khối có `shift` toàn 0.
+Trục nghề chạy **độc lập với ngày sinh và scope**: khách chưa khai ngày sinh (`Wp = 0`) vẫn có
+`d = (1−Wo)·ĝ + Wo·ô`. Luồng `Carry` cũng nhận trục nghề (vẫn bắt buộc ngày sinh cho dụng thần).
 
-⚠️ **Luồng `Carry` không chịu tác động** — nhánh dụng thần không dựng `r` nên không có chỗ để bẻ.
+### `GET /api/products/{id}/occupation-fit` — mặt A, public
 
-Vì có đủ `ĝ`, `r` và `personalWeight.value`, **FE tự dựng lại `d` và `priorityVector` ở mọi mức `Wp`** —
+"Sản phẩm này hợp NGHỀ NÀO, bao nhiêu %" — `ô · p` cho mọi nghề đang bật có hồ sơ, sắp giảm dần.
+Không cần đăng nhập, phòng hay ngày sinh (không có mệnh nên dùng `ô` thô). `?occupationCode=IT` để
+lấy đúng một nghề (không phân biệt hoa/thường; không có → 404).
+
+```json
+{
+  "productId": "…", "formulaVersion": "3.5", "placement": "Carry",
+  "productVector": [ { "element": "Kim", "value": 1.0 }, … ],
+  "fits": [
+    { "code": "FINANCE", "nameVi": "Tài chính / Kế toán", "score": 0.750, "displayPercent": 88, "tierVi": "Rất hợp",
+      "direction": [ … ], "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề Tài chính / Kế toán cần." },
+    { "code": "SALES", "score": 0.400, "displayPercent": 70, "tierVi": "Phù hợp", … }
+  ],
+  "noteVi": null
+}
+```
+
+`Consumable` ⇒ `fits: []` + `noteVi`. Nghề không có hồ sơ / `OTHER` ⇒ không có dòng (không phải 50%).
+`tierVi` cùng ngưỡng `ScoreBadge` của FE (≥0.6 Rất hợp · ≥0.2 Phù hợp · ≥−0.2 Trung tính · Cân nhắc).
+
+Vì có đủ `ĝ`, `r`, `ô` (+`occupation.weight`) và `personalWeight.value`, **FE tự dựng lại `d` và `priorityVector` ở mọi mức `Wp`** —
 slider mô phỏng trọng số cá nhân không cần gọi lại API.
 
 ⚠️ `breakdown` **không** được gửi cho LLM — model đọc số thô sẽ bịa lại phép tính. Tool AI vẫn chỉ nhận `matchFacts` / `cautionFacts`.
@@ -360,12 +405,17 @@ là lý do hai luồng gợi ý vốn đã tách theo `ProductPlacement`.
   "breakdown": {
     "target": "PersonalNeed",
     "components": [
-      { "code": "PERSONAL_NEED_SCORE", "labelVi": "Hợp dụng thần của bạn", "value": 0.800, "weight": 1.000, "contribution": 0.800, "reasonVi": "…" }
+      { "code": "PERSONAL_NEED_SCORE", "labelVi": "Phủ dụng thần của bạn", "value": 0.800, "weight": 1.000, "contribution": 0.800, "reasonVi": "Phủ được Mộc 0.60/0.60, Thủy 0.20/0.40 của nhu cầu; còn thiếu …" },
+      { "code": "PERSONAL_AVOID_SCORE", "labelVi": "Rơi vào kỵ thần", "value": -0.100, "weight": 1.000, "contribution": -0.100, "reasonVi": "Kỵ thần của bạn là Kim, Thổ; sản phẩm có Kim 10% - phần đó trừ thẳng theo tỉ trọng." }
     ],
+    "personalAvoidElements": [ "Kim", "Tho" ],
     "personalWeight": null,
     "vectors": { "personalNeed": [ … ], "normalizedGap": [ … ], "ruleScore": null, "combinedDirection": [ … ] }
   },
   "personalNeedVector": [ { "element": "Moc", "value": 0.60 }, { "element": "Thuy", "value": 0.40 } ],
+  "personalNeedSource": "TuTru",
+  "personalNeedNoteVi": "Dụng thần theo Tứ Trụ (thân nhược, nhật chủ Ất hành Mộc).",
+  "personalAvoidElements": [ "Kim", "Tho" ],
   "productVector": [ { "element": "Moc", "value": 1.00 } ],
   "destinyElement": "Moc",
   "destinyLabelVi": "Moc — Đại Lâm Mộc (1988)"

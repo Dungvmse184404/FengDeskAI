@@ -12,12 +12,28 @@ public enum PersonalTargetSource
     NapAm,
 }
 
-/// <summary>Vector mục tiêu của một người + căn cứ đã dùng để dựng ra nó.</summary>
+/// <summary>
+/// Vector mục tiêu của một người + căn cứ đã dùng để dựng ra nó.
+/// <para>
+/// <paramref name="Avoid"/> (v3.6): <b>kỵ thần</b> — hành nên tránh. Tứ Trụ chia hành thành dụng/hỷ (bồi),
+/// kỵ (tránh) và nhàn (trung tính); trước v3.6 engine chỉ giữ nhóm đầu nên vật toàn kỵ thần vẫn "trung
+/// tính". Nạp Âm chỉ suy được một hành kỵ (khắc mệnh). Xem ADR <c>personal-need-v3.6.md</c>.
+/// </para>
+/// </summary>
 public sealed record PersonalTarget(
     ElementVector Vector,
     PersonalTargetSource Source,
     IReadOnlyList<string> Elements,
-    string Note);
+    string Note,
+    IReadOnlySet<FengShuiElement>? Avoid = null)
+{
+    /// <summary>Kỵ thần — rỗng khi không suy được.</summary>
+    public IReadOnlySet<FengShuiElement> AvoidSet => Avoid ?? new HashSet<FengShuiElement>();
+
+    /// <summary>Tên tiếng Việt của kỵ thần, thứ tự enum.</summary>
+    public IReadOnlyList<string> AvoidElements
+        => Enum.GetValues<FengShuiElement>().Where(AvoidSet.Contains).Select(BaTuCalculator.ElementVn).ToList();
+}
 
 /// <summary>
 /// Dựng vector "người đang cần hành gì" cho luồng gợi ý vật phẩm mang theo người
@@ -57,11 +73,18 @@ public static class PersonalTargetBuilder
                     vector = vector.Add(ElementVector.Single(favorable[i]).Scale(share));
                 }
 
+                var avoid = (chart.UnfavorableElementCodes ?? Array.Empty<string>())
+                    .Select(code => Enum.TryParse<FengShuiElement>(code, out var e) ? e : (FengShuiElement?)null)
+                    .OfType<FengShuiElement>()
+                    .Where(e => !favorable.Contains(e))
+                    .ToHashSet();
+
                 return new PersonalTarget(
                     vector.Normalize(),
                     PersonalTargetSource.TuTru,
                     favorable.Select(BaTuCalculator.ElementVn).ToList(),
-                    $"Dụng thần theo Tứ Trụ ({chart.BodyStrength}, nhật chủ {chart.NhatChu} hành {chart.DayMasterElement}).");
+                    $"Dụng thần theo Tứ Trụ ({chart.BodyStrength}, nhật chủ {chart.NhatChu} hành {chart.DayMasterElement}).",
+                    avoid);
             }
         }
 
@@ -72,12 +95,15 @@ public static class PersonalTargetBuilder
         var napAmVector = FengShuiCalculator.BuildPersonalVector(
             birthDate, prms.SelfShare, prms.SupportShare, prms.ChildShare);
 
+        // Nạp Âm chỉ biết bản mệnh ⇒ kỵ duy nhất suy được là hành khắc mệnh. Ít thông tin hơn Tứ Trụ nên
+        // ít hành bị trừ hơn — đúng với mức chắc chắn của dữ liệu.
         return new PersonalTarget(
             napAmVector,
             PersonalTargetSource.NapAm,
             new[] { BaTuCalculator.ElementVn(napAmElement) },
             birthTime is null
                 ? "Chưa có giờ sinh nên dùng bản mệnh Nạp Âm; bổ sung giờ sinh sẽ tính được dụng thần Tứ Trụ chính xác hơn."
-                : "Dùng bản mệnh Nạp Âm.");
+                : "Dùng bản mệnh Nạp Âm.",
+            new HashSet<FengShuiElement> { FengShuiCalculator.GetControllingElement(napAmElement) });
     }
 }

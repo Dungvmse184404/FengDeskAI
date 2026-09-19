@@ -12,7 +12,12 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// Gán chất liệu/màu/hình khối (<c>product_element_inputs</c>) cho sản phẩm demo → engine dùng
 /// auto-calc vector (tầng 2) + cache vào 5 cột <c>products.element_*</c>. Data đọc từ
 /// <c>catalog-demo.json</c> (xem <see cref="CatalogDemoFile"/>), khớp theo <b>tên đầy đủ</b>.
-/// Idempotent: bỏ qua product đã có input. Chạy sau khi <c>element_input_map</c> + demo products đã seed.
+///
+/// <para>
+/// Idempotent theo kiểu <b>đồng bộ</b>, không phải "đã có thì bỏ qua": tập (kind, code) trong DB được
+/// kéo về đúng file, vector cache tính lại, rồi <see cref="DemoProductFengShuiSync.Audit"/> cảnh báo nếu
+/// vector thuần một hành hoặc hành trội ≠ hành chính khai. Chạy sau <c>element_input_map</c> + seeder 21.
+/// </para>
 /// </summary>
 public class ProductElementInputDemoSeeder : IDataSeeder
 {
@@ -45,59 +50,44 @@ public class ProductElementInputDemoSeeder : IDataSeeder
         var byName = _loader.Load<CatalogDemoFile>(FileName).ByName();
         if (byName.Count == 0) return;
 
-        // Chỉ nhận (kind, code) đã có trong element_input_map — code lạ sẽ không đóng góp gì vào vector
-        // mà vẫn nằm lại DB gây hiểu nhầm "đã khai rồi".
-        var knownInputs = map
-            .Select(m => (m.InputKind, Code: m.InputCode))
-            .ToHashSet();
-
         var resolver = new ElementInputResolver(map);
         var prms = ScoringParameters.FromRows(await _context.Set<ScoringParam>().AsNoTracking().ToListAsync(ct));
 
         var inputSet = _context.Set<ProductElementInput>();
-        var products = await _context.Set<Product>().Include(p => p.Elements).ToListAsync(ct);
+        var names = byName.Keys.ToList();
+        var products = await _context.Set<Product>()
+            .Include(p => p.Elements)
+            .Where(p => names.Contains(p.Name))
+            .ToListAsync(ct);
+        var productIds = products.Select(p => p.Id).ToList();
+        var existingByProduct = (await inputSet.Where(i => productIds.Contains(i.ProductId)).ToListAsync(ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         int touched = 0;
         foreach (var p in products)
         {
-            if (!byName.TryGetValue(p.Name, out var row) || row.ElementInputs.Count == 0) continue;
-            if (await inputSet.AnyAsync(i => i.ProductId == p.Id, ct)) continue; // đã có input
+            var row = byName[p.Name];
+            if (row.ElementInputs.Count == 0 || p.IsVectorOverridden) continue; // override tay thì file không có quyền
 
-            var entities = new List<ProductElementInput>();
-            foreach (var i in row.ElementInputs)
-            {
-                if (!Enum.TryParse<ElementInputKind>(i.Kind, ignoreCase: true, out var kind))
-                {
-                    _logger.LogWarning("{File}: inputKind '{Kind}' không hợp lệ ('{Name}') — bỏ qua.",
-                        FileName, i.Kind, p.Name);
-                    continue;
-                }
-                if (!knownInputs.Contains((kind, i.Code)))
-                {
-                    _logger.LogWarning("{File}: ({Kind}, {Code}) không có trong element_input_map ('{Name}') — bỏ qua.",
-                        FileName, kind, i.Code, p.Name);
-                    continue;
-                }
+            var desired = DemoProductFengShuiSync.ParseInputs(
+                row.ElementInputs.Select(i => (i.Kind, i.Code)), _logger, FileName, p.Name);
+            var existing = existingByProduct.GetValueOrDefault(p.Id) ?? new List<ProductElementInput>();
 
-                entities.Add(new ProductElementInput { ProductId = p.Id, InputKind = kind, InputCode = i.Code });
-            }
+            var (inputs, changed) = DemoProductFengShuiSync.SyncInputs(
+                p, desired, existing, inputSet, resolver, _logger, FileName);
 
-            if (entities.Count == 0) continue;
-            await inputSet.AddRangeAsync(entities, ct);
+            // Cache lại vector mỗi lần: hành chính/phụ (seeder 21) hoặc element_input_map có thể vừa đổi
+            // dù tập input không đổi.
+            var before = (p.ElementTho, p.ElementKim, p.ElementThuy, p.ElementMoc, p.ElementHoa);
+            var vector = DemoProductFengShuiSync.CacheVector(p, inputs.ToList(), resolver, prms);
+            DemoProductFengShuiSync.Audit(p, vector, _logger, FileName);
 
-            // Cache vector (tầng 2) vào cột products.
-            var vector = ProductVectorProvider.Build(
-                isOverridden: false, overriddenVector: null, inputs: entities, resolver: resolver,
-                productElements: p.Elements.Select(e => (e.Element, e.IsPrimary)), p: prms);
-            p.ElementTho = vector.Tho;
-            p.ElementKim = vector.Kim;
-            p.ElementThuy = vector.Thuy;
-            p.ElementMoc = vector.Moc;
-            p.ElementHoa = vector.Hoa;
-            touched++;
+            if (changed || before != (p.ElementTho, p.ElementKim, p.ElementThuy, p.ElementMoc, p.ElementHoa))
+                touched++;
         }
 
         if (touched > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed product_element_inputs cho {Count} product demo.", touched);
+        _logger.LogInformation("Đồng bộ product_element_inputs + vector cho {Count} product demo.", touched);
     }
 }

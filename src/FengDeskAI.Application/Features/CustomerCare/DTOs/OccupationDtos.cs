@@ -27,16 +27,16 @@ public sealed record OccupationAdminDto
     public int SortOrder { get; init; }
 
     /// <summary>
-    /// Delta theo hành. <b>Rỗng = nghề chưa được chuyên gia duyệt delta</b> — engine bỏ qua nghề đó
-    /// thay vì đoán, nên nghề vẫn dùng được cho thống kê mà không tác động điểm.
+    /// Hồ sơ ngũ hành Σ=1. <b>Rỗng = nghề chưa có hồ sơ</b> — engine bỏ qua nghề đó thay vì đoán, nên
+    /// nghề vẫn dùng được cho thống kê mà không tác động điểm.
     /// </summary>
-    public List<OccupationModifierDto> Modifiers { get; init; } = new();
+    public List<OccupationProfileEntryDto> Profile { get; init; } = new();
 }
 
-public sealed record OccupationModifierDto
+public sealed record OccupationProfileEntryDto
 {
     public string Element { get; init; } = null!;
-    public decimal Delta { get; init; }
+    public decimal Share { get; init; }
 }
 
 public sealed record UpsertOccupationRequest
@@ -51,19 +51,19 @@ public sealed record UpsertOccupationRequest
 }
 
 /// <summary>
-/// Thay <b>toàn bộ</b> bảng delta của một nghề — hành có trong DB mà thiếu ở đây sẽ bị xóa.
-/// Ghi đè trọn gói thay vì upsert từng dòng vì bảng delta là một phát biểu phong thủy trọn vẹn: sửa
-/// lẻ từng hành dễ để lại một bộ nửa cũ nửa mới mà không ai nhận ra.
+/// Thay <b>toàn bộ</b> hồ sơ ngũ hành của một nghề — hành có trong DB mà thiếu ở đây coi như 0 và bị xóa.
+/// Ghi đè trọn gói thay vì upsert từng dòng vì hồ sơ là một phân bố trọn vẹn (Σ=1): sửa lẻ từng hành
+/// là phá tổng mà không ai nhận ra.
 /// </summary>
-public sealed record ReplaceOccupationModifiersRequest
+public sealed record ReplaceOccupationProfileRequest
 {
-    public List<OccupationModifierInput> Modifiers { get; init; } = new();
+    public List<OccupationProfileEntryInput> Entries { get; init; } = new();
 }
 
-public sealed record OccupationModifierInput
+public sealed record OccupationProfileEntryInput
 {
     public FengShuiElement Element { get; init; }
 
-    /// <summary>Độ dịch điểm quan hệ, CÓ THỂ ÂM. Miền hợp lệ [−1, 1].</summary>
-    public decimal Delta { get; init; }
+    /// <summary>Tỉ trọng ∈ [0, 1]. Σ toàn bộ entries phải = 1 ± 0.001.</summary>
+    public decimal Share { get; init; }
 }

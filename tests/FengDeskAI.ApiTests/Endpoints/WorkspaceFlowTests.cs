@@ -344,6 +344,46 @@ public sealed class WorkspaceFlowTests
         Assert.NotEmpty(data.GetProperty("insights").GetProperty("lines").EnumerateArray());
     }
 
+    [Fact(DisplayName = "WS-19b [Normal] v3.5: seven tags are capped to five votes while the evidence count stays seven")]
+    public async Task ElementAnalysis_SevenTags_TagVotesAreCappedAtFive()
+    {
+        // User dùng một lần, KHÔNG có ngày sinh ⇒ không có phiếu chủ nhân: tổng = nền 3 + tag (cap 5) = 8.
+        var user = await ScenarioUsers.CreateAsync(_fixture);
+        var client = ScenarioUsers.ClientFor(_fixture, user);
+
+        var created = await client.PostAsJsonAsync("/api/workspace", new
+        {
+            name = "Bảy tag gỗ",
+            locationType = "Office",
+            styleCode = "Modern",
+            workPurpose = "Office",
+            inputs = new[]
+            {
+                new { inputKind = "Material", inputCode = "Wood" },
+                new { inputKind = "Material", inputCode = "Bamboo" },
+                new { inputKind = "Material", inputCode = "Metal" },
+                new { inputKind = "Color", inputCode = "Green" },
+                new { inputKind = "Color", inputCode = "White" },
+                new { inputKind = "Color", inputCode = "Red" },
+                new { inputKind = "Shape", inputCode = "Square" },
+            },
+        });
+        Assert.True(created.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(created, "tạo hồ sơ 7 tag"));
+        var profileId = (await ApiEnvelope.DataAsync(created)).GetProperty("id").GetGuid();
+
+        var data = await ApiEnvelope.DataAsync(await client.GetAsync($"/api/workspace/{profileId}/element-analysis"));
+
+        var tagRows = data.GetProperty("contributions").EnumerateArray()
+            .Where(c => c.GetProperty("source").GetString() == "Tag").ToList();
+        Assert.Equal(7, tagRows.Count);
+        Assert.Equal(7, data.GetProperty("evidenceCount").GetInt32());
+
+        decimal tagVotes = tagRows.Sum(c => c.GetProperty("votes").GetDecimal());
+        Assert.Equal(5m, Math.Round(tagVotes, 2));
+        Assert.Equal(8m, Math.Round(data.GetProperty("totalVotes").GetDecimal(), 2));
+        Assert.Equal(Math.Round(5m / 7m, 3), data.GetProperty("tagVotesScale").GetDecimal());
+    }
+
     [Fact(DisplayName = "WS-20 [Abnormal] The element analysis of another user's profile returns 404")]
     public async Task ElementAnalysis_OfAnotherUser_ReturnsNotFound()
     {

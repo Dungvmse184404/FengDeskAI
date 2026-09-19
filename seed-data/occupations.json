@@ -1,5 +1,5 @@
 ﻿{
-  "_comment": "Danh sách nghề (taxonomy) - KHÔNG kèm delta ngũ hành. Bảng delta là phát biểu phong thủy, phải do chuyên gia duyệt rồi nhập qua PUT /api/admin/scoring/occupations/{code}/modifiers, giống cách feng_shui_rules đã làm. Bản nháp để chuyên gia bắt đầu nằm ở docs/adr/score-explainability-v3.2.md §11.5.",
+  "_comment": "Danh sách nghề (taxonomy). Hồ sơ ngũ hành Σ=1 của từng nghề nằm ở occupation-element-profiles.json (seed riêng, N3 - ADR occupation-product-fit-v1.md); sửa runtime qua PUT /api/admin/scoring/occupations/{code}/profile.",
   "occupations": [
     { "code": "IT", "nameVi": "CNTT / Lập trình", "description": "Kỹ sư phần mềm, IT, dữ liệu.", "sort": 10 },
     { "code": "SALES", "nameVi": "Kinh doanh / Sales", "description": "Bán hàng, phát triển thị trường.", "sort": 20 },

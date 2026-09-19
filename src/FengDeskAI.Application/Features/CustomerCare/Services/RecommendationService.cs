@@ -52,87 +52,11 @@ public sealed class RecommendationService : IRecommendationService
     public async Task<IServiceResult<RecommendationResponse>> GenerateAsync(
         Guid userId, GenerateRecommendationRequest request, CancellationToken ct = default)
     {
-        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(request.WorkspaceProfileId, userId, ct);
-        if (profile is null)
-            return ServiceResult<RecommendationResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hồ sơ không gian.");
+        var scored = await ScoreWorkspaceAsync(userId, request, ct);
+        if (!scored.IsSuccess || scored.Data is null)
+            return ServiceResult<RecommendationResponse>.Failure(scored.StatusCode, scored.Message ?? "Không chấm điểm được.");
 
-        var user = await _uow.Users.GetByIdAsync(userId, ct);
-        if (user is null)
-            return ServiceResult<RecommendationResponse>.Failure(ApiStatusCodes.Unauthorized, "Người dùng không hợp lệ.");
-
-        // Hồ sơ cá nhân (mệnh Nạp Âm + Kua) — cho AI diễn giải + lưu rec (null nếu thiếu ngày sinh).
-        var personal = FengShuiCalculator.BuildPersonalProfile(user.DateOfBirth, user.Gender);
-
-        // ── Tham số engine (thiếu row → default trong code) ──
-        var p = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
-
-        // ── Vector mệnh (null → bỏ bộ lọc mệnh) ──
-        ElementVector? personalVector = user.DateOfBirth is { } dob
-            ? FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare)
-            : null;
-
-        // ── Vector phòng: ideal → intent → hiện trạng (chung với GetProductFitAsync) ──
-        var wctx = await BuildWorkspaceContextAsync(profile, ct, user.DateOfBirth, p);
-        var wsType = wctx.WsType;
-        var scope = wctx.Scope;
-        var resolver = wctx.Resolver; // còn tái dùng cho vector sản phẩm bên dưới
-        var ideal = wctx.Analysis.Ideal;
-        var adjustedIdeal = wctx.Analysis.AdjustedIdeal;
-        var currentVector = wctx.Analysis.Current;
-
-        // ── Trục cá nhân v3.1: trọng số theo scope + bảng luật ngũ hành + hướng theo mục tiêu ──
-        decimal personalWeight = ResolvePersonalWeight(scope, user.DateOfBirth, p);
-        var ruleScores = await LoadRuleScoresAsync(ct);
-        var aspirationDirs = BuildAspirationDirections(request.Aspiration, user.DateOfBirth, user.Gender);
-
-        // ── Ứng viên + vector sản phẩm (chỉ đồ đặt trong không gian — vật đeo/hàng tiêu hao loại từ query) ──
-        var (products, aspirationNote) = await LoadCandidatesAsync(WorkspacePlacements, request.Aspiration, ct);
-        if (products.Count == 0)
-            return ServiceResult<RecommendationResponse>.Failure(
-                ApiStatusCodes.UnprocessableEntity,
-                "Chưa có sản phẩm nào được gắn thuộc tính phong thủy để gợi ý.");
-
-        var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(products.Select(x => x.Id).ToList(), ct))
-            .GroupBy(i => i.ProductId)
-            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
-
-        var candidates = products.Select(prod => ToFacts(prod, productInputs, resolver, p)).ToList();
-
-        // ── Hướng bị chắn (cửa vào ∪ WC ∪ góc tối) ──
-        var violated = new HashSet<CompassDirection>();
-        if (profile.EntranceDirection is { } ed) violated.Add(ed);
-        if (profile.ToiletDirection is { } td) violated.Add(td);
-        foreach (var d in profile.DarkDirections) violated.Add(d);
-
-        var occupation = await LoadOccupationAsync(user, p, ct);
-
-        var context = new ScoringContext
-        {
-            PersonalVector = personalVector,
-            AdjustedIdeal = adjustedIdeal,
-            CurrentVector = currentVector,
-            Scope = scope,
-            Purpose = profile.WorkPurpose,
-            ViolatedDirections = violated,
-            PersonalWeight = personalWeight,
-            RuleScores = ruleScores,
-            Aspiration = request.Aspiration,
-            AspirationDirections = aspirationDirs,
-            OccupationDelta = occupation.Delta,
-            OccupationCode = occupation.Code,
-            OccupationNameVi = occupation.NameVi,
-            Params = p,
-        };
-
-        int topN = Math.Clamp(request.TopN ?? DefaultTopN, 1, MaxTopN);
-        var top = _scorer.Score(context, candidates).Take(topN).ToList();
-        var productById = products.ToDictionary(x => x.Id);
-
-        if (top.Count == 0)
-            return ServiceResult<RecommendationResponse>.Failure(
-                ApiStatusCodes.UnprocessableEntity,
-                "Không có sản phẩm nào phù hợp với mục đích/bản mệnh của không gian này.");
-
+        var (profile, wsType, personal, adjustedIdeal, currentVector, top, candidates, productById, aspirationNote, engineLog) = scored.Data;
         decimal legacyWeight = wsType?.PersonalWeight ?? 1.0m;
 
         return await _uow.ExecuteInTransactionAsync(async innerCt =>
@@ -169,20 +93,7 @@ public sealed class RecommendationService : IRecommendationService
             rec.Logs.Add(new RecommendationLog
             {
                 Stage = "EngineScored",
-                Detail = JsonSerializer.Serialize(new
-                {
-                    topN,
-                    candidates = candidates.Count,
-                    ideal,
-                    adjustedIdeal,
-                    current = currentVector,
-                    gap = adjustedIdeal.Subtract(currentVector),
-                    scope = scope.ToString(),
-                    hasPersonalVector = personalVector is not null,
-                    personalWeight,
-                    aspiration = request.Aspiration?.ToString(),
-                    aspirationRelaxed = aspirationNote is not null,
-                }),
+                Detail = JsonSerializer.Serialize(engineLog),
             });
 
             var aiRequest = BuildAiRequest(profile, wsType, personal, legacyWeight, top, productById);
@@ -212,6 +123,164 @@ public sealed class RecommendationService : IRecommendationService
                 BuildResponse(rec, top, productById, BuildGap(adjustedIdeal, currentVector), note: aspirationNote),
                 "Tạo gợi ý thành công.", ApiStatusCodes.Created);
         }, ct);
+    }
+
+    public async Task<IServiceResult<RecommendationResponse>> PreviewAsync(
+        Guid userId, GenerateRecommendationRequest request, CancellationToken ct = default)
+    {
+        var scored = await ScoreWorkspaceAsync(userId, request, ct);
+        if (!scored.IsSuccess || scored.Data is null)
+            return ServiceResult<RecommendationResponse>.Failure(scored.StatusCode, scored.Message ?? "Không chấm điểm được.");
+
+        var (profile, wsType, personal, adjustedIdeal, currentVector, top, _, productById, aspirationNote, _) = scored.Data;
+
+        // Không có entity Recommendation thật — dựng một bản "ảo" chỉ để Compose đọc metadata, Id = Guid.Empty
+        // để FE biết đây không phải phiên đã lưu (không GET /recommendations/{id} lại được).
+        var ghost = new Recommendation
+        {
+            Id = Guid.Empty,
+            UserId = userId,
+            WorkspaceProfileId = profile.Id,
+            WorkspaceTypeId = profile.WorkspaceTypeId,
+            CustomerElement = personal?.Element,
+            KuaNumber = personal?.KuaNumber,
+            KuaGroup = personal?.Group,
+            PersonalWeight = wsType?.PersonalWeight ?? 1.0m,
+            Kind = RecommendationKind.Workspace,
+            Status = RecommendationStatus.Scored,
+        };
+
+        int rank = 1;
+        foreach (var s in top)
+            ghost.Items.Add(new RecommendationItem { ProductId = s.ProductId, BaseScore = s.Score, BaseRank = rank, FinalRank = rank++ });
+
+        return ServiceResult<RecommendationResponse>.Success(
+            BuildResponse(ghost, top, productById, BuildGap(adjustedIdeal, currentVector), note: aspirationNote));
+    }
+
+    /// <summary>
+    /// Kết quả chấm điểm phòng — phần dùng chung giữa <see cref="GenerateAsync"/> (lưu phiên + AI diễn giải) và
+    /// <see cref="PreviewAsync"/> (trả thẳng, không lưu).
+    /// </summary>
+    private sealed record WorkspaceScoring(
+        WorkspaceProfile Profile,
+        WorkspaceType? WsType,
+        PersonalProfile? Personal,
+        ElementVector AdjustedIdeal,
+        ElementVector Current,
+        List<ScoredProduct> Top,
+        List<ProductFacts> Candidates,
+        IReadOnlyDictionary<Guid, Product> ProductById,
+        string? AspirationNote,
+        /// <summary>Payload log "EngineScored" (anonymous object, chỉ để serialize).</summary>
+        object EngineLog);
+
+    /// <summary>Engine chấm điểm topN sản phẩm đặt phòng cho một workspace của user — deterministic, không AI, không ghi DB.</summary>
+    private async Task<IServiceResult<WorkspaceScoring>> ScoreWorkspaceAsync(
+        Guid userId, GenerateRecommendationRequest request, CancellationToken ct)
+    {
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(request.WorkspaceProfileId, userId, ct);
+        if (profile is null)
+            return ServiceResult<WorkspaceScoring>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hồ sơ không gian.");
+
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        if (user is null)
+            return ServiceResult<WorkspaceScoring>.Failure(ApiStatusCodes.Unauthorized, "Người dùng không hợp lệ.");
+
+        // Hồ sơ cá nhân (mệnh Nạp Âm + Kua) — cho AI diễn giải + lưu rec (null nếu thiếu ngày sinh).
+        var personal = FengShuiCalculator.BuildPersonalProfile(user.DateOfBirth, user.Gender);
+
+        // ── Tham số engine (thiếu row → default trong code) ──
+        var p = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+
+        // ── Vector mệnh (null → bỏ bộ lọc mệnh) ──
+        ElementVector? personalVector = user.DateOfBirth is { } dob
+            ? FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare)
+            : null;
+
+        // ── Vector phòng: ideal → intent → hiện trạng (chung với GetProductFitAsync) ──
+        var wctx = await BuildWorkspaceContextAsync(profile, p, user.DateOfBirth, ct);
+        var wsType = wctx.WsType;
+        var scope = wctx.Scope;
+        var resolver = wctx.Resolver; // còn tái dùng cho vector sản phẩm bên dưới
+        var ideal = wctx.Analysis.Ideal;
+        var adjustedIdeal = wctx.Analysis.AdjustedIdeal;
+        var currentVector = wctx.Analysis.Current;
+
+        // ── Trục cá nhân v3.1: trọng số theo scope + bảng luật ngũ hành + hướng theo mục tiêu ──
+        decimal personalWeight = ResolvePersonalWeight(scope, user.DateOfBirth, p);
+        var ruleScores = await LoadRuleScoresAsync(ct);
+        var aspirationDirs = BuildAspirationDirections(request.Aspiration, user.DateOfBirth, user.Gender);
+
+        // ── Ứng viên + vector sản phẩm (chỉ đồ đặt trong không gian — vật đeo/hàng tiêu hao loại từ query) ──
+        var (products, aspirationNote) = await LoadCandidatesAsync(WorkspacePlacements, request.Aspiration, ct);
+        if (products.Count == 0)
+            return ServiceResult<WorkspaceScoring>.Failure(
+                ApiStatusCodes.UnprocessableEntity,
+                "Chưa có sản phẩm nào được gắn thuộc tính phong thủy để gợi ý.");
+
+        var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(products.Select(x => x.Id).ToList(), ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+
+        var candidates = products.Select(prod => ToFacts(prod, productInputs, resolver, p)).ToList();
+
+        // ── Hướng bị chắn (cửa vào ∪ WC ∪ góc tối) ──
+        var violated = new HashSet<CompassDirection>();
+        if (profile.EntranceDirection is { } ed) violated.Add(ed);
+        if (profile.ToiletDirection is { } td) violated.Add(td);
+        foreach (var d in profile.DarkDirections) violated.Add(d);
+
+        var occupation = await LoadOccupationAsync(user, p, ct);
+
+        var context = new ScoringContext
+        {
+            PersonalVector = personalVector,
+            AdjustedIdeal = adjustedIdeal,
+            CurrentVector = currentVector,
+            Scope = scope,
+            Purpose = profile.WorkPurpose,
+            ViolatedDirections = violated,
+            PersonalWeight = personalWeight,
+            RuleScores = ruleScores,
+            Aspiration = request.Aspiration,
+            AspirationDirections = aspirationDirs,
+            OccupationProfile = occupation.Profile,
+            OccupationWeight = p.OccupationWeightFor(personalWeight),
+            OccupationCode = occupation.Code,
+            OccupationNameVi = occupation.NameVi,
+            Params = p,
+        };
+
+        int topN = Math.Clamp(request.TopN ?? DefaultTopN, 1, MaxTopN);
+        var top = _scorer.Score(context, candidates).Take(topN).ToList();
+        var productById = products.ToDictionary(x => x.Id);
+
+        if (top.Count == 0)
+            return ServiceResult<WorkspaceScoring>.Failure(
+                ApiStatusCodes.UnprocessableEntity,
+                "Không có sản phẩm nào phù hợp với mục đích/bản mệnh của không gian này.");
+
+        // Chi tiết engine cho log "EngineScored" — dựng ở đây vì chỉ hàm này còn thấy đủ biến trung gian.
+        var engineLog = new
+        {
+            topN,
+            candidates = candidates.Count,
+            ideal,
+            adjustedIdeal,
+            current = currentVector,
+            gap = adjustedIdeal.Subtract(currentVector),
+            scope = scope.ToString(),
+            hasPersonalVector = personalVector is not null,
+            personalWeight,
+            occupation = occupation.Code,
+            occupationWeight = context.OccupationWeight,
+            aspiration = request.Aspiration?.ToString(),
+            aspirationRelaxed = aspirationNote is not null,
+        };
+
+        return ServiceResult<WorkspaceScoring>.Success(new WorkspaceScoring(
+            profile, wsType, personal, adjustedIdeal, currentVector, top, candidates, productById, aspirationNote, engineLog));
     }
 
     public async Task<IServiceResult<RecommendationResponse>> GeneratePersonalAsync(
@@ -251,18 +320,23 @@ public sealed class RecommendationService : IRecommendationService
 
         var candidates = products.Select(prod => ToFacts(prod, productInputs, resolver, p)).ToList();
 
+        // N3 — nghề áp cho cả Carry: d = (1−Wo)·n̂ + Wo·ô. Không kẹp theo Wp vì nhánh này không có Wp.
+        var carryOccupation = await LoadOccupationAsync(user, p, ct);
+
         var context = new ScoringContext
         {
             PersonalVector = personalVector,
             PersonalNeedVector = target.Vector,
-            // Nghề nghiệp KHÔNG áp cho luồng Carry: phương án N1 bẻ vector `r`, mà nhánh dụng thần
-            // không dựng `r` (mục tiêu vốn đã 100% cá nhân). Muốn nghề nghiệp tác động ở đây thì phải
-            // bẻ chính vector dụng thần — một quyết định nghiệp vụ khác, chưa chốt. Xem ADR v3.2 §11.2.
+            PersonalAvoid = target.AvoidSet,
             // Không có phòng: gap = Zero − Zero. Policy của Carry không đọc hai vector này.
             AdjustedIdeal = ElementVector.Zero,
             CurrentVector = ElementVector.Zero,
             Scope = WorkspaceScope.Private,
             Purpose = WorkPurpose.Other, // Other → TargetVibe null → không lọc theo vibe không gian
+            OccupationProfile = carryOccupation.Profile,
+            OccupationWeight = p.OccupationWeight,
+            OccupationCode = carryOccupation.Code,
+            OccupationNameVi = carryOccupation.NameVi,
             Params = p,
         };
 
@@ -317,6 +391,8 @@ public sealed class RecommendationService : IRecommendationService
                     targetElements = target.Elements,
                     target = target.Vector,
                     hasPersonalVector = personalVector is not null,
+                    occupation = carryOccupation.Code,
+                    occupationWeight = context.OccupationWeight,
                     aspiration = request.Aspiration?.ToString(),
                     aspirationRelaxed = aspirationNote is not null,
                 }),
@@ -364,7 +440,7 @@ public sealed class RecommendationService : IRecommendationService
             ? FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare)
             : null;
 
-        var wctx = await BuildWorkspaceContextAsync(profile, ct, user?.DateOfBirth, p);
+        var wctx = await BuildWorkspaceContextAsync(profile, p, user?.DateOfBirth, ct);
 
         var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(new[] { productId }, ct))
             .GroupBy(i => i.ProductId)
@@ -379,6 +455,7 @@ public sealed class RecommendationService : IRecommendationService
         // Trang Fit phải dùng CÙNG công thức với danh sách gợi ý, nếu không user thấy hai điểm khác nhau
         // cho cùng một sản phẩm × cùng một phòng.
         var fitOccupation = await LoadOccupationAsync(user, p, ct);
+        decimal fitPersonalWeight = ResolvePersonalWeight(wctx.Scope, user?.DateOfBirth, p);
 
         var context = new ScoringContext
         {
@@ -388,9 +465,10 @@ public sealed class RecommendationService : IRecommendationService
             Scope = wctx.Scope,
             Purpose = profile.WorkPurpose,
             ViolatedDirections = violated,
-            PersonalWeight = ResolvePersonalWeight(wctx.Scope, user?.DateOfBirth, p),
+            PersonalWeight = fitPersonalWeight,
             RuleScores = await LoadRuleScoresAsync(ct),
-            OccupationDelta = fitOccupation.Delta,
+            OccupationProfile = fitOccupation.Profile,
+            OccupationWeight = p.OccupationWeightFor(fitPersonalWeight),
             OccupationCode = fitOccupation.Code,
             OccupationNameVi = fitOccupation.NameVi,
             Params = p,
@@ -414,18 +492,22 @@ public sealed class RecommendationService : IRecommendationService
         // hai lớp radar lệch thang và "xem trước" trông như đã gỡ chủ nhân ra khỏi phòng.
         var person = PersonPresenceBuilder.Build(user?.DateOfBirth, wctx.Scope, p);
 
+        // "Xem trước" = phòng NHƯ ĐANG CÓ (kể cả sản phẩm đã đặt) cộng thêm đúng sản phẩm này. Thiếu
+        // phần đã đặt thì nét đứt vẽ một căn phòng chưa từng tồn tại.
         var previewCurrent = WorkspaceVectorBuilder.BuildCurrentBreakdown(
                 wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements,
-                new[] { new ProductContribution(Guid.Empty, string.Empty, facts.Vector, voteWeight) },
-                person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha)
+                wctx.PlacedProducts
+                    .Append(new ProductContribution(Guid.Empty, string.Empty, facts.Vector, voteWeight))
+                    .ToList(),
+                person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha, p.TagVotesCap)
             .Current;
         var previewGapVec = wctx.Analysis.AdjustedIdeal.Subtract(previewCurrent);
 
         // Hiện trạng phòng có kèm "nguồn nào đóng góp bao nhiêu" — cùng phép tính với element-analysis,
         // chỉ khác là ở đây không tính sản phẩm đang xem vào (nó đã có mặt trong previewCurrent).
         var currentBreakdown = WorkspaceVectorBuilder.BuildCurrentBreakdown(
-            wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements, Array.Empty<ProductContribution>(),
-            person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha);
+            wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements, wctx.PlacedProducts,
+            person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha, p.TagVotesCap);
 
         var response = new ProductFitResponse
         {
@@ -462,6 +544,7 @@ public sealed class RecommendationService : IRecommendationService
             Contributions = CurrentBreakdownMapping.ToContributionRows(currentBreakdown),
             EvidenceCount = currentBreakdown.EvidenceCount,
             Confidence = CurrentBreakdownMapping.ConfidenceOf(currentBreakdown),
+            TagVotesScale = Math.Round(currentBreakdown.TagVotesScale, 3),
         };
 
         return ServiceResult<ProductFitResponse>.Success(response);
@@ -496,17 +579,23 @@ public sealed class RecommendationService : IRecommendationService
             .GroupBy(i => i.ProductId)
             .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
         var facts = ToFacts(product, productInputs, resolver, p);
+        var personalFitOccupation = await LoadOccupationAsync(user, p, ct);
 
         var context = new ScoringContext
         {
             PersonalVector = FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare),
             PersonalNeedVector = target.Vector,
+            PersonalAvoid = target.AvoidSet,
             // Không có phòng — policy của Carry không đọc hai vector này.
             AdjustedIdeal = ElementVector.Zero,
             CurrentVector = ElementVector.Zero,
             Scope = WorkspaceScope.Private,
             Purpose = WorkPurpose.Other, // Other → TargetVibe null → không lọc theo vibe không gian
             RuleScores = await LoadRuleScoresAsync(ct),
+            OccupationProfile = personalFitOccupation.Profile,
+            OccupationWeight = p.OccupationWeight,
+            OccupationCode = personalFitOccupation.Code,
+            OccupationNameVi = personalFitOccupation.NameVi,
             Params = p,
         };
 
@@ -532,6 +621,10 @@ public sealed class RecommendationService : IRecommendationService
                 Element = x.Element.ToString(),
                 Value = Math.Round(x.Value, 3),
             }).ToList(),
+            PersonalNeedSource = target.Source.ToString(),
+            PersonalNeedNoteVi = target.Note,
+            PersonalAvoidElements = Enum.GetValues<FengShuiElement>()
+                .Where(target.AvoidSet.Contains).Select(e => e.ToString()).ToList(),
             ProductVector = facts.Vector.Enumerate().Select(x => new ProductElementRow
             {
                 Element = x.Element.ToString(),
@@ -548,39 +641,40 @@ public sealed class RecommendationService : IRecommendationService
 
     // ─────────────────────────── helpers ───────────────────────────
 
-    /// <summary>Nghề nghiệp đã quy về đại lượng engine hiểu. Ba trường luôn cùng có hoặc cùng vắng.</summary>
-    private sealed record OccupationInfluence(ElementVector? Delta, string? Code, string? NameVi)
+    /// <summary>Nghề của user đã quy về đại lượng engine hiểu. Ba trường luôn cùng có hoặc cùng vắng.</summary>
+    private sealed record OccupationInfluence(ElementVector? Profile, string? Code, string? NameVi)
     {
         public static readonly OccupationInfluence None = new(null, null, null);
     }
 
     /// <summary>
-    /// Nạp delta ngũ hành theo nghề của user (P5/N1). Trả <see cref="OccupationInfluence.None"/> khi
-    /// kill-switch tắt, user chưa khai nghề, nghề bị tắt, hoặc nghề đó chưa được nhập delta nào —
-    /// <b>thiếu dữ liệu thì đừng đoán</b>, và cũng đừng trả mã nghề ra breakdown khi nó không đổi được điểm.
+    /// Nạp hồ sơ ngũ hành Σ=1 theo nghề của user (N3). Trả <see cref="OccupationInfluence.None"/> khi
+    /// kill-switch tắt, user chưa khai nghề, nghề bị tắt, hoặc nghề đó chưa có hồ sơ —
+    /// <b>thiếu dữ liệu thì đừng đoán</b>. Hồ sơ OTHER (0.2 đều) vẫn được trả: <c>OccupationAxis.Build</c>
+    /// tự nhận ra |δ|₁ = 0 và tắt trục, không cần luật riêng ở đây.
     /// </summary>
     private async Task<OccupationInfluence> LoadOccupationAsync(User? user, ScoringParameters p, CancellationToken ct)
     {
-        if (p.OccupationShare <= 0m || user?.OccupationId is not { } occupationId)
+        if (p.OccupationWeight <= 0m || user?.OccupationId is not { } occupationId)
             return OccupationInfluence.None;
 
         var occupation = (await _uow.ScoringConfig.GetOccupationsAsync(includeInactive: true, ct))
             .FirstOrDefault(o => o.Id == occupationId);
-        if (occupation is null || !occupation.IsActive || occupation.Modifiers.Count == 0)
+        if (occupation is null || !occupation.IsActive || occupation.Profile.Count == 0)
             return OccupationInfluence.None;
 
-        // KHÔNG dùng ElementVector.FromContributions: nó normalize về Σ=1, mà delta là đại lượng CÓ DẤU
-        // và có độ lớn riêng — chuẩn hoá là bóp méo đúng thứ tham số OCCUPATION_SHARE dùng để hiệu chỉnh.
-        var delta = ElementVector.Zero;
-        foreach (var m in occupation.Modifiers)
-            delta = delta.Add(ElementVector.Single(m.Element).Scale(m.Delta));
-
-        return new OccupationInfluence(delta, occupation.Code, occupation.NameVi);
+        var profile = OccupationProfileRules.ToVector(occupation.Profile.Select(r => (r.Element, r.Share)));
+        return new OccupationInfluence(profile, occupation.Code, occupation.NameVi);
     }
 
+    /// <param name="PlacedProducts">
+    /// Sản phẩm ĐÃ GIAO đang đặt trong phòng — đã nằm trong <paramref name="Analysis"/>. Mang theo đây
+    /// để trang Fit dựng lại <c>current</c>/<c>previewCurrent</c> mà không phải nạp lần hai.
+    /// </param>
     private sealed record WorkspaceScoringContext(
         WorkspaceType? WsType, WorkspaceScope Scope, ElementInputResolver Resolver, WorkspaceElementAnalysis Analysis,
-        IReadOnlyList<WorkspaceProfileInput> ProfileInputs, IReadOnlyList<WorkspaceTypeElement> TypeElements);
+        IReadOnlyList<WorkspaceProfileInput> ProfileInputs, IReadOnlyList<WorkspaceTypeElement> TypeElements,
+        IReadOnlyCollection<ProductContribution> PlacedProducts);
 
     /// <summary>Nạp data phòng + dựng 4 vector ngũ hành — dùng chung bởi GenerateAsync và GetProductFitAsync.</summary>
     // ─────────────────────────── v3.1 — trục cá nhân & mục tiêu ───────────────────────────
@@ -647,9 +741,13 @@ public sealed class RecommendationService : IRecommendationService
             + "gợi ý theo không gian và bản mệnh, chưa lọc theo mục tiêu đó.");
     }
 
+    /// <summary>
+    /// <paramref name="prms"/> KHÔNG có giá trị mặc định là cố ý: thiếu nó thì phiếu chủ nhân (§12),
+    /// nén tương phản (§17) và sản phẩm đã đặt (§19) đều <b>im lặng tắt</b>, và caller sẽ không nhận
+    /// được một lỗi nào — chỉ ra điểm khác prod. Bắt buộc truyền để trình biên dịch canh hộ.
+    /// </summary>
     private async Task<WorkspaceScoringContext> BuildWorkspaceContextAsync(
-        WorkspaceProfile profile, CancellationToken ct,
-        DateTime? ownerDateOfBirth = null, ScoringParameters? prms = null)
+        WorkspaceProfile profile, ScoringParameters prms, DateTime? ownerDateOfBirth, CancellationToken ct)
     {
         WorkspaceType? wsType = null;
         var typeElements = new List<WorkspaceTypeElement>();
@@ -667,12 +765,27 @@ public sealed class RecommendationService : IRecommendationService
         var resolver = new ElementInputResolver(await _uow.ScoringConfig.GetElementInputMapAsync(ct));
         var modifiers = await _uow.ScoringConfig.GetWorkPurposeModifiersAsync(profile.WorkPurpose, ct);
         var profileInputs = await _uow.ScoringConfig.GetWorkspaceProfileInputsAsync(profile.Id, ct);
-        var person = prms is null ? null : PersonPresenceBuilder.Build(ownerDateOfBirth, scope, prms);
+        var person = PersonPresenceBuilder.Build(ownerDateOfBirth, scope, prms);
+
+        // §19 — sản phẩm ĐÃ GIAO là hiện trạng thật của phòng, phải vào `current` dùng để CHẤM ĐIỂM
+        // chứ không chỉ vào radar. Dựng bằng đúng PlacedProductVectorBuilder mà element-analysis dùng.
+        var placements = await _uow.WorkspaceProfiles.GetPlacementsAsync(profile.Id, ct);
+        var placedProducts = placements.Count == 0
+            ? Array.Empty<ProductContribution>()
+            : PlacedProductVectorBuilder.Build(
+                    placements,
+                    await _uow.ScoringConfig.GetProductElementInputsByProductAsync(
+                        placements.Select(pl => pl.ProductId).Distinct().ToList(), ct),
+                    resolver,
+                    prms)
+                .DeliveredContributions();
+
         var analysis = WorkspaceElementAnalyzer.Analyze(
             typeElements, modifiers, profileInputs, resolver, person,
-            prms?.InteriorPriorVotes, prms?.EvidenceSaturationAlpha);
+            prms.InteriorPriorVotes, prms.EvidenceSaturationAlpha, placedProducts, prms.TagVotesCap);
 
-        return new WorkspaceScoringContext(wsType, scope, resolver, analysis, profileInputs, typeElements);
+        return new WorkspaceScoringContext(
+            wsType, scope, resolver, analysis, profileInputs, typeElements, placedProducts);
     }
 
     /// <summary>MatchFacts + placementHint (gộp để không đổi schema RecommendationItem).</summary>
@@ -684,7 +797,7 @@ public sealed class RecommendationService : IRecommendationService
         return list;
     }
 
-    private static ProductFacts ToFacts(
+    internal static ProductFacts ToFacts(
         Product p,
         IReadOnlyDictionary<Guid, IReadOnlyCollection<ProductElementInput>> inputsByProduct,
         ElementInputResolver resolver,
@@ -897,6 +1010,7 @@ public sealed class RecommendationService : IRecommendationService
         {
             Source = personalTarget.Source.ToString(),
             Elements = personalTarget.Elements.ToList(),
+            AvoidElements = personalTarget.AvoidElements.ToList(),
             Note = personalTarget.Note,
         },
         Note = note,

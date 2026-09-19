@@ -79,11 +79,18 @@ public sealed record CurrentContribution(
     Guid? ProductId = null);
 
 /// <summary>Kết quả dựng Current kèm breakdown theo nguồn (để FE vẽ radar "tag nào chiếm bao nhiêu %").</summary>
+/// <param name="TagVotesScale">
+/// v3.5 — hệ số đã nhân vào phiếu của MỌI tag: <c>1</c> khi tổng phiếu tag không vượt
+/// <c>TAG_VOTES_CAP</c>, <c>cap / Σ</c> khi vượt. <see cref="Contributions"/> đã mang phiếu sau khi nhân,
+/// nên <see cref="TotalVotes"/> và <see cref="ShareOf"/> tự nhất quán; con số này chỉ để giải thích
+/// ("8 tag đang tính bằng 5 phiếu").
+/// </param>
 public sealed record CurrentBreakdown(
     ElementVector Current,
     decimal TotalVotes,
     IReadOnlyList<CurrentContribution> Contributions,
-    ElementVector RawMass = default)
+    ElementVector RawMass = default,
+    decimal TagVotesScale = 1m)
 {
     /// <summary>
     /// Số bằng chứng THẬT (tag + sản phẩm) — 0 nghĩa là Current hoàn toàn suy ra từ prior.
@@ -145,7 +152,7 @@ public static class PersonPresenceBuilder
 
         var destiny = FengShuiCalculator.GetNapAmElement(FengShuiCalculator.GetLunarYear(dob));
         var vector = FengShuiCalculator.BuildPersonalVector(dob, p.SelfShare, p.SupportShare, p.ChildShare);
-        return new PersonPresence($"Bạn - mệnh {destiny}", votes, vector);
+        return new PersonPresence($"Bạn - mệnh {ElementSemantics.ElementName(destiny)}", votes, vector);
     }
 }
 
@@ -206,10 +213,11 @@ public static class WorkspaceVectorBuilder
         ElementInputResolver resolver,
         IEnumerable<WorkspaceTypeElement> interiorFallback,
         IReadOnlyCollection<(ElementVector Vector, decimal VoteWeight)> productContributions,
-        decimal? saturationAlpha = null)
+        decimal? saturationAlpha = null,
+        decimal? tagVotesCap = null)
         => BuildCurrentBreakdown(inputs, resolver, interiorFallback,
                 productContributions.Select(p => new ProductContribution(Guid.Empty, string.Empty, p.Vector, p.VoteWeight)).ToList(),
-                saturationAlpha: saturationAlpha)
+                saturationAlpha: saturationAlpha, tagVotesCap: tagVotesCap)
             .Current;
 
     /// <summary>
@@ -218,6 +226,10 @@ public static class WorkspaceVectorBuilder
     /// + mỗi sản phẩm đặt vào (vector chuẩn hóa × voteWeight), rồi chuẩn hóa Σ=1.
     /// Trả kèm breakdown từng nguồn để FE hiển thị "tag nào chiếm bao nhiêu %" và insight nêu nguyên do.
     /// Loại phòng chưa seed Interior → nền = phân bố đều 0.2 (vẫn không có hành = 0).
+    /// <para>
+    /// <paramref name="tagVotesCap"/> (v3.5): trần cho TỔNG phiếu tag — vượt thì mọi tag nhân
+    /// <c>cap / Σ</c>. <c>null</c> hoặc <c>≤ 0</c> = không cap (test cũ và §17 giữ nguyên).
+    /// </para>
     /// </summary>
     public static CurrentBreakdown BuildCurrentBreakdown(
         IReadOnlyCollection<WorkspaceProfileInput> inputs,
@@ -226,7 +238,8 @@ public static class WorkspaceVectorBuilder
         IReadOnlyCollection<ProductContribution> productContributions,
         PersonPresence? person = null,
         decimal? interiorVotes = null,
-        decimal? saturationAlpha = null)
+        decimal? saturationAlpha = null,
+        decimal? tagVotesCap = null)
     {
         var contributions = new List<CurrentContribution>();
 
@@ -254,6 +267,24 @@ public static class WorkspaceVectorBuilder
                 raw.Normalize(),
                 InputKind: input.InputKind,
                 InputCode: input.InputCode));
+        }
+
+        // 2a) v3.5 — trần tổng phiếu tag. Áp MỘT hệ số cho mọi tag (tỉ lệ giữa các tag giữ nguyên, tooltip
+        //     radar không đổi thứ tự), trước khi cộng với nền/chủ nhân/sản phẩm — ba nguồn đó không bị cap.
+        //     Nén α ở cuối vẫn áp lên tổng như cũ; cap chỉ đổi "tag nặng bao nhiêu so với phần còn lại".
+        decimal tagVotesScale = 1m;
+        if (tagVotesCap is > 0m and var cap)
+        {
+            decimal tagVotes = contributions.Where(c => c.Source == CurrentSourceKind.Tag).Sum(c => c.Votes);
+            if (tagVotes > cap)
+            {
+                tagVotesScale = cap / tagVotes;
+                for (int i = 0; i < contributions.Count; i++)
+                {
+                    if (contributions[i].Source == CurrentSourceKind.Tag)
+                        contributions[i] = contributions[i] with { Votes = contributions[i].Votes * tagVotesScale };
+                }
+            }
         }
 
         // 2b) Chủ nhân phòng — cùng cơ chế phiếu, PRIOR chứ không phải bằng chứng.
@@ -297,7 +328,7 @@ public static class WorkspaceVectorBuilder
         //
         // Đặt TRƯỚC Normalize: nén rồi mới chia tổng, nếu ngược lại thì Σ=1 khiến α gần như vô hiệu.
         var alpha = saturationAlpha ?? 1m;
-        return new CurrentBreakdown(total.Pow(alpha).Normalize(), totalVotes, contributions, total);
+        return new CurrentBreakdown(total.Pow(alpha).Normalize(), totalVotes, contributions, total, tagVotesScale);
     }
 
     /// <summary>Cộng dồn contributions KHÔNG chuẩn hóa (khác <see cref="ElementVector.FromContributions"/>).</summary>

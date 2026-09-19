@@ -98,7 +98,7 @@ public sealed class MinorClashPenaltyTests
         // Im lặng trừ điểm còn tệ hơn không trừ — dòng này là chỗ DUY NHẤT user đọc được lý do.
         foreach (var fragment in c.ReasonContains)
             Assert.Contains(fragment, minorRow.ReasonVi);
-        Assert.Contains("phần phụ", minorRow.LabelVi);
+        Assert.Contains("khắc bản mệnh", minorRow.LabelVi);
     }
 
     public static TheoryData<MinorClashCase> Cases()
@@ -111,10 +111,10 @@ public sealed class MinorClashPenaltyTests
             Id = "SCORE-MC-01", Name = "[Normal] A carry item is penalised for the clashing share it still carries",
             Destiny = FengShuiElement.Kim, Product = Bracelet, Placement = ProductPlacement.Carry,
             MinorClashPenalty = 0.60m,
-            Expected = 0.080m, ExpectedMinorPenalty = 0.120m,
+            Expected = 0.280m, ExpectedMinorPenalty = 0.120m,
             ReasonContains = new[] { "Hỏa", "20" },
-            Why = "dụngThần·sảnPhẩm = 0.6×0 + 0.4×0.50 = 0.200 (đo được trên UI: 60%); "
-                + "clashShare = product[Hỏa] = 0.20 ⇒ phạt 0.60×0.20 = 0.120 ⇒ 0.080.",
+            Why = "v3.6: needCover = min(0.6,0) + min(0.4,0.50) = 0.400 (không có kỵ thần trong ca này); "
+                + "clashShare = product[Hỏa] = 0.20 ⇒ phạt 0.60×0.20 = 0.120 ⇒ 0.280.",
         });
 
         data.Add(new MinorClashCase
@@ -122,8 +122,8 @@ public sealed class MinorClashPenaltyTests
             Id = "SCORE-MC-02", Name = "[Boundary] Turning the penalty off restores the pre-§18 score exactly",
             Destiny = FengShuiElement.Kim, Product = Bracelet, Placement = ProductPlacement.Carry,
             MinorClashPenalty = 0.00m,
-            Expected = 0.200m, ExpectedMinorPenalty = null,
-            Why = "Kill-switch: 0 × clashShare = 0 ⇒ đúng con số trước §18, không lệch chữ số nào.",
+            Expected = 0.400m, ExpectedMinorPenalty = null,
+            Why = "Kill-switch: 0 × clashShare = 0 ⇒ chỉ còn needCover = 0.400, không lệch chữ số nào.",
         });
 
         // ── Ranh giới: hành TRỘI khắc mệnh đi đường cũ, không rơi vào công thức tỉ trọng ──
@@ -144,8 +144,8 @@ public sealed class MinorClashPenaltyTests
             Destiny = FengShuiElement.Kim, Placement = ProductPlacement.Carry,
             Product = new ElementVector(Tho: 0.50m, Kim: 0.50m, Thuy: 0m, Moc: 0m, Hoa: 0m),
             MinorClashPenalty = 0.60m,
-            Expected = 0.500m, ExpectedMinorPenalty = null,
-            Why = "Không hành nào khắc Kim ⇒ clashShare = 0 ⇒ không phạt. "
+            Expected = 0.900m, ExpectedMinorPenalty = null,
+            Why = "v3.6: needCover = min(0.6,0.5) + min(0.4,0.5) = 0.900. Không hành nào khắc Kim ⇒ clashShare = 0 ⇒ không phạt. "
                 + "Điểm = 0.6×0.50 + 0.4×0.50 = 0.500.",
         });
 

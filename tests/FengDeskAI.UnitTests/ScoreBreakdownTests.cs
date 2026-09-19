@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Features.CustomerCare.Engine;
+﻿using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Domain.Entities.CustomerCare;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Workspace;
@@ -230,7 +230,10 @@ public sealed class ScoreBreakdownTests
         Assert.Contains(penalties, p => p.Code is ScoringParamCodes.VibeMismatchPenalty or ScoringParamCodes.VibeUnknownPenalty);
 
         Assert.All(scored.Breakdown!.Components, c => Assert.False(string.IsNullOrWhiteSpace(c.ReasonVi)));
-        Assert.Equal(ScoringFormulaVersions.V32, scored.Breakdown!.FormulaVersion);
+        // So với Current, KHÔNG neo vào một phiên bản cụ thể: điều ca này khóa là "breakdown có đóng
+        // dấu phiên bản engine đang chạy", chứ không phải "phiên bản đó là 3.2". Neo số cụ thể thì mỗi
+        // lần bump công thức sẽ làm đỏ một ca về penalty, chọc sai chỗ cần xem.
+        Assert.Equal(ScoringFormulaVersions.Current, scored.Breakdown!.FormulaVersion);
     }
 
     /// <summary>Bốn đẳng thức của §9.1, dùng chung cho mọi ca.</summary>

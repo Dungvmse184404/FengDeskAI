@@ -24,7 +24,7 @@ Ba điểm sai:
 
 ### 2.1 Tách "lệch" khỏi "chưa biết" — hai tham số
 
-Cùng nguyên tắc đã dùng ở `recommendation-scoring-v4-polarity.md` §3.2 (polarity chưa xác định thì giữ hành vi cũ, không coi unknown là một giá trị hợp lệ), áp theo chiều ngược lại:
+Cùng nguyên tắc đã dùng ở [`recommendation-scoring-v4-polarity.md`](./recommendation-scoring-v4-polarity.md#32-khắc-hữu-tình--vô-tình--tinh-chỉnh-bước-2b) §3.2 (polarity chưa xác định thì giữ hành vi cũ, không coi unknown là một giá trị hợp lệ), áp theo chiều ngược lại:
 
 | Code | Default | Áp khi |
 |---|---|---|
@@ -64,7 +64,7 @@ Nâng lên `0.00` khi tắt kill-switch.
 
 - **Ma trận tương thích vibe 5×5.** `Focus` vs `Calm` gần nhau (đều tĩnh), `Focus` vs `Energize` lệch hẳn — phạt phẳng coi hai ca như nhau. Làm đúng cần bảng 25 ô phải seed và hiệu chỉnh; để giai đoạn 2, sau khi có số liệu thực từ penalty phẳng.
 - **Mềm hóa bộ lọc khắc mệnh.** Nó cũng loại trước khi chấm (khi `Scope = Private`), nhưng khắc mệnh là ràng buộc phong thủy thật chứ không phải vấn đề dữ liệu thiếu — giữ cứng. Nếu sau này muốn mềm nốt thì `MIN_SCORE_THRESHOLD` đã sẵn sàng gánh vai lưới an toàn.
-- **Thêm nhóm vibe mới** (cầu tài/bình an/sức khỏe/thi cử) — xem `product-placement-personal-recommendation.md` §7.
+- **Thêm nhóm vibe mới** (cầu tài/bình an/sức khỏe/thi cử) — xem [`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md#7-không-làm-out-of-scope) §7.
 
 ## 4. File thay đổi
 

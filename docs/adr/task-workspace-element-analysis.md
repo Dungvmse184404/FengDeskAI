@@ -81,7 +81,7 @@ public sealed record ElementAnalysisRow
 - Regression: điểm recommendation trước/sau refactor giống nhau.
 
 ### 6. Doc
-Cập nhật `docs/api-documents/16-workspace-profiles.md`: thêm endpoint `GET /{id}/element-analysis` + ví dụ response.
+Cập nhật [`docs/api-documents/16-workspace-profiles.md`](../api-documents/16-workspace-profiles.md): thêm endpoint `GET /{id}/element-analysis` + ví dụ response.
 
 ## Ràng buộc
 - **Không** thêm bảng/migration. **Không** đổi engine chấm điểm.

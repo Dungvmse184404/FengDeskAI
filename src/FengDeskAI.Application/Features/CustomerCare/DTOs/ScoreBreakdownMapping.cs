@@ -36,6 +36,9 @@ public static class ScoreBreakdownMapping
                 Value = Math.Round(p.Value, 3),
                 Applied = p.Applied,
                 ReasonVi = p.ReasonVi,
+                ParamValue = Math.Round(p.ParamValue, 3),
+                Factor = p.Factor is { } f ? Math.Round(f, 3) : null,
+                FactorLabelVi = p.FactorLabelVi,
             }).ToList(),
             Blended = Math.Round(b.Blended, 3),
             RawScore = Math.Round(b.RawScore, 3),
@@ -53,8 +56,8 @@ public static class ScoreBreakdownMapping
                 Product = Rows(b.ProductVector),
                 NormalizedGap = Rows(b.NormalizedGap),
                 RuleScore = b.RuleScoreVector is { } r ? Rows(r) : null,
-                BaseRuleScore = b.BaseRuleScoreVector is { } br ? Rows(br) : null,
-                OccupationShift = b.OccupationShift is { } shift ? Rows(shift) : null,
+                OccupationDirection = b.OccupationDirection is { } od ? Rows(od) : null,
+                OccupationRawDirection = b.OccupationRawDirection is { } ord ? Rows(ord) : null,
                 CombinedDirection = Rows(b.CombinedDirection),
                 PriorityVector = Rows(b.PriorityVector),
                 PersonalNeed = b.PersonalNeedVector is { } need ? Rows(need) : null,
@@ -62,14 +65,17 @@ public static class ScoreBreakdownMapping
                 PersonalTarget = b.PersonalTarget is { } pt ? Rows(pt) : null,
             },
             DestinyElement = b.DestinyElement?.ToString(),
+            PersonalAvoidElements = b.PersonalAvoidElements?.Select(e => e.ToString()).ToList(),
             DestinyLabelVi = DestinyLabel(b.DestinyElement, dateOfBirth),
-            Occupation = b.OccupationCode is { } occCode && b.OccupationNameVi is { } occName && b.OccupationShift is { } occShift
+            Occupation = b.OccupationCode is { } occCode && b.OccupationNameVi is { } occName
+                         && b.OccupationDirection is { } occDir && b.OccupationRawDirection is { } occRaw
                 ? new OccupationInfluenceResponse
                 {
                     Code = occCode,
                     NameVi = occName,
-                    Share = b.OccupationShare,
-                    ReasonVi = OccupationReason(occName, occShift),
+                    Weight = Math.Round(b.OccupationWeight, 3),
+                    WeightCode = b.OccupationWeightCode ?? ScoringParamCodes.OccupationWeight,
+                    ReasonVi = OccupationReason(occName, occDir, occRaw, b.DestinyElement),
                 }
                 : null,
             ConflictResolution = b.ConflictResolution is { } c ? new ConflictResolutionResponse
@@ -82,31 +88,35 @@ public static class ScoreBreakdownMapping
         };
 
     /// <summary>
-    /// Câu giải thích cho lớp nghề nghiệp — nêu ĐÍCH DANH hành nào được kéo lên, hành nào bị đẩy xuống.
-    ///
-    /// <para>
-    /// Đọc từ mức dịch THẬT (<c>r' − r</c>) chứ không từ delta khai trong bảng: hành khắc bản mệnh bị
-    /// chặn nên mức dịch thật của nó gần 0, và user cần thấy đúng điều đó — nói "nghề của bạn hợp Kim"
-    /// trong khi Kim vẫn khắc mệnh là nói dối bằng con số danh nghĩa.
-    /// </para>
+    /// Câu giải thích cho trục nghề — nêu ĐÍCH DANH hành nghề cần, hành nghề tránh, và hành nghề muốn
+    /// nâng nhưng bị chặn vì khắc mệnh. Đọc từ <c>ô</c> ĐÃ chặn: nói "nghề của bạn hợp Kim" trong khi
+    /// Kim vẫn khắc mệnh là nói dối bằng con số danh nghĩa.
     /// </summary>
-    public static string OccupationReason(string occupationNameVi, ElementVector shift)
+    public static string OccupationReason(
+        string occupationNameVi, ElementVector direction, ElementVector rawDirection, FengShuiElement? destiny)
     {
-        const decimal visible = 0.005m; // dưới ngưỡng này thì làm tròn hiển thị đã về 0.00
-        var up = shift.Enumerate().Where(x => x.Value >= visible)
+        const decimal visible = 0.005m;
+        var up = direction.Enumerate().Where(x => x.Value >= visible)
             .OrderByDescending(x => x.Value).Select(x => x.Element.ToString()).ToList();
-        var down = shift.Enumerate().Where(x => x.Value <= -visible)
+        var down = direction.Enumerate().Where(x => x.Value <= -visible)
             .OrderBy(x => x.Value).Select(x => x.Element.ToString()).ToList();
-
-        if (up.Count == 0 && down.Count == 0)
-            return $"Nghề {occupationNameVi} không đổi mức hợp của hành nào - hoặc hệ số đang rất nhỏ, "
-                 + "hoặc những hành nghề này ưa đều đang khắc bản mệnh của bạn nên bị chặn lại.";
+        var blocked = rawDirection.Enumerate()
+            .Where(x => x.Value >= visible && direction[x.Element] < visible)
+            .Select(x => x.Element.ToString()).ToList();
 
         var parts = new List<string>();
-        if (up.Count > 0) parts.Add($"nâng {string.Join(", ", up)}");
-        if (down.Count > 0) parts.Add($"hạ {string.Join(", ", down)}");
-        return $"Nghề {occupationNameVi} {string.Join(" và ", parts)}. "
-             + "Nghề nghiệp chỉ đổi mức ƯA THÍCH, không đổi bản mệnh: hành đang khắc mệnh vẫn ở lại phía âm.";
+        if (up.Count > 0) parts.Add($"cần {string.Join(", ", up)}");
+        if (down.Count > 0) parts.Add($"tránh {string.Join(", ", down)}");
+
+        string head = parts.Count > 0
+            ? $"Nghề {occupationNameVi} {string.Join(" và ", parts)}."
+            : $"Nghề {occupationNameVi} không nghiêng về hành nào sau khi chặn.";
+
+        if (blocked.Count > 0 && destiny is { } mine)
+            head += $" Nghề còn cần {string.Join(", ", blocked)} nhưng hành đó khắc bản mệnh {mine} nên không được cộng"
+                  + " - nghề đổi mức ưa thích, không đổi bản mệnh.";
+
+        return head;
     }
 
     /// <summary>
@@ -115,6 +125,18 @@ public static class ScoreBreakdownMapping
     /// </summary>
     public static int DisplayPercentOf(decimal score)
         => (int)Math.Round(100m * (Math.Clamp(score, -1m, 1m) + 1m) / 2m, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// Cùng ngưỡng với <c>ScoreBadge.tierFor</c> của FE (≥0.6 · ≥0.2 · ≥−0.2). BE tính sẵn cho những chỗ
+    /// FE không có badge (bảng "hợp nghề nào" ở trang sản phẩm) để hai bên không lệch nhãn.
+    /// </summary>
+    public static string TierVi(decimal score) => score switch
+    {
+        >= 0.6m => "Rất hợp",
+        >= 0.2m => "Phù hợp",
+        >= -0.2m => "Trung tính",
+        _ => "Cân nhắc",
+    };
 
     public static List<ProductElementRow> Rows(ElementVector v)
         => v.Enumerate()

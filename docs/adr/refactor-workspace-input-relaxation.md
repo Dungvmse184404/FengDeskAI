@@ -1,6 +1,6 @@
 # ARD — Refactor: Workspace Input Relaxation
 
-> **Status:** Proposal. **PR riêng, làm TRƯỚC** `feature-workspace-ai-intake.md` và scoring v4.
+> **Status:** Proposal. **PR riêng, làm TRƯỚC** [`feature-workspace-ai-intake.md`](./feature-workspace-ai-intake.md) và scoring v4.
 > **Vấn đề:** form workspace bắt buộc nhiều field user không biết/không có (hướng bàn, diện tích bàn, phòng không có bàn, hành nhập tay) — trong khi engine v3 không dùng chúng để chấm điểm (audit: `RoomFacingDirection` không dùng ở đâu; `DeskOrientation/DeskArea/Lighting` chỉ vào payload AI diễn giải; `FengShuiElement` legacy).
 
 ## Nguyên tắc

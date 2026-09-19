@@ -2403,7 +2403,7 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.ToTable("occupations", (string)null);
                 });
 
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.OccupationElementModifier", b =>
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.OccupationElementProfile", b =>
                 {
                     b.Property<Guid>("Id")
                         .HasColumnType("uuid")
@@ -2416,10 +2416,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("CreatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
-
-                    b.Property<decimal>("Delta")
-                        .HasColumnType("numeric(4,3)")
-                        .HasColumnName("delta");
 
                     b.Property<string>("Element")
                         .IsRequired()
@@ -2437,6 +2433,10 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("occupation_id");
 
+                    b.Property<decimal>("Share")
+                        .HasColumnType("numeric(4,3)")
+                        .HasColumnName("share");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("updated_at");
@@ -2451,7 +2451,10 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .IsUnique()
                         .HasFilter("is_deleted = false");
 
-                    b.ToTable("occupation_element_modifiers", (string)null);
+                    b.ToTable("occupation_element_profiles", null, t =>
+                        {
+                            t.HasCheckConstraint("CK_occupation_element_profiles_share", "share >= 0 AND share <= 1");
+                        });
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.ProductElementInput", b =>
@@ -4566,10 +4569,10 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("ReturnRequest");
                 });
 
-            modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.OccupationElementModifier", b =>
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.OccupationElementProfile", b =>
                 {
                     b.HasOne("FengDeskAI.Domain.Entities.Recommendation.Occupation", "Occupation")
-                        .WithMany("Modifiers")
+                        .WithMany("Profile")
                         .HasForeignKey("OccupationId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -4963,7 +4966,7 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.Occupation", b =>
                 {
-                    b.Navigation("Modifiers");
+                    b.Navigation("Profile");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Sales.Cart", b =>

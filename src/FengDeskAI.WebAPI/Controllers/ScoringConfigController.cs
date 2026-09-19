@@ -83,7 +83,7 @@ public class ScoringConfigController : ApiControllerBase
 
     // ── occupations (P5) ──
 
-    /// <summary>Danh sách nghề kèm bảng delta — màn hình chuyên gia soát và nhập số.</summary>
+    /// <summary>Danh sách nghề kèm hồ sơ ngũ hành — màn hình chuyên gia soát và nhập số.</summary>
     [HttpGet("occupations")]
     public async Task<IActionResult> GetOccupations([FromQuery] bool includeInactive = false, CancellationToken ct = default)
         => ToActionResult(await _service.GetOccupationsAsync(includeInactive, ct));
@@ -93,19 +93,19 @@ public class ScoringConfigController : ApiControllerBase
     public async Task<IActionResult> CreateOccupation([FromBody] UpsertOccupationRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpsertOccupationAsync(null, request, ct));
 
-    /// <summary>Sửa tên/mô tả/trạng thái của một nghề. KHÔNG đụng tới delta.</summary>
+    /// <summary>Sửa tên/mô tả/trạng thái của một nghề. KHÔNG đụng tới hồ sơ ngũ hành.</summary>
     [HttpPut("occupations/{code}")]
     public async Task<IActionResult> UpdateOccupation(string code, [FromBody] UpsertOccupationRequest request, CancellationToken ct)
         => ToActionResult(await _service.UpsertOccupationAsync(code, request, ct));
 
     /// <summary>
-    /// Ghi đè TRỌN GÓI bảng delta của một nghề — đây là chỗ chuyên gia phong thủy nhập số sau khi duyệt.
-    /// Seeder cố tình không seed delta: nó là phát biểu phong thủy, không phải dữ liệu tham chiếu.
+    /// Ghi đè TRỌN GÓI hồ sơ ngũ hành (Σ share = 1) của một nghề — chỗ chuyên gia phong thủy sửa số
+    /// sau khi duyệt bản nháp seeder đã chèn. Tổng lệch 1 quá 0.001 ⇒ 400.
     /// </summary>
-    [HttpPut("occupations/{code}/modifiers")]
-    public async Task<IActionResult> ReplaceOccupationModifiers(
-        string code, [FromBody] ReplaceOccupationModifiersRequest request, CancellationToken ct)
-        => ToActionResult(await _service.ReplaceOccupationModifiersAsync(code, request, ct));
+    [HttpPut("occupations/{code}/profile")]
+    public async Task<IActionResult> ReplaceOccupationProfile(
+        string code, [FromBody] ReplaceOccupationProfileRequest request, CancellationToken ct)
+        => ToActionResult(await _service.ReplaceOccupationProfileAsync(code, request, ct));
 
     /// <summary>Xóa nghề. Bị chặn khi còn user đang chọn — ẩn bằng <c>isActive = false</c> thay vì xóa.</summary>
     [HttpDelete("occupations/{code}")]

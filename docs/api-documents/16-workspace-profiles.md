@@ -11,7 +11,7 @@ Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / 
 > **Lưu ý field engine:**
 > - `fengShuiElement` (mệnh nhập tay) là **legacy**, engine **không dùng** — mệnh phòng tính bằng vector ngũ hành từ loại phòng + màu/vật liệu.
 > - `inputs` (màu/vật liệu/hình khối thực tế của phòng → dựng `currentVector`) **ĐÃ lộ ra** ở cả request lẫn response. Quy ước null-vs-rỗng: `inputs = null` → **giữ nguyên**; `inputs = []` → **xoá hết**.
-> - ⚠️ `entrance_direction`, `toilet_direction`, `dark_directions` (hướng bị chắn → Directional Validation) **vẫn CHƯA có ô nhập** ở request/UI — chỉ tồn tại ở tầng DB/engine, nên `DIRECTION_PENALTY` gần như không bao giờ kích hoạt. Xem `docs/ard/architecture-core/06-doc-debt.md`.
+> - ⚠️ `entrance_direction`, `toilet_direction`, `dark_directions` (hướng bị chắn → Directional Validation) **vẫn CHƯA có ô nhập** ở request/UI — chỉ tồn tại ở tầng DB/engine, nên `DIRECTION_PENALTY` gần như không bao giờ kích hoạt. Xem [`docs/ard/architecture-core/06-doc-debt.md`](../ard/architecture-core/06-doc-debt.md).
 
 ---
 

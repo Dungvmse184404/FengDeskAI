@@ -16,7 +16,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
     private readonly IGenericRepository<WorkPurposeElementModifier> _modifiers;
     private readonly IGenericRepository<WorkspaceTypeElement> _typeElements;
     private readonly IGenericRepository<Occupation> _occupations;
-    private readonly IGenericRepository<OccupationElementModifier> _occupationModifiers;
+    private readonly IGenericRepository<OccupationElementProfile> _occupationProfiles;
     private readonly IGenericRepository<User> _users;
     private readonly IUnitOfWork _uow;
 
@@ -26,7 +26,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         IGenericRepository<WorkPurposeElementModifier> modifiers,
         IGenericRepository<WorkspaceTypeElement> typeElements,
         IGenericRepository<Occupation> occupations,
-        IGenericRepository<OccupationElementModifier> occupationModifiers,
+        IGenericRepository<OccupationElementProfile> occupationProfiles,
         IGenericRepository<User> users,
         IUnitOfWork uow)
     {
@@ -35,7 +35,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         _modifiers = modifiers;
         _typeElements = typeElements;
         _occupations = occupations;
-        _occupationModifiers = occupationModifiers;
+        _occupationProfiles = occupationProfiles;
         _users = users;
         _uow = uow;
     }
@@ -357,42 +357,43 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
     }
 
     /// <summary>
-    /// Ghi đè TRỌN GÓI bảng delta của một nghề.
+    /// Ghi đè TRỌN GÓI hồ sơ ngũ hành của một nghề (N3).
     ///
     /// <para>
-    /// Chặn <c>|delta| &gt; 1</c>: <c>r</c> vốn nằm trong [−1, 1] nên delta lớn hơn thế chỉ có thể ép
-    /// mọi hành về biên, biến tham số <c>OCCUPATION_SHARE</c> thành công tắc bật/tắt thay vì một núm
-    /// hiệu chỉnh. Việc chặn hành khắc mệnh thì nằm trong engine, không đặt ở đây — dữ liệu được phép
-    /// khai ý định, engine mới là nơi cưỡng chế kiêng kỵ.
+    /// Cưỡng chế <c>Σ share = 1 ± 0.001</c> và từng share ∈ [0, 1] tại đây vì DB không diễn tả được ràng
+    /// buộc theo nhóm dòng. Hồ sơ lệch tổng thì <c>δ = share − 0.2</c> không còn Σ=0 và trục nghề
+    /// (<c>OccupationAxis</c>) sẽ nghiêng về một phía không ai chủ ý. Việc chặn hành khắc mệnh thì nằm
+    /// trong engine, không đặt ở đây — dữ liệu được phép khai ý định, engine mới là nơi cưỡng chế kiêng kỵ.
     /// </para>
+    /// <para>Gửi danh sách rỗng = xóa hồ sơ, nghề trở về trạng thái "chưa có hồ sơ" (engine bỏ qua).</para>
     /// </summary>
-    public async Task<IServiceResult<OccupationAdminDto>> ReplaceOccupationModifiersAsync(
-        string code, ReplaceOccupationModifiersRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult<OccupationAdminDto>> ReplaceOccupationProfileAsync(
+        string code, ReplaceOccupationProfileRequest request, CancellationToken ct = default)
     {
         var occupation = await _uow.ScoringConfig.GetOccupationByCodeAsync(code, ct);
         if (occupation is null)
             return ServiceResult<OccupationAdminDto>.Failure(ApiStatusCodes.NotFound, $"Không tìm thấy nghề '{code}'.");
 
-        var rows = request.Modifiers ?? new List<OccupationModifierInput>();
-        if (rows.Select(m => m.Element).Distinct().Count() != rows.Count)
-            return ServiceResult<OccupationAdminDto>.Failure(ApiStatusCodes.BadRequest, "Mỗi hành chỉ được khai một lần.");
-        if (rows.Any(m => Math.Abs(m.Delta) > 1m))
-            return ServiceResult<OccupationAdminDto>.Failure(ApiStatusCodes.BadRequest, "Delta phải nằm trong [-1, 1].");
+        var rows = request.Entries ?? new List<OccupationProfileEntryInput>();
+        if (OccupationProfileRules.Validate(rows.Select(m => (m.Element, m.Share)).ToList()) is { } error)
+            return ServiceResult<OccupationAdminDto>.Failure(ApiStatusCodes.BadRequest, error);
 
-        var existing = await _occupationModifiers.FindAsync(m => m.OccupationId == occupation.Id, ct);
-        foreach (var row in existing) _occupationModifiers.Remove(row);
+        // Xóa qua chính navigation đã track bởi GetOccupationByCodeAsync(Include Profile). Nạp lại bằng
+        // FindAsync (AsNoTracking) sẽ ra instance thứ hai cùng Id ⇒ Remove ném "already being tracked".
+        foreach (var row in occupation.Profile.ToList()) _occupationProfiles.Remove(row);
 
-        foreach (var row in rows.Where(m => m.Delta != 0m))
-            await _occupationModifiers.AddAsync(new OccupationElementModifier
+        // Hành share = 0 không lưu: thiếu dòng nghĩa là 0, và bảng gọn hơn cho màn hình soát.
+        foreach (var row in rows.Where(m => m.Share > 0m))
+            await _occupationProfiles.AddAsync(new OccupationElementProfile
             {
                 OccupationId = occupation.Id,
                 Element = row.Element,
-                Delta = row.Delta,
+                Share = row.Share,
             }, ct);
 
         await _uow.SaveChangesAsync(ct);
         var saved = await _uow.ScoringConfig.GetOccupationByCodeAsync(code, ct);
-        return ServiceResult<OccupationAdminDto>.Success(ToDto(saved!), "Đã lưu bảng delta của nghề.");
+        return ServiceResult<OccupationAdminDto>.Success(ToDto(saved!), "Đã lưu hồ sơ ngũ hành của nghề.");
     }
 
     /// <summary>
@@ -410,8 +411,8 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
             return ServiceResult.Failure(ApiStatusCodes.BadRequest,
                 $"Còn {inUse} người dùng đang chọn nghề này. Đặt isActive = false để ẩn khỏi danh sách chọn thay vì xóa.");
 
-        var modifiers = await _occupationModifiers.FindAsync(m => m.OccupationId == occupation.Id, ct);
-        foreach (var row in modifiers) _occupationModifiers.Remove(row);
+        var profile = await _occupationProfiles.FindAsync(m => m.OccupationId == occupation.Id, ct);
+        foreach (var row in profile) _occupationProfiles.Remove(row);
         _occupations.Remove(occupation);
 
         await _uow.SaveChangesAsync(ct);
@@ -427,9 +428,12 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         IsActive = o.IsActive,
         IsSystemSeeded = o.IsSystemSeeded,
         SortOrder = o.SortOrder,
-        Modifiers = o.Modifiers
+        // Lọc IsDeleted ở đây vì sau ReplaceOccupationProfileAsync, navigation đã track vẫn giữ các dòng
+        // vừa xóa mềm (query filter chỉ áp ở DB, không dọn collection trong change tracker).
+        Profile = o.Profile
+            .Where(m => !m.IsDeleted)
             .OrderBy(m => m.Element)
-            .Select(m => new OccupationModifierDto { Element = m.Element.ToString(), Delta = m.Delta })
+            .Select(m => new OccupationProfileEntryDto { Element = m.Element.ToString(), Share = m.Share })
             .ToList(),
     };
 

@@ -1,3 +1,4 @@
+using FengDeskAI.Domain.Entities.CustomerCare;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
@@ -316,6 +317,74 @@ public sealed class CustomerCareFlowTests
     }
 
     // ===================== Helper =====================
+
+    // ===================== Hợp nghề — mặt A (N3) =====================
+
+    [Fact(DisplayName = "REC-OCC-01 [Normal] Anyone can ask which occupations a product fits, ranked by percent")]
+    public async Task OccupationFit_Anonymous_ReturnsRankedOccupations()
+    {
+        var productId = await ScoredProductIdAsync();
+
+        var response = await _fixture.ClientFor(TestRole.Anonymous)
+            .GetAsync($"/api/products/{productId}/occupation-fit");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var data = await ApiEnvelope.DataAsync(response);
+        Assert.Equal(productId, data.GetProperty("productId").GetGuid());
+        Assert.Equal(ScoringFormulaVersions.Current, data.GetProperty("formulaVersion").GetString());
+
+        var fits = data.GetProperty("fits").EnumerateArray().ToList();
+        // 8 nghề seed, OTHER (0.2 đều) tự rút ⇒ 7 dòng.
+        Assert.True(fits.Count >= 7, $"kỳ vọng ≥ 7 nghề có hồ sơ, nhận {fits.Count}");
+        Assert.DoesNotContain(fits, f => f.GetProperty("code").GetString() == "OTHER");
+
+        var scores = fits.Select(f => f.GetProperty("score").GetDecimal()).ToList();
+        Assert.Equal(scores.OrderByDescending(x => x).ToList(), scores);
+        Assert.All(fits, f =>
+        {
+            int pct = f.GetProperty("displayPercent").GetInt32();
+            Assert.InRange(pct, 0, 100);
+            Assert.False(string.IsNullOrWhiteSpace(f.GetProperty("tierVi").GetString()));
+            Assert.Equal(5, f.GetProperty("direction").GetArrayLength());
+        });
+    }
+
+    [Fact(DisplayName = "REC-OCC-02 [Normal] A single occupation can be requested by code, case-insensitively")]
+    public async Task OccupationFit_ByCode_ReturnsOneRow()
+    {
+        var productId = await ScoredProductIdAsync();
+
+        var response = await _fixture.ClientFor(TestRole.Anonymous)
+            .GetAsync($"/api/products/{productId}/occupation-fit?occupationCode=finance");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var fits = (await ApiEnvelope.DataAsync(response)).GetProperty("fits").EnumerateArray().ToList();
+        Assert.Single(fits);
+        Assert.Equal("FINANCE", fits[0].GetProperty("code").GetString());
+    }
+
+    [Fact(DisplayName = "REC-OCC-03 [Abnormal] An unknown product or occupation code returns 404")]
+    public async Task OccupationFit_Unknown_ReturnsNotFound()
+    {
+        var missingProduct = await _fixture.ClientFor(TestRole.Anonymous)
+            .GetAsync($"/api/products/{Guid.NewGuid()}/occupation-fit");
+        Assert.Equal(HttpStatusCode.NotFound, missingProduct.StatusCode);
+
+        var productId = await ScoredProductIdAsync();
+        var missingOccupation = await _fixture.ClientFor(TestRole.Anonymous)
+            .GetAsync($"/api/products/{productId}/occupation-fit?occupationCode=NOPE");
+        Assert.Equal(HttpStatusCode.NotFound, missingOccupation.StatusCode);
+    }
+
+    /// <summary>Một sản phẩm chắc chắn đã gắn thuộc tính phong thủy — lấy từ đầu bảng gợi ý.</summary>
+    private async Task<Guid> ScoredProductIdAsync()
+    {
+        var profileId = await ProfileAsync();
+        var recommended = await Customer().PostAsJsonAsync("/api/recommendations",
+            new { workspaceProfileId = profileId, topN = 1 });
+        Assert.True(recommended.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(recommended, "tạo gợi ý"));
+        return (await ApiEnvelope.DataAsync(recommended)).GetProperty("items")[0].GetProperty("productId").GetGuid();
+    }
 
     private HttpClient Customer() => _fixture.ClientFor(TestRole.Customer);
 

@@ -9,12 +9,9 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// Seed bảng tra cứu <c>occupations</c> từ <c>seed-data/occupations.json</c>. Idempotent theo <c>code</c>.
 ///
 /// <para>
-/// <b>⚠️ CHỈ seed danh sách nghề, KHÔNG seed delta ngũ hành.</b> Danh sách nghề là một
-/// <i>taxonomy</i> — thêm "Y tế" vào danh sách không phát biểu điều gì về phong thủy. Còn
-/// <c>occupation_element_modifiers.delta</c> <i>là</i> một phát biểu phong thủy ("nghề này hợp hành
-/// Thủy hơn"), nên nó phải đi qua chuyên gia duyệt rồi nhập bằng
-/// <c>PUT /api/admin/scoring/occupations/{code}/modifiers</c>, đúng cách <c>feng_shui_rules</c> đã làm.
-/// Bản nháp để chuyên gia bắt đầu nằm ở <c>docs/adr/score-explainability-v3.2.md</c> §11.5.
+/// <b>CHỈ seed danh sách nghề (taxonomy).</b> Hồ sơ ngũ hành Σ=1 của từng nghề là một phát biểu phong
+/// thủy nên tách sang <see cref="OccupationElementProfileSeeder"/> (chạy sau, Order 3) và sửa runtime
+/// bằng <c>PUT /api/admin/scoring/occupations/{code}/profile</c>. Xem ADR <c>occupation-product-fit-v1.md</c> §2.
 /// </para>
 ///
 /// <para>
@@ -79,7 +76,7 @@ public class OccupationSeeder : IDataSeeder
 
         await _context.SaveChangesAsync(ct);
         _logger.LogInformation(
-            "Seed occupations: thêm {Added} nghề (tổng {Total} trong file). Delta ngũ hành để trống — chờ chuyên gia duyệt.",
+            "Seed occupations: thêm {Added} nghề (tổng {Total} trong file). Hồ sơ ngũ hành do OccupationElementProfileSeeder chèn riêng.",
             added, file.Occupations.Count);
     }
 }

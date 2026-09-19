@@ -76,5 +76,5 @@ Types/api: `product.d.ts` thêm `elementInputs` vào create payload; `*.api.ts` 
 
 ## Quan hệ với các ADR khác
 
-- Chuẩn bị nền cho `recommendation-scoring-v4-polarity.md`: polarity của product suy từ chính `ElementInputs` này — luồng create sửa xong thì v4 không cần vendor làm gì thêm.
-- Cùng tinh thần với `refactor-workspace-input-relaxation.md` (không hỏi thứ user không biết) — có thể review cùng đợt.
+- Chuẩn bị nền cho [`recommendation-scoring-v4-polarity.md`](./recommendation-scoring-v4-polarity.md): polarity của product suy từ chính `ElementInputs` này — luồng create sửa xong thì v4 không cần vendor làm gì thêm.
+- Cùng tinh thần với [`refactor-workspace-input-relaxation.md`](./refactor-workspace-input-relaxation.md) (không hỏi thứ user không biết) — có thể review cùng đợt.

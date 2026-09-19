@@ -128,6 +128,8 @@ public class PlacementProductDemoSeeder : IDataSeeder
         var existingNames = (await _context.Set<Product>().Select(p => p.Name).ToListAsync(ct))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
+        int synced = await SyncExistingAsync(file, resolver, prms, ct);
+
         int added = 0;
         foreach (var row in file.Rows)
         {
@@ -203,14 +205,8 @@ public class PlacementProductDemoSeeder : IDataSeeder
                 .ToList();
 
             // Cache vector ngũ hành ngay lúc seed — engine đọc 5 cột này thay vì tính lại mỗi lần chấm.
-            var vector = ProductVectorProvider.Build(
-                isOverridden: false, overriddenVector: null, inputs: inputs, resolver: resolver,
-                productElements: product.Elements.Select(e => (e.Element, e.IsPrimary)), p: prms);
-            product.ElementTho = vector.Tho;
-            product.ElementKim = vector.Kim;
-            product.ElementThuy = vector.Thuy;
-            product.ElementMoc = vector.Moc;
-            product.ElementHoa = vector.Hoa;
+            var vector = DemoProductFengShuiSync.CacheVector(product, inputs, resolver, prms);
+            DemoProductFengShuiSync.Audit(product, vector, _logger, FileName);
 
             await _context.Set<Product>().AddAsync(product, ct);
             if (inputs.Count > 0)
@@ -220,8 +216,59 @@ public class PlacementProductDemoSeeder : IDataSeeder
             added++;
         }
 
-        if (added > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed {Count} sản phẩm demo placement {Placement} từ {File}.", added, placement, FileName);
+        if (added > 0 || synced > 0) await _context.SaveChangesAsync(ct);
+        _logger.LogInformation("Seed {Added} sản phẩm demo placement {Placement} từ {File}; đồng bộ lại {Synced} sản phẩm đã có.",
+            added, placement, FileName, synced);
     }
 
+    /// <summary>
+    /// Sản phẩm demo đã tồn tại (khớp tên) → kéo hành chính/phụ, input và vector về đúng file
+    /// (<see cref="DemoProductFengShuiSync"/>). Không đụng giá/tồn kho/ảnh — đó là dữ liệu vận hành.
+    /// </summary>
+    private async Task<int> SyncExistingAsync(
+        FileModel file, ElementInputResolver resolver, ScoringParameters prms, CancellationToken ct)
+    {
+        var names = file.Rows.Select(r => r.Name).Where(n => !string.IsNullOrWhiteSpace(n)).ToList();
+        var products = await _context.Set<Product>()
+            .Include(p => p.Elements)
+            .Where(p => names.Contains(p.Name))
+            .ToListAsync(ct);
+        if (products.Count == 0) return 0;
+
+        var byName = file.Rows
+            .GroupBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.OrdinalIgnoreCase);
+        var inputSet = _context.Set<ProductElementInput>();
+        var ids = products.Select(p => p.Id).ToList();
+        var existingByProduct = (await inputSet.Where(i => ids.Contains(i.ProductId)).ToListAsync(ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        int synced = 0;
+        foreach (var product in products)
+        {
+            if (product.IsVectorOverridden) continue; // override tay thì file không có quyền
+            var row = byName[product.Name];
+
+            bool changed = DemoProductFengShuiSync.SyncElements(
+                product,
+                DemoProductFengShuiSync.ParseElement(row.PrimaryElement),
+                row.SecondaryElements.Select(DemoProductFengShuiSync.ParseElement).OfType<FengShuiElement>());
+
+            var desired = DemoProductFengShuiSync.ParseInputs(
+                row.ElementInputs.Select(i => (i.Kind, i.Code)), _logger, FileName, product.Name);
+            var existing = existingByProduct.GetValueOrDefault(product.Id) ?? new List<ProductElementInput>();
+            var (inputs, inputsChanged) = DemoProductFengShuiSync.SyncInputs(
+                product, desired, existing, inputSet, resolver, _logger, FileName);
+            changed |= inputsChanged;
+
+            var before = (product.ElementTho, product.ElementKim, product.ElementThuy, product.ElementMoc, product.ElementHoa);
+            var vector = DemoProductFengShuiSync.CacheVector(product, inputs.ToList(), resolver, prms);
+            DemoProductFengShuiSync.Audit(product, vector, _logger, FileName);
+            changed |= before != (product.ElementTho, product.ElementKim, product.ElementThuy, product.ElementMoc, product.ElementHoa);
+
+            if (changed) synced++;
+        }
+        return synced;
+    }
 }

@@ -2,6 +2,7 @@ using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Catalog.DTOs;
 using FengDeskAI.Application.Features.Catalog.Services;
+using FengDeskAI.Application.Features.CustomerCare.Services;
 using FengDeskAI.WebAPI.Authorization;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -20,12 +21,18 @@ public class ProductsController : ApiControllerBase
     private readonly IProductService _service;
     private readonly IProductModel3DService _model3DService;
     private readonly IProductVectorService _vectorService;
+    private readonly IOccupationService _occupationService;
 
-    public ProductsController(IProductService service, IProductModel3DService model3DService, IProductVectorService vectorService)
+    public ProductsController(
+        IProductService service,
+        IProductModel3DService model3DService,
+        IProductVectorService vectorService,
+        IOccupationService occupationService)
     {
         _service = service;
         _model3DService = model3DService;
         _vectorService = vectorService;
+        _occupationService = occupationService;
     }
 
     private bool IsAdmin => User.IsInRole(Roles.Admin);
@@ -168,6 +175,18 @@ public class ProductsController : ApiControllerBase
     public async Task<IActionResult> ApproveAspirations(
         Guid id, [FromBody] ApproveProductAspirationsRequest request, CancellationToken ct)
         => ToActionResult(await _service.ApproveAspirationsAsync(id, CurrentUserId, request, ct));
+
+    // ----- Hợp nghề (N3, mặt A) -----
+
+    /// <summary>
+    /// "Sản phẩm này hợp nghề nào, bao nhiêu %" — <c>ô · p</c> cho mọi nghề đang bật có hồ sơ, sắp giảm dần.
+    /// Public: không cần đăng nhập, phòng hay ngày sinh. <c>occupationCode</c> để lấy đúng một nghề.
+    /// Cùng con số với dòng "Hợp nghề" trong breakdown gợi ý.
+    /// </summary>
+    [HttpGet("{id:guid}/occupation-fit")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GetOccupationFit(Guid id, [FromQuery] string? occupationCode, CancellationToken ct)
+        => ToActionResult(await _occupationService.GetProductFitAsync(id, occupationCode, ct));
 
     // ----- Vector ngũ hành (engine v3) -----
 

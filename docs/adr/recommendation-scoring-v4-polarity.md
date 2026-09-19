@@ -1,7 +1,7 @@
 # ARD — Recommendation Scoring v4: Âm/Dương (Polarity)
 
 > **Status:** Proposal — đã review lần 2 (2026-07-11): sửa nguồn functionPolarity (§2.2), rule polarity-unknown khi khắc (§3.2), thêm rollout kill-switch (§3.4) và chống lệch pha radar (§3.5).
-> **Tiền đề:** engine v3 (`recommendation-scoring-v3.md`) đã chạy: mọi thực thể quy về `ElementVector`, điểm = gap-matching. v4 **không đổi** kiến trúc đó — chỉ thêm **1 trục scalar** `Polarity` chạy song song.
+> **Tiền đề:** engine v3 ([`recommendation-scoring-v3.md`](./recommendation-scoring-v3.md)) đã chạy: mọi thực thể quy về `ElementVector`, điểm = gap-matching. v4 **không đổi** kiến trúc đó — chỉ thêm **1 trục scalar** `Polarity` chạy song song.
 
 ---
 
@@ -61,7 +61,7 @@ score = (1 − POLARITY_SHARE) × gapScore + POLARITY_SHARE × polarityScore −
 ```
 
 > ### 🔴 XUNG ĐỘT với v3.1/v3.2 — hợp nhất theo kiểu **LỒNG**
-> Công thức trên và `personalized-recommendation-v3.1.md` §3.3 **giành cùng một slot `(1 − x)` trên
+> Công thức trên và [`personalized-recommendation-v3.1.md`](./personalized-recommendation-v3.1.md#33-công-thức-đầy-đủ--chỉ-đổi-nhánh-workspacegap) §3.3 **giành cùng một slot `(1 − x)` trên
 > `gapScore`**. Nếu làm cả hai, dùng dạng **lồng** (đã chốt ở
 > [score-explainability-v3.2.md §14.5](./score-explainability-v3.2.md)):
 > ```

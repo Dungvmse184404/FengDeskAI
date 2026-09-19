@@ -31,6 +31,9 @@ public class ScoringParamSeeder : IDataSeeder
         _logger = logger;
     }
 
+    /// <summary>Khớp <c>ScoringParamConfiguration</c> (<c>HasMaxLength(200)</c>).</summary>
+    private const int DescriptionMaxLength = 200;
+
     public int Order => 2;
     public string Name => "Scoring params (engine v3)";
 
@@ -52,11 +55,22 @@ public class ScoringParamSeeder : IDataSeeder
         foreach (var row in file.Rows)
         {
             if (existing.Contains(row.Code)) continue;
+
+            // Cột description là varchar(200): mô tả dài hơn làm SaveChanges nổ và kéo cả app không lên
+            // (đã xảy ra 2026-09-19 với DB trống). Cắt + cảnh báo thay vì chết — mô tả chỉ để đọc.
+            var description = row.Description ?? "";
+            if (description.Length > DescriptionMaxLength)
+            {
+                _logger.LogWarning("scoring-params.json: mô tả của {Code} dài {Length} > {Max} ký tự — cắt bớt.",
+                    row.Code, description.Length, DescriptionMaxLength);
+                description = description[..DescriptionMaxLength];
+            }
+
             await set.AddAsync(new ScoringParam
             {
                 Code = row.Code,
                 Value = row.Value * scale,
-                Description = row.Description,
+                Description = description,
             }, ct);
             added++;
         }

@@ -93,7 +93,7 @@ public class AppDbContext : DbContext
 
     // P5 — nghề nghiệp bẻ vector điểm quan hệ `r` (ADR v3.2 §11)
     public DbSet<Occupation> Occupations => Set<Occupation>();
-    public DbSet<OccupationElementModifier> OccupationElementModifiers => Set<OccupationElementModifier>();
+    public DbSet<OccupationElementProfile> OccupationElementProfiles => Set<OccupationElementProfile>();
 
     /// <summary>Map tới hàm Postgres <c>unaccent()</c> (extension unaccent) — chỉ dùng trong truy vấn EF
     /// để tìm kiếm không phân biệt dấu. Cần CREATE EXTENSION unaccent (đã bật trong migration).</summary>

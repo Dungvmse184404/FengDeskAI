@@ -13,6 +13,12 @@ public readonly record struct ElementVector(
 {
     public static ElementVector Zero { get; } = new(0m, 0m, 0m, 0m, 0m);
 
+    /// <summary>
+    /// Phân bố đều 0.2 × 5 (Σ=1) — mốc "không nghiêng về hành nào". Hồ sơ nghề trừ đi vector này ra
+    /// <c>δ</c> có Σ=0, cùng hình dạng với gap phòng (ADR occupation-product-fit-v1.md §2).
+    /// </summary>
+    public static ElementVector Uniform { get; } = new(0.2m, 0.2m, 0.2m, 0.2m, 0.2m);
+
     /// <summary>Đọc giá trị theo enum hành.</summary>
     public decimal this[FengShuiElement e] => e switch
     {

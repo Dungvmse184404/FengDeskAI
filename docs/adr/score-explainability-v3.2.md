@@ -1,9 +1,9 @@
-# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
+﻿# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
 
 > **Trạng thái:** **ACCEPTED** rev.5 — 13/13 quyết định đã chốt 08/09/2026 (bảng ở PHẦN E)
 > **Đã xong:** 12 doc liên quan + bộ test `RecommendationScorerTests.cs`. **Chưa xong:** code engine (P1).
 > **Vị trí đề xuất:** `docs/adr/score-explainability-v3.2.md`
-> **Tiền đề:** `docs/adr/personalized-recommendation-v3.1.md` · `docs/adr/recommendation-scoring-v3.md` · `docs/adr/vibe-soft-scoring.md`
+> **Tiền đề:** [`docs/adr/personalized-recommendation-v3.1.md`](./personalized-recommendation-v3.1.md) · [`docs/adr/recommendation-scoring-v3.md`](./recommendation-scoring-v3.md) · [`docs/adr/vibe-soft-scoring.md`](./vibe-soft-scoring.md)
 
 ---
 
@@ -703,6 +703,10 @@ Cần thêm **`GET /api/recommendations/fit/personal?productId=`** → `Personal
 
 ## 11. R5 — Nghề nghiệp
 
+> ⚠️ **Superseded (2026-09-11)** bởi [`occupation-product-fit-v1.md`](./occupation-product-fit-v1.md) — N1
+> (delta bẻ `r`) đã gỡ hẳn ở v3.4, thay bằng N3: nghề là trục thứ ba `d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô`,
+> hồ sơ Σ=1 thay cho delta, áp cả luồng Carry. Mục này giữ làm lịch sử quyết định.
+
 ### 11.1 Schema — theo pattern `work_purpose_modifiers` (**cộng delta**)
 
 ```sql
@@ -996,7 +1000,7 @@ Sản phẩm **không** khắc mệnh không bị đụng: SP Thủy → `TuongS
 **Phản biện phải ghi vào ADR:** v3.1 đã **cố ý bỏ** penalty này để tránh tính phạt hai lần
 (`PersonalConflictMode.None`). Lý lẽ bảo vệ L2: `personalScore` đo **mức độ hợp** (liên tục), còn
 "bị khắc" là một **phạm trù kiêng kỵ** — hai đại lượng khác loại nên tách hai số hạng.
-⇒ **L2 supersede một phần `personalized-recommendation-v3.1.md` §3.3.**
+⇒ **L2 supersede một phần [`personalized-recommendation-v3.1.md`](./personalized-recommendation-v3.1.md#33-công-thức-đầy-đủ--chỉ-đổi-nhánh-workspacegap) §3.3.**
 
 ### 14.3 ⚠️ Đứt gãy tại `Wp = 0` — **CHỐT: chấp nhận (a)**
 
@@ -1070,7 +1074,7 @@ if (GetRelation(destiny, e) == FengShuiRelation.BiKhac)
 
 ### 14.5 ⚠️ XUNG ĐỘT với ADR `recommendation-scoring-v4-polarity.md`
 
-ADR v4 (đã duyệt trong `adr/README.md`, **chưa code, chưa seed**) khai một công thức **giành cùng một chỗ**:
+ADR v4 (đã duyệt trong [`adr/README.md`](./README.md), **chưa code, chưa seed**) khai một công thức **giành cùng một chỗ**:
 
 ```
 v3.1:  score = (1 − Wp)             · gapScore + Wp             · personalScore
@@ -1127,18 +1131,18 @@ nguyên tắc "không trộn hai đơn vị trên một khung" ở §10.
 
 | File | Sửa gì |
 |---|---|
-| `docs/adr/personalized-recommendation-v3.1.md` | §3.2 `Wp`; **§3.3 bị L2 supersede một phần** — thêm mục "Superseded by" |
-| `docs/adr/recommendation-scoring-v3.md` | công thức `gapScore` ÷ `(\|gap\|₁/2)` (§8) |
-| `docs/adr/recommendation-scoring-v4-polarity.md` | §3.1 hợp nhất **lồng** (§14.5); §3.2 thứ tự nhân penalty |
-| `docs/adr/product-placement-personal-recommendation.md` | `PlacementPolicy` thêm `PersonalConflictMode.Scaled` |
-| `docs/adr/vibe-soft-scoring.md` | giá trị `VIBE_*_PENALTY` ×2 |
+| [`docs/adr/personalized-recommendation-v3.1.md`](./personalized-recommendation-v3.1.md) | §3.2 `Wp`; **§3.3 bị L2 supersede một phần** — thêm mục "Superseded by" |
+| [`docs/adr/recommendation-scoring-v3.md`](./recommendation-scoring-v3.md) | công thức `gapScore` ÷ `(\|gap\|₁/2)` (§8) |
+| [`docs/adr/recommendation-scoring-v4-polarity.md`](./recommendation-scoring-v4-polarity.md) | §3.1 hợp nhất **lồng** (§14.5); §3.2 thứ tự nhân penalty |
+| [`docs/adr/product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md) | `PlacementPolicy` thêm `PersonalConflictMode.Scaled` |
+| [`docs/adr/vibe-soft-scoring.md`](./vibe-soft-scoring.md) | giá trị `VIBE_*_PENALTY` ×2 |
 | `docs/adr/score-explainability-v3.2.md` | chính file này |
-| `docs/adr/README.md` | bảng ADR + đánh dấu quan hệ supersede |
-| `docs/api-documents/18-recommendations.md` | `breakdown` · `conflictResolution` · endpoint `fit/personal` |
-| `docs/api-documents/25-scoring-config.md` | giá trị 4 penalty ×2 + `PERSONAL_WEIGHT_*` + `OCCUPATION_SHARE` |
-| `docs/ard/architecture-core/04-data-and-integrations.md` | mô tả engine |
-| `docs/ard/bounded-contexts/customer-care.md` | luồng chấm điểm |
-| `docs/ard/bounded-contexts/workspace.md` | vector phòng |
+| [`docs/adr/README.md`](./README.md) | bảng ADR + đánh dấu quan hệ supersede |
+| [`docs/api-documents/18-recommendations.md`](../api-documents/18-recommendations.md) | `breakdown` · `conflictResolution` · endpoint `fit/personal` |
+| [`docs/api-documents/25-scoring-config.md`](../api-documents/25-scoring-config.md) | giá trị 4 penalty ×2 + `PERSONAL_WEIGHT_*` + `OCCUPATION_SHARE` |
+| [`docs/ard/architecture-core/04-data-and-integrations.md`](../ard/architecture-core/04-data-and-integrations.md) | mô tả engine |
+| [`docs/ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md) | luồng chấm điểm |
+| [`docs/ard/bounded-contexts/workspace.md`](../ard/bounded-contexts/workspace.md) | vector phòng |
 | `seed-data/scoring-params.json` | 4 penalty ×2 · `PERSONAL_WEIGHT_*` 0.50/0.30/0.00 · `OCCUPATION_SHARE` 0.00 |
 
 ⚠️ **`docs/ard/` (25 file) vẫn CHƯA từng được commit** — `.gitignore:120` có dòng `*ard`.
@@ -1414,6 +1418,86 @@ Dòng phạt đổi cả mã, nhãn lẫn câu giải thích - im lặng trừ �
 
 `MINOR_CLASH_PENALTY = 0` ⇒ byte-identical như trước §18 (`SCORE-MC-03`). Seed **0.60**, ngang
 `USER_CONFLICT_PENALTY`; default trong code khớp seed (`SCORE-PARAM-04`).
+
+## 19. Sản phẩm ĐÃ ĐẶT phải vào `current` dùng để chấm điểm
+
+### 19.1 Lỗi — cùng một phòng, hai kết luận trái nhau
+
+`current` được dựng ở ba đường, và **chỉ radar** tính sản phẩm user đã mua về đặt vào phòng:
+
+| Đường | tag | chủ nhân | nền phòng | **sản phẩm đã giao** |
+|---|:-:|:-:|:-:|:-:|
+| radar trang Workspace (`element-analysis`) | ✅ | ✅ | ✅ | ✅ |
+| `GenerateAsync` — **recommend_products** | ✅ | ✅ | ✅ | ❌ |
+| `GetProductFitAsync` — trang chấm điểm | ✅ | ✅ | ✅ | ❌ |
+
+Số thật của **"Phòng họp tổng"** (Meeting Room · Shared · Office · chủ nhân mệnh Kim · 0 tag · 2 sản
+phẩm ĐÃ GIAO: cây tùng thơm thuần Mộc + đèn muối):
+
+| | Kim | Mộc | Thuỷ | Hoả | Thổ |
+|---|---:|---:|---:|---:|---:|
+| `adjustedIdeal` | 31.8% | 18.2% | 9.1% | 9.1% | 31.8% |
+| `current` — recommend_products | 43.6% | **8.9%** | 13.3% | 8.9% | 25.3% |
+| `current` — radar Workspace | 35.6% | **19.4%** | 12.2% | 11.8% | 21.0% |
+
+| | hành thiếu nhất |
+|---|---|
+| recommend_products | **Mộc** `ĝ = +0.58` |
+| radar Workspace | **Thổ** `ĝ = +1.00` |
+
+Điểm của một sản phẩm thuần Mộc: **+0.581 (79%) → −0.113 (44%)**, lệch **0.694** trên thang ±1.
+
+Nghĩa là: user mua một cây tùng thơm, đặt vào phòng, radar ghi nhận Mộc đã đủ — còn bộ gợi ý vẫn
+tiếp tục đẩy đồ Mộc, vì nó không thấy cái cây đó.
+
+### 19.2 Đây là lỗi, không phải thiết kế — chính code nói vậy
+
+| Nơi | Câu trong code | Thực tế |
+|---|---|---|
+| `WorkspaceElementAnalyzer` | *"engine chấm điểm và endpoint element-analysis dùng chung một công thức — **bảo đảm Gap giống hệt nhau**"* | Hàm dùng chung được tạo ra đúng để chặn chuyện này, nhưng hai bên truyền **tham số** khác nhau nên vẫn lệch |
+| `GetProductFitAsync` | *"cùng phép tính với element-analysis, chỉ khác là ở đây không tính sản phẩm **đang xem**"* | Tự tin là chỉ khác một sản phẩm; thực tế khác **tất cả** |
+
+Bài học: tách hàm dùng chung KHÔNG đủ để chống trôi, nếu phần **nạp dữ liệu đầu vào** vẫn nằm rải ở
+mỗi caller.
+
+### 19.3 Chốt: cho Rank/Fit đọc sản phẩm đã giao, khớp với radar
+
+Không phải chiều ngược lại — radar mà bỏ sản phẩm đi thì nó nói dối về căn phòng, và cả tính năng
+`placedProducts`/`previewCurrent` mất nghĩa.
+
+```
+m[e]     = interiorVotes·interior[e] + Σ tag vᵢwᵢ[e] + personVotes·personal[e]
+           + Σ sản phẩm ĐÃ GIAO (voteWeight · vector[e])          ← thêm ở §19
+current  = normalize(m^α)
+```
+
+**`PlacedProductVectorBuilder` (mới, thuần, không I/O)** giữ toàn bộ luật quy placement ra vector:
+vector sản phẩm 3 tầng, `voteWeight` = Σ weight mã `DecorItem`, và lằn ranh `Delivered` vs đang giao.
+Phần nạp dữ liệu cũng gom về repo (`GetProductElementInputsByProductAsync`) để không caller nào phải
+tự nhóm lại — đó đúng là kiểu trùng lặp đã sinh ra lỗi này.
+
+⚠️ **Chỉ hàng ĐÃ GIAO** vào `current`. Hàng đang giao chỉ vào `previewCurrent` — "vừa bấm mua" không
+phải "phòng đã có" (`SCORE-PP-04`).
+
+⚠️ `previewCurrent` của trang Fit cũng sửa theo: trước đây nó chỉ có **một** sản phẩm đang xem, tức
+nét đứt vẽ một căn phòng chưa từng tồn tại. Nay là *phòng như đang có* **+** sản phẩm đang xem.
+
+### 19.4 Hai bẫy dọn kèm
+
+**`prms` mất giá trị mặc định.** `BuildWorkspaceContextAsync(..., ScoringParameters? prms = null)` để
+default `null`; caller nào quên truyền thì phiếu chủ nhân (§12), nén tương phản (§17) **và** sản phẩm
+đã đặt (§19) đều **im lặng tắt**, không một lỗi nào. Nay `prms` là tham số bắt buộc — để trình biên
+dịch canh hộ thay vì trông vào việc nhớ.
+
+**`ScoringFormulaVersions.Current` → `"3.3"`.** §12/§17/§18/§19 đổi công thức đủ nhiều để điểm không
+so trực tiếp được với phiên cũ. Không bump thì phiên lưu trước và sau cùng mang nhãn `"3.2"`, và
+không ai truy được vì sao cùng một sản phẩm × cùng một phòng lại ra hai điểm khác nhau (`SCORE-PP-05`).
+
+### 19.5 Test
+
+`SCORE-PP-01..05`, DDT trên chính phòng "Phòng họp tổng": `current` chính xác tới 6 chữ số ở cả hai
+trạng thái, hành thiếu nhất lật từ Mộc sang Thổ, `adjustedIdeal` không phụ thuộc sản phẩm, vector 0
+bị chặn ở hai lớp độc lập, và lằn ranh đã-giao vs đang-giao.
 
 ## P0 — Sửa dữ liệu *(0.5 ngày)*
 

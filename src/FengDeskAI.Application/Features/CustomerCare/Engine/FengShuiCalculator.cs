@@ -191,6 +191,13 @@ public static class FengShuiCalculator
     /// <summary>Hành mà <paramref name="e"/> KHẮC (chủ động) — vd Kim khắc Mộc → GetControlledElement(Kim)=Mộc.</summary>
     public static FengShuiElement GetControlledElement(FengShuiElement e) => Controls[e];
 
+    // Đảo của Controls: ControlledBy[X] = hành KHẮC X (quan sát của nhật chủ X).
+    private static readonly Dictionary<FengShuiElement, FengShuiElement> ControlledBy =
+        Controls.ToDictionary(kv => kv.Value, kv => kv.Key);
+
+    /// <summary>Hành KHẮC <paramref name="e"/> — vd Hỏa khắc Kim → GetControllingElement(Kim)=Hỏa.</summary>
+    public static FengShuiElement GetControllingElement(FengShuiElement e) => ControlledBy[e];
+
     /// <summary>Các hướng la bàn ứng với hành <paramref name="e"/> (đảo của <see cref="GetDirectionElement"/>).</summary>
     public static IReadOnlyList<CompassDirection> GetDirectionsForElement(FengShuiElement e)
         => DirectionElements.Where(kv => kv.Value == e).Select(kv => kv.Key).ToList();

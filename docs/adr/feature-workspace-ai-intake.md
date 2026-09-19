@@ -1,6 +1,6 @@
 # ARD — Feature: Workspace AI Intake (mô tả bằng lời → AI điền form)
 
-> **Status:** Proposal. **Phụ thuộc:** `refactor-workspace-input-relaxation.md` (fields phải nullable để draft một phần vẫn lưu được).
+> **Status:** Proposal. **Phụ thuộc:** [`refactor-workspace-input-relaxation.md`](./refactor-workspace-input-relaxation.md) (fields phải nullable để draft một phần vẫn lưu được).
 > **Mục tiêu:** customer mô tả không gian bằng văn bản hoặc giọng nói → AI phân tích, điền sẵn các dropdown → customer xem, sửa, lưu. Giảm ma sát nhập liệu về gần 0.
 
 ## Luồng tổng thể

@@ -17,7 +17,7 @@ namespace FengDeskAI.Application.Features.CustomerCare.DTOs;
 public sealed record ScoreBreakdownResponse
 {
     /// <summary>
-    /// <c>"3.1"</c> hoặc <c>"3.2"</c>. Điểm của hai phiên bản KHÔNG so sánh được với nhau — FE phải ẩn
+    /// <c>"3.1"</c>, <c>"3.2"</c> hay <c>"3.3"</c>. Điểm của hai phiên bản KHÔNG so sánh được với nhau — FE phải ẩn
     /// mọi so sánh chéo phiên bản (§8.4).
     /// </summary>
     public string FormulaVersion { get; init; } = null!;
@@ -55,12 +55,15 @@ public sealed record ScoreBreakdownResponse
     /// <summary>Hành Nạp Âm của user — <c>null</c> khi chưa có ngày sinh.</summary>
     public string? DestinyElement { get; init; }
 
+    /// <summary>v3.6 — kỵ thần đã áp ở nhánh Carry (mã hành); <c>null</c> ở luồng phòng.</summary>
+    public List<string>? PersonalAvoidElements { get; init; }
+
     /// <summary>vd <c>"Mộc — Đại Lâm Mộc (1988)"</c>. <c>null</c> khi chưa có ngày sinh.</summary>
     public string? DestinyLabelVi { get; init; }
 
     /// <summary>
-    /// Nghề nghiệp đã tác động vào điểm này (P5). <c>null</c> khi user chưa khai nghề, nghề chưa có
-    /// delta, hoặc <c>OCCUPATION_SHARE</c> đang tắt — cả ba đều nghĩa là nghề nghiệp không đổi gì.
+    /// Trục nghề đã tác động vào điểm này (N3). <c>null</c> khi user chưa khai nghề, nghề chưa có hồ sơ
+    /// (hoặc là OTHER), hoặc <c>OCCUPATION_WEIGHT</c> đang tắt — cả ba đều nghĩa là nghề không đổi gì.
     /// </summary>
     public OccupationInfluenceResponse? Occupation { get; init; }
 
@@ -97,6 +100,15 @@ public sealed record ScorePenaltyRow
     public bool Applied { get; init; }
 
     public string ReasonVi { get; init; } = null!;
+
+    /// <summary>Mức phạt gốc trong <c>scoring_params</c> (vd 0.60). FE in công thức <c>paramValue × factor = value</c> từ số này.</summary>
+    public decimal ParamValue { get; init; }
+
+    /// <summary>Hệ số nhân vào mức gốc khi có (<c>Wp</c>, hoặc tỉ trọng hành khắc mệnh); <c>null</c> = trừ nguyên mức.</summary>
+    public decimal? Factor { get; init; }
+
+    /// <summary>Tên hệ số để in, vd "tỉ trọng hành khắc mệnh trong vật phẩm".</summary>
+    public string? FactorLabelVi { get; init; }
 }
 
 /// <summary>Trọng số trục cá nhân đã áp cho phiên chấm này.</summary>
@@ -126,26 +138,23 @@ public sealed record ScoreVectorsResponse
     /// </summary>
     public List<ProductElementRow> NormalizedGap { get; init; } = new();
 
-    /// <summary>
-    /// <c>r'[e]</c> — điểm quan hệ ĐÃ tính nghề nghiệp, CÓ DẤU. <c>null</c> khi trục cá nhân tắt.
-    /// Bằng <see cref="BaseRuleScore"/> khi nghề nghiệp không áp.
-    /// </summary>
+    /// <summary><c>r[e]</c> — điểm quan hệ với bản mệnh, CÓ DẤU. <c>null</c> khi trục cá nhân tắt.</summary>
     public List<ProductElementRow>? RuleScore { get; init; }
 
     /// <summary>
-    /// <c>r</c> TRƯỚC khi cộng delta nghề nghiệp. <c>null</c> khi nghề nghiệp không áp — khi đó
-    /// <see cref="RuleScore"/> đã là <c>r</c> gốc.
+    /// <c>ô</c> — <b>lớp radar "Nghề cần"</b>, ĐÃ chặn hành khắc mệnh về ≤ 0. Mỗi trục ∈ [−1, +1] cùng
+    /// thang với <see cref="NormalizedGap"/>; vẽ phần dương bằng <c>normalize(max(ô, 0))</c> như
+    /// <see cref="PriorityVector"/>. <c>null</c> khi trục nghề tắt.
     /// </summary>
-    public List<ProductElementRow>? BaseRuleScore { get; init; }
+    public List<ProductElementRow>? OccupationDirection { get; init; }
 
     /// <summary>
-    /// <c>r' − r</c> — <b>lớp radar nghề nghiệp</b>: nghề của bạn đã kéo hành nào lên/xuống bao nhiêu.
-    /// Là mức dịch THẬT SAU khi chặn, nên hành khắc mệnh hiện ra gần 0 dù delta khai lớn — đúng thứ
-    /// cần cho user thấy. <c>null</c> khi nghề nghiệp không áp.
+    /// <c>ô</c> TRƯỚC khi chặn. Khác <see cref="OccupationDirection"/> đúng ở hành nghề muốn nâng nhưng
+    /// khắc mệnh — user phải thấy phần nghề <i>không</i> kéo được. <c>null</c> khi trục nghề tắt.
     /// </summary>
-    public List<ProductElementRow>? OccupationShift { get; init; }
+    public List<ProductElementRow>? OccupationRawDirection { get; init; }
 
-    /// <summary><c>d = (1−Wp)·ĝ + Wp·r'</c> — thứ thật sự nhân với vector sản phẩm.</summary>
+    /// <summary><c>d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô</c> — thứ thật sự nhân với vector sản phẩm.</summary>
     public List<ProductElementRow> CombinedDirection { get; init; } = new();
 
     /// <summary>
@@ -169,7 +178,7 @@ public sealed record ScoreVectorsResponse
     public List<ProductElementRow>? PersonalTarget { get; init; }
 }
 
-/// <summary>Nghề nghiệp đã bẻ vector điểm quan hệ thế nào — v3.2 §11 (P5).</summary>
+/// <summary>Trục nghề đã áp thế nào — N3, ADR <c>occupation-product-fit-v1.md</c> §3.</summary>
 public sealed record OccupationInfluenceResponse
 {
     /// <summary>Mã bất biến, vd <c>"IT"</c>.</summary>
@@ -178,13 +187,13 @@ public sealed record OccupationInfluenceResponse
     /// <summary>Tên hiển thị, vd <c>"CNTT / Lập trình"</c>.</summary>
     public string NameVi { get; init; } = null!;
 
-    /// <summary><c>OCCUPATION_SHARE</c> đang áp.</summary>
-    public decimal Share { get; init; }
+    /// <summary><c>Wo</c> đang áp (đã kẹp <c>≤ 1 − Wp</c> ở luồng phòng).</summary>
+    public decimal Weight { get; init; }
 
-    /// <summary>Mã dòng <c>scoring_params</c> quyết định <see cref="Share"/>.</summary>
-    public string ShareCode { get; init; } = ScoringParamCodes.OccupationShare;
+    /// <summary>Mã dòng <c>scoring_params</c> quyết định <see cref="Weight"/>.</summary>
+    public string WeightCode { get; init; } = ScoringParamCodes.OccupationWeight;
 
-    /// <summary>Câu giải thích cho tooltip — nói cả phần nghề nghiệp KHÔNG kéo được.</summary>
+    /// <summary>Câu giải thích cho tooltip — nói cả phần nghề KHÔNG kéo được (hành khắc mệnh bị chặn).</summary>
     public string ReasonVi { get; init; } = null!;
 }
 

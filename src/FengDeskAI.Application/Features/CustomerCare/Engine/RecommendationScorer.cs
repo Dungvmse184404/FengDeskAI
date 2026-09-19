@@ -109,7 +109,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         //    VIBE_FILTER_HARD ≥ 0.5 giữ nguyên hành vi v3 (loại cứng); < 0.5 chuyển sang trừ điểm.
         decimal vibePenalty = 0m;
         string vibeCode = ScoringParamCodes.VibeMismatchPenalty;
-        string vibeReason = "Cảm hứng không gian của sản phẩm hợp mục đích của phòng - không trừ điểm.";
+        string vibeReason = "Cảm hứng không gian của sản phẩm hợp mục đích của phòng.";
         if (TargetVibe(ctx.Purpose) is { } vibe)
         {
             bool unknown = product.Vibes.Count == 0;
@@ -153,6 +153,9 @@ public sealed class RecommendationScorer : IRecommendationScorer
         decimal userPenalty = 0m;
         string userPenaltyCode = ScoringParamCodes.UserConflictPenalty;
         string userPenaltyLabel = "Khắc bản mệnh";
+        decimal userPenaltyParam = ctx.Params.UserConflictPenalty;
+        decimal? userPenaltyFactor = null;
+        string? userPenaltyFactorLabel = null;
         string userPenaltyReason = policy.Conflict switch
         {
             PersonalConflictMode.None when ctx.Scope == WorkspaceScope.Public =>
@@ -182,41 +185,49 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 userPenalty = scaled
                     ? ctx.Params.UserConflictPenalty * ctx.PersonalWeight
                     : ctx.Params.UserConflictPenalty;
+                if (scaled)
+                {
+                    userPenaltyFactor = ctx.PersonalWeight;
+                    userPenaltyFactorLabel = "trọng số cá nhân Wp";
+                }
 
                 userPenaltyReason = scaled
-                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant}. Mức phạt co giãn theo "
+                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant}. Mức cân nhắc theo "
                         + $"trọng số cá nhân của không gian: {ctx.Params.UserConflictPenalty:0.00} × "
                         + $"{ctx.PersonalWeight:0.00} = {userPenalty:0.00}."
                     : $"Hành {productDominant} khắc bản mệnh {personalDominant} - trục cá nhân đang tắt "
-                        + $"nên áp mức phạt đầy đủ {userPenalty:0.00}.";
+                        + $"nên cân nhắc ở mức đầy đủ {userPenalty:0.00}.";
 
                 cautions.Add(scaled
-                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - trừ {userPenalty:0.00} điểm."
-                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} - trừ điểm"
+                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - chưa hợp với bạn ({userPenalty:0.00})."
+                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} - nên cân nhắc"
                         + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
             }
             else if (policy.Target == ScoringTarget.PersonalNeed
                      && ctx.Params.MinorClashPenalty > 0m
-                     && ClashShare(personalDominant, product.Vector) is > 0m and var clashShare)
+                     && ClashShare(personalDominant, product.Vector, ctx.PersonalAvoid) is > 0m and var clashShare)
             {
                 // §18 — hành trội không khắc, nhưng vật vẫn CHỨA hành khắc mệnh. Chỉ nhánh dụng thần
                 // mới cần nhánh này: vector dụng thần không âm nên phần khắc đó nhân ra đúng 0, còn
                 // luồng phòng đã trừ nó qua r có dấu.
                 userPenalty = ctx.Params.MinorClashPenalty * clashShare;
                 userPenaltyCode = ScoringParamCodes.MinorClashPenalty;
-                userPenaltyLabel = "Khắc bản mệnh (phần phụ)";
+                userPenaltyLabel = "Có phần khắc bản mệnh";
+                userPenaltyParam = ctx.Params.MinorClashPenalty;
+                userPenaltyFactor = clashShare;
+                userPenaltyFactorLabel = "phần hành khắc mệnh trong vật phẩm";
 
-                string clashing = ClashingElementsVi(personalDominant, product.Vector);
+                string clashing = ClashingElementsVi(personalDominant, product.Vector, ctx.PersonalAvoid);
                 userPenaltyReason =
                     $"Hành trội {ElementSemantics.ElementName(productDominant)} không khắc bản mệnh "
                     + $"{ElementSemantics.ElementName(personalDominant)} của bạn, nhưng vật phẩm còn "
                     + $"{clashShare:P0} là {clashing} - khắc bản mệnh. Vật mang trên người nên phần đó "
-                    + $"vẫn bị trừ theo đúng tỉ trọng: {ctx.Params.MinorClashPenalty:0.00} × "
+                    + $"được cân nhắc theo đúng tỉ trọng: {ctx.Params.MinorClashPenalty:0.00} × "
                     + $"{clashShare:0.00} = {userPenalty:0.00}.";
 
                 cautions.Add(
                     $"Vật phẩm có {clashShare:P0} {clashing} - khắc bản mệnh "
-                    + $"{ElementSemantics.ElementName(personalDominant)} của bạn, trừ {userPenalty:0.00} điểm.");
+                    + $"{ElementSemantics.ElementName(personalDominant)} của bạn, phần này chưa hợp với bạn.");
             }
             else if (!scaled)
             {
@@ -242,30 +253,72 @@ public sealed class RecommendationScorer : IRecommendationScorer
         FengShuiElement? destiny = ctx.PersonalVector?.Dominant();
         bool blendPersonal = personalBlend && policy.Target == ScoringTarget.WorkspaceGap;
 
+        // N3 — trục nghề dựng MỘT lần từ context, độc lập với trục cá nhân (chỉ mượn `destiny` để chặn
+        // hành khắc mệnh). null ⇒ công thức y hệt v3.3.
+        var occupation = OccupationAxis.Build(
+            ctx.OccupationProfile, destiny, ctx.OccupationWeight,
+            ScoringParamCodes.OccupationWeight, ctx.OccupationCode ?? "", ctx.OccupationNameVi ?? "");
+
         var direction = policy.Target == ScoringTarget.PersonalNeed
-            ? ElementDirection.ForPersonalNeed(target)
+            ? ElementDirection.ForPersonalNeed(target, occupation)
             : ElementDirection.ForWorkspaceGap(
-                target, blendPersonal ? destiny : null, ctx.PersonalWeight, ctx.RuleScoreOf,
-                ctx.OccupationDelta, ctx.Params.OccupationShare);
+                target, blendPersonal ? destiny : null, ctx.PersonalWeight, ctx.RuleScoreOf, occupation);
 
         var normalizedGap = direction.NormalizedGap;
         var ruleScoreVector = direction.RuleScoreVector;
         var combinedDirection = direction.CombinedDirection;
 
-        decimal gapScore = Math.Clamp(normalizedGap.Dot(product.Vector), -1m, 1m);
+        // v3.6 — nhánh Carry đo "phủ nhu cầu" trừ "rơi vào kỵ thần" thay cho tích trong (ADR personal-need-v3.6 §2.2):
+        //   n̂·p với hai vector Σ=1 không âm kẹt trần max(n̂) = 0.6 — vật khớp hoàn hảo chỉ 76%. Σ min(n̂, p)
+        //   khớp hoàn hảo = 1, cấp thừa không cộng thêm (như "thêm thừa" bên phòng); phần rơi vào kỵ thần
+        //   trừ thẳng theo tỉ trọng. Luồng phòng giữ ĝ·p.
+        decimal? needCover = null, avoidHit = null;
+        decimal gapScore;
+        if (policy.Target == ScoringTarget.PersonalNeed)
+        {
+            needCover = NeedCover(normalizedGap, product.Vector);
+            avoidHit = AvoidHit(ctx.PersonalAvoid, product.Vector);
+            gapScore = Math.Clamp(needCover.Value - avoidHit.Value, -1m, 1m);
+        }
+        else
+        {
+            gapScore = Math.Clamp(normalizedGap.Dot(product.Vector), -1m, 1m);
+        }
         DescribeTarget(policy.Target, target, product.Vector, productDominant, gapScore, facts, cautions);
+        if (avoidHit is > 0m)
+        {
+            string avoiding = string.Join(", ", product.Vector.Enumerate()
+                .Where(x => x.Value > 0m && ctx.PersonalAvoid.Contains(x.Element))
+                .OrderByDescending(x => x.Value)
+                .Select(x => ElementSemantics.ElementName(x.Element)));
+            cautions.Add($"{avoidHit.Value:P0} vật phẩm là {avoiding} - hành bạn nên tránh, nên chưa thật hợp với bạn.");
+        }
 
         // ── Bước 2d (v3.1) — trộn trục cá nhân, CHỈ cho nhánh chấm theo phòng ──
         //    Nhánh PersonalNeed (Carry) vốn đã 100% cá nhân nên không trộn thêm.
-        decimal blended = gapScore;
+        decimal wp = 0m;
         decimal? personalScore = null;
 
         if (ruleScoreVector is { } r && destiny is { } mine)
         {
             personalScore = Math.Clamp(r.Dot(product.Vector), -1m, 1m);
-            blended = (1m - ctx.PersonalWeight) * gapScore + ctx.PersonalWeight * personalScore.Value;
+            wp = ctx.PersonalWeight;
             DescribePersonalAffinity(mine, productDominant, personalScore.Value, facts, cautions);
         }
+
+        // ── Bước 2e (v3.4 · N3) — trục nghề, cho CẢ hai nhánh ──
+        //    blended = (1 − Wp − Wo)·gap + Wp·personal + Wo·occupation. Ở Carry, Wp = 0.
+        decimal wo = occupation?.Weight ?? 0m;
+        decimal? occupationScore = occupation is { } axis
+            ? Math.Clamp(axis.Direction.Dot(product.Vector), -1m, 1m)
+            : null;
+
+        decimal blended = (1m - wp - wo) * gapScore
+            + wp * (personalScore ?? 0m)
+            + wo * (occupationScore ?? 0m);
+
+        if (occupation is { } occ && occupationScore is { } os)
+            DescribeOccupationAffinity(occ, product.Vector, os, facts, cautions);
 
         // ── Bước 3 — Directional Validation (bỏ qua với vật mang theo người / cây) ──
         var (dirPenalty, placementHint) = policy.Direction == DirectionMode.Soft
@@ -304,18 +357,28 @@ public sealed class RecommendationScorer : IRecommendationScorer
             PersonalTarget: policy.Target == ScoringTarget.PersonalNeed || ctx.PersonalVector is not { } mine2
                 ? null
                 : ElementDirection.PersonalTargetOf(ctx.AdjustedIdeal, mine2, ctx.PersonalWeight),
-            Components: BuildComponents(ctx, policy, product, normalizedGap, gapScore, personalScore, destiny),
+            Components: BuildComponents(
+                ctx, policy, product, normalizedGap, gapScore, personalScore, destiny, occupation, occupationScore,
+                needCover, avoidHit),
             Penalties: BuildPenalties(
                 ctx, userPenalty, userPenaltyCode, userPenaltyLabel, userPenaltyReason,
+                userPenaltyParam, userPenaltyFactor, userPenaltyFactorLabel,
                 dirPenalty, placementHint, vibePenalty, vibeCode, vibeReason),
             ConflictResolution: direction.ConflictResolution,
             DestinyElement: destiny,
-            // Chỉ khai báo nghề nghiệp khi nó THẬT SỰ dịch được `r`. Trả mã nghề kèm một shift toàn 0
-            // sẽ đẻ ra một lớp radar phẳng lì và một dòng breakdown vô nghĩa.
-            BaseRuleScoreVector: direction.OccupationShift is null ? null : direction.BaseRuleScoreVector,
-            OccupationCode: direction.OccupationShift is null ? null : ctx.OccupationCode,
-            OccupationNameVi: direction.OccupationShift is null ? null : ctx.OccupationNameVi,
-            OccupationShare: direction.OccupationShift is null ? 0m : ctx.Params.OccupationShare);
+            // Chỉ khai báo nghề khi trục THẬT SỰ bật (OccupationAxis.Build ≠ null). Trả mã nghề kèm
+            // một hướng rỗng sẽ đẻ ra một lớp radar phẳng lì và một dòng breakdown vô nghĩa.
+            OccupationDirection: occupation?.Direction,
+            OccupationRawDirection: occupation?.RawDirection,
+            OccupationCode: occupation?.Code,
+            OccupationNameVi: occupation?.NameVi,
+            OccupationWeight: wo,
+            OccupationWeightCode: occupation?.WeightCode,
+            PersonalAvoidElements: policy.Target == ScoringTarget.PersonalNeed
+                ? Enum.GetValues<FengShuiElement>().Where(ctx.PersonalAvoid.Contains).ToList()
+                : null,
+            PersonalNeedCover: needCover,
+            PersonalAvoidHit: avoidHit);
 
         return new ScoredProduct(product.ProductId, score, facts, cautions, placementHint, breakdown);
     }
@@ -325,42 +388,98 @@ public sealed class RecommendationScorer : IRecommendationScorer
     /// </summary>
     private static IReadOnlyList<ScoreComponent> BuildComponents(
         ScoringContext ctx, PlacementPolicy policy, ProductFacts product,
-        ElementVector normalizedGap, decimal gapScore, decimal? personalScore, FengShuiElement? destiny)
+        ElementVector normalizedGap, decimal gapScore, decimal? personalScore, FengShuiElement? destiny,
+        OccupationAxis? occupation, decimal? occupationScore,
+        decimal? needCover = null, decimal? avoidHit = null)
     {
+        decimal wo = occupation?.Weight ?? 0m;
+        var components = new List<ScoreComponent>();
+
         if (policy.Target == ScoringTarget.PersonalNeed)
         {
-            // Carry không có phòng ⇒ waterfall chỉ MỘT thành phần. FE phải dùng component khác, không
-            // dùng chung với luồng workspace (§PHẦN E #6).
-            return new[]
+            // Carry không có phòng ⇒ thành phần chính là dụng thần; thêm dòng nghề khi trục bật. FE dùng
+            // component riêng cho Carry, không dùng chung panel phòng (§PHẦN E #6).
+            // v3.6: hai dòng — "phủ dụng thần" (+) và "rơi vào kỵ thần" (−), cùng trọng số 1 − Wo;
+            // Σ contribution = (1 − Wo)·(needCover − avoidHit) = (1 − Wo)·gapScore.
+            decimal cover = needCover ?? gapScore;
+            components.Add(new ScoreComponent(
+                ScoreComponentCodes.PersonalNeedScore, "Đáp ứng hành bạn cần",
+                Value: cover, Weight: 1m - wo, Contribution: (1m - wo) * cover,
+                ReasonVi: DescribeNeedCover(normalizedGap, product.Vector)));
+
+            if (ctx.PersonalAvoid.Count > 0 && avoidHit is { } hit)
             {
-                new ScoreComponent(
-                    ScoreComponentCodes.PersonalNeedScore, "Hợp dụng thần của bạn",
-                    Value: gapScore, Weight: 1m, Contribution: gapScore,
-                    ReasonVi: DescribeVectorMatch(
-                        normalizedGap, product.Vector, "hành bạn đang cần được bồi", "hành chưa phải thứ bạn cần")),
-            };
+                components.Add(new ScoreComponent(
+                    ScoreComponentCodes.PersonalAvoidScore, "Mang hành bạn nên tránh",
+                    Value: -hit, Weight: 1m - wo, Contribution: -(1m - wo) * hit,
+                    ReasonVi: DescribeAvoidHit(ctx.PersonalAvoid, product.Vector)));
+            }
+        }
+        else
+        {
+            decimal wp = personalScore is null ? 0m : ctx.PersonalWeight;
+            components.Add(new ScoreComponent(
+                ScoreComponentCodes.GapScore, "Khớp nhu cầu của phòng",
+                Value: gapScore, Weight: 1m - wp - wo, Contribution: (1m - wp - wo) * gapScore,
+                ReasonVi: DescribeVectorMatch(
+                    normalizedGap, product.Vector, "hành phòng đang thiếu", "hành phòng đã thừa")));
+
+            if (personalScore is { } ps && destiny is { } mine)
+            {
+                var relation = FengShuiCalculator.GetRelation(mine, product.Vector.Dominant());
+                components.Add(new ScoreComponent(
+                    ScoreComponentCodes.PersonalScore, "Hợp bản mệnh của bạn",
+                    Value: ps, Weight: wp, Contribution: wp * ps,
+                    ReasonVi: $"Hành trội {product.Vector.Dominant()} của sản phẩm {RelationVi(relation)} "
+                        + $"bản mệnh {mine} của bạn."));
+            }
         }
 
-        decimal wp = personalScore is null ? 0m : ctx.PersonalWeight;
-        var components = new List<ScoreComponent>
+        // N3 — cùng mã, cùng thang ở cả hai nhánh: "88% hợp nghề" ở trang sản phẩm là đúng con số này.
+        if (occupation is { } axis && occupationScore is { } os)
         {
-            new(ScoreComponentCodes.GapScore, "Khớp nhu cầu của phòng",
-                Value: gapScore, Weight: 1m - wp, Contribution: (1m - wp) * gapScore,
-                ReasonVi: DescribeVectorMatch(
-                    normalizedGap, product.Vector, "hành phòng đang thiếu", "hành phòng đã thừa")),
-        };
-
-        if (personalScore is { } ps && destiny is { } mine)
-        {
-            var relation = FengShuiCalculator.GetRelation(mine, product.Vector.Dominant());
             components.Add(new ScoreComponent(
-                ScoreComponentCodes.PersonalScore, "Hợp bản mệnh của bạn",
-                Value: ps, Weight: wp, Contribution: wp * ps,
-                ReasonVi: $"Hành trội {product.Vector.Dominant()} của sản phẩm {RelationVi(relation)} "
-                    + $"bản mệnh {mine} của bạn."));
+                ScoreComponentCodes.OccupationScore, $"Hợp nghề {axis.NameVi}",
+                Value: os, Weight: wo, Contribution: wo * os,
+                ReasonVi: DescribeVectorMatch(
+                    axis.Direction, product.Vector, "hành nghề bạn cần", "hành nghề bạn nên tránh")
+                    + ClampNoteVi(axis, destiny)));
         }
 
         return components;
+    }
+
+    /// <summary>
+    /// Phần nghề KHÔNG kéo được: các hành nghề muốn nâng nhưng khắc mệnh, đã bị chặn về 0 (ADR §3.2).
+    /// Nói ra để user không tưởng hệ thống bỏ sót nhu cầu nghề của mình.
+    /// </summary>
+    private static string ClampNoteVi(OccupationAxis axis, FengShuiElement? destiny)
+    {
+        if (destiny is not { } mine || !axis.WasClamped) return "";
+        var clamped = axis.ClampedElements.Select(ElementSemantics.ElementName).ToList();
+        if (clamped.Count == 0) return "";
+        return $" Nghề bạn cần {string.Join(", ", clamped)} nhưng {(clamped.Count > 1 ? "các hành đó" : "hành đó")} "
+            + $"khắc bản mệnh {ElementSemantics.ElementName(mine)} - phần này không được cộng.";
+    }
+
+    /// <summary>Sự thật để AI diễn giải phần điểm nghề — cùng vai với <see cref="DescribePersonalAffinity"/>.</summary>
+    private static void DescribeOccupationAffinity(
+        OccupationAxis axis, ElementVector productVector, decimal occupationScore,
+        List<string> facts, List<string> cautions)
+    {
+        var top = axis.Direction.Enumerate()
+            .Where(x => x.Value > 0m)
+            .OrderByDescending(x => x.Value)
+            .Select(x => ElementSemantics.ElementName(x.Element))
+            .Take(2).ToList();
+        string need = top.Count > 0 ? string.Join(" và ", top) : "không hành nào nổi bật";
+
+        if (occupationScore >= 0.2m)
+            facts.Add($"Nghề {axis.NameVi} cần {need}; sản phẩm cấp đúng hành đó ({occupationScore:+0.00}).");
+        else if (occupationScore <= -0.2m)
+            cautions.Add($"Nghề {axis.NameVi} cần {need}; hành của sản phẩm lệch nhu cầu nghề ({occupationScore:+0.00;-0.00}).");
+        else
+            facts.Add($"Hành của sản phẩm trung tính với nghề {axis.NameVi}.");
     }
 
     /// <summary>
@@ -370,24 +489,28 @@ public sealed class RecommendationScorer : IRecommendationScorer
     private static IReadOnlyList<ScorePenalty> BuildPenalties(
         ScoringContext ctx,
         decimal userPenalty, string userPenaltyCode, string userPenaltyLabel, string userPenaltyReason,
+        decimal userPenaltyParam, decimal? userPenaltyFactor, string? userPenaltyFactorLabel,
         decimal dirPenalty, string? placementHint,
         decimal vibePenalty, string vibeCode, string vibeReason)
         => new[]
         {
             new ScorePenalty(userPenaltyCode, userPenaltyLabel,
-                userPenalty, userPenalty > 0m, userPenaltyReason),
+                userPenalty, userPenalty > 0m, userPenaltyReason,
+                userPenaltyParam, userPenaltyFactor, userPenaltyFactorLabel),
 
             new ScorePenalty(ScoringParamCodes.DirectionPenalty, "Hướng hợp bị chắn",
                 dirPenalty, dirPenalty > 0m,
                 dirPenalty > 0m
                     ? "Mọi hướng hợp với vật phẩm đều trùng cửa vào, nhà vệ sinh hoặc góc tối."
-                    : placementHint ?? "Còn hướng hợp để đặt vật phẩm - không trừ điểm."),
+                    : placementHint ?? "Còn hướng hợp để đặt vật phẩm.",
+                ctx.Params.DirectionPenalty),
 
-            new ScorePenalty(vibeCode, "Lệch cảm hứng không gian", vibePenalty, vibePenalty > 0m, vibeReason),
+            new ScorePenalty(vibeCode, "Lệch cảm hứng không gian", vibePenalty, vibePenalty > 0m, vibeReason,
+                vibeCode == ScoringParamCodes.VibeUnknownPenalty ? ctx.Params.VibeUnknownPenalty : ctx.Params.VibeMismatchPenalty),
         };
 
     /// <summary>Câu giải thích chung cho "vector mục tiêu × vector sản phẩm": nêu đúng hành đã khớp.</summary>
-    private static string DescribeVectorMatch(
+    internal static string DescribeVectorMatch(
         ElementVector direction, ElementVector productVector, string wantedLabel, string unwantedLabel)
     {
         var hit = direction.Enumerate()
@@ -438,8 +561,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
         else if (personalScore < -0.05m)
         {
             cautions.Add(relation == FengShuiRelation.BiKhac
-                ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - đã trừ vào điểm hợp mệnh."
-                : $"Hành {productDominant} làm hao khí bản mệnh {personalDominant} - trừ nhẹ điểm hợp mệnh.");
+                ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - chưa hợp với bạn."
+                : $"Hành {productDominant} làm hao khí bản mệnh {personalDominant} - hợp ở mức vừa phải.");
         }
     }
 
@@ -565,19 +688,81 @@ public sealed class RecommendationScorer : IRecommendationScorer
     /// chỉnh được (§14.4). Điểm số mềm mới đi đường <c>r</c>.
     /// </para>
     /// </summary>
-    private static decimal ClashShare(FengShuiElement destiny, ElementVector productVector)
+    /// <summary>
+    /// v3.6 — phần nhu cầu được sản phẩm phủ: <c>Σ min(n̂[e], p[e])</c>. Bằng 1 khi <c>p = n̂</c>, không
+    /// cộng thêm khi cấp thừa một hành (như "thêm thừa" bên phòng), và là cùng phép đo với
+    /// <c>compatibilityPercent</c> (<c>1 − |a − b|₁/2</c>).
+    /// </summary>
+    internal static decimal NeedCover(ElementVector need, ElementVector productVector)
+    {
+        decimal sum = 0m;
+        foreach (var (element, value) in need.Enumerate())
+            if (value > 0m)
+                sum += Math.Min(value, productVector[element]);
+        return Math.Clamp(sum, 0m, 1m);
+    }
+
+    /// <summary>v3.6 — phần sản phẩm rơi vào kỵ thần: <c>Σ_{e ∈ kỵ} p[e]</c>.</summary>
+    internal static decimal AvoidHit(IReadOnlySet<FengShuiElement> avoid, ElementVector productVector)
     {
         decimal sum = 0m;
         foreach (var (element, value) in productVector.Enumerate())
-            if (value > 0m && FengShuiCalculator.GetRelation(destiny, element) == FengShuiRelation.BiKhac)
+            if (value > 0m && avoid.Contains(element))
+                sum += value;
+        return Math.Clamp(sum, 0m, 1m);
+    }
+
+    private static string DescribeNeedCover(ElementVector need, ElementVector productVector)
+    {
+        var covered = need.Enumerate()
+            .Where(x => x.Value > 0m && productVector[x.Element] > 0m)
+            .OrderByDescending(x => Math.Min(x.Value, productVector[x.Element]))
+            .Select(x => $"{ElementSemantics.ElementName(x.Element)} {Math.Min(x.Value, productVector[x.Element]):0.00}/{x.Value:0.00}")
+            .ToList();
+        var missing = need.Enumerate()
+            .Where(x => x.Value > 0m && productVector[x.Element] <= 0m)
+            .OrderByDescending(x => x.Value)
+            .Select(x => $"{ElementSemantics.ElementName(x.Element)} {x.Value:0.00}")
+            .ToList();
+
+        if (covered.Count == 0)
+            return "Vật này chưa mang hành nào bạn đang cần được bồi.";
+        var text = $"Đáp ứng {string.Join(", ", covered)} phần bạn cần";
+        return missing.Count > 0 ? $"{text}; bạn còn cần thêm {string.Join(", ", missing)}." : $"{text} - đúng trọn nhu cầu của bạn.";
+    }
+
+    private static string DescribeAvoidHit(IReadOnlySet<FengShuiElement> avoid, ElementVector productVector)
+    {
+        var hits = productVector.Enumerate()
+            .Where(x => x.Value > 0m && avoid.Contains(x.Element))
+            .OrderByDescending(x => x.Value)
+            .Select(x => $"{ElementSemantics.ElementName(x.Element)} {x.Value:P0}")
+            .ToList();
+        var avoidVi = string.Join(", ", Enum.GetValues<FengShuiElement>().Where(avoid.Contains).Select(ElementSemantics.ElementName));
+        return hits.Count == 0
+            ? $"Hành bạn nên tránh là {avoidVi} - vật này không mang hành nào trong số đó."
+            : $"Hành bạn nên tránh là {avoidVi}; vật này có {string.Join(", ", hits)} nên phần đó chưa hợp với bạn.";
+    }
+
+    /// <summary>
+    /// Tỉ trọng hành khắc mệnh trong sản phẩm. <paramref name="exclude"/> (v3.6): hành đã nằm trong kỵ
+    /// thần thì đã bị trừ ở <see cref="AvoidHit"/> — không trừ lần hai.
+    /// </summary>
+    private static decimal ClashShare(FengShuiElement destiny, ElementVector productVector, IReadOnlySet<FengShuiElement>? exclude = null)
+    {
+        decimal sum = 0m;
+        foreach (var (element, value) in productVector.Enumerate())
+            if (value > 0m
+                && FengShuiCalculator.GetRelation(destiny, element) == FengShuiRelation.BiKhac
+                && !(exclude?.Contains(element) ?? false))
                 sum += value;
         return sum;
     }
 
     /// <summary>Tên tiếng Việt của các hành khắc mệnh đang có mặt — cho câu giải thích.</summary>
-    private static string ClashingElementsVi(FengShuiElement destiny, ElementVector productVector)
+    private static string ClashingElementsVi(FengShuiElement destiny, ElementVector productVector, IReadOnlySet<FengShuiElement>? exclude = null)
         => string.Join(", ", productVector.Enumerate()
-            .Where(x => x.Value > 0m
+            .Where(x => x.Value > 0m && !(exclude?.Contains(x.Element) ?? false)
                         && FengShuiCalculator.GetRelation(destiny, x.Element) == FengShuiRelation.BiKhac)
             .OrderByDescending(x => x.Value)
             .Select(x => ElementSemantics.ElementName(x.Element)));

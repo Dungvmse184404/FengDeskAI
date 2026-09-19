@@ -14,6 +14,8 @@ Các seeder trong `src/FengDeskAI.Infrastructure/Persistence/Seeding/` đọc da
 | `work-purpose-modifiers.json`  | `work_purpose_element_modifiers` | Có (`delta`, có thể âm)                         |
 | `workspace-types.json`         | `workspace_types`                | Có (`personalWeight` — **legacy**, engine đọc `scope`) |
 | `workspace-type-elements.json` | `workspace_type_elements`        | Có (vector 5 hành, tổng = 1.0)                  |
+| `occupations.json`             | `occupations`                    | Không (taxonomy)                                |
+| `occupation-element-profiles.json` | `occupation_element_profiles` | Có (`share`, Σ mỗi nghề = 1.0 — seeder ném nếu lệch > 0.001; chỉ chèn cho nghề **chưa có** dòng nào) |
 
 ### Nhóm B — dữ liệu DEMO (đuôi `-demo`, bỏ ở production)
 
@@ -39,6 +41,25 @@ Nay tên sản phẩm khai **đúng một chỗ**, các seeder khớp bằng **t
 
 `defaults` chỉ áp cho sản phẩm **không có trong file** (vd tạo tay lúc test) mà chưa khai phong thủy.
 
+#### Phong thủy của sản phẩm demo: file là nguồn sự thật, và không vật nào một hành thuần
+
+Với sản phẩm **có tên trong** `catalog-demo.json` / `carry-products-demo.json`, seeder 21/22/23 **đồng bộ**
+hành chính/phụ + `elementInputs` + vector cache về đúng file mỗi lần khởi động
+(`DemoProductFengShuiSync`), không còn "đã có thì bỏ qua" — sửa file là DB dev/test đổi theo. Giá, tồn
+kho, ảnh không bị đụng; sản phẩm đã `IsVectorOverridden` cũng không.
+
+Luật khai (seeder **cảnh báo** khi vi phạm, không chặn):
+
+1. **Không vật nào là một hành thuần.** Ngũ hành gán hành qua nhiều kênh — chất liệu, màu, hình, công năng:
+   cây là Mộc nhưng sống trong chậu sứ/đất (Thổ); tượng đồng là Kim nhưng đứng trên đế đá (Thổ), ánh đồng đỏ
+   (Hỏa). Vector `1.000` chỉ xảy ra khi *mọi* kênh khai trỏ về cùng một hành (`Wood + Green`) — tức khai
+   thiếu kênh. Mỗi sản phẩm khai **≥ 2 kênh trỏ về ≥ 2 hành** (thân + đế/chậu/dây, màu, hình).
+2. **Hành trội của vector tính ra phải trùng `primaryElement`.** Trang sản phẩm ghi hành theo
+   `primaryElement`, engine chấm theo vector; lệch nhau là hai màn hình nói hai chuyện.
+
+Vector tính theo `ProductVectorProvider` tầng 2: `0.6·chất liệu + 0.4·(màu + hình)`, mỗi nhóm normalize
+trước. Muốn xem trước không cần chạy seed: thay số vào `docs/glossary-scoring.md` §7.2 #11.
+
 > ⚠️ **`sizeClass` nằm ở `products[].items[]`, không phải ở sản phẩm cha** — kích thước biến thiên theo
 > SKU (migration `MoveSizeClassToProductItem`). Đừng thêm `sizeClass` ở cấp product, seeder không đọc.
 
@@ -53,6 +74,13 @@ Mỗi file weight có trường `weightScale` (mặc định `1.0`). Weight lưu
 Thứ tự ưu tiên: `weightScale` trong file → config `Seeding:WeightScale` (appsettings) → `1.0`.
 
 Ví dụ giảm ảnh hưởng workspace weights còn một nửa: đặt `"weightScale": 0.5` trong `workspace-types.json` / `workspace-type-elements.json`. **Không nên** scale `scoring-params.json` (các tham số tỉ trọng phải giữ tổng = 1.0).
+
+⚠️ **Đừng scale `element-input-map.json`.** Weight ở đây là *số phiếu* của một tag trong `current` (xem
+`docs/glossary-scoring.md` §3a/§7) và được cân với `INTERIOR_PRIOR_VOTES = 3`, `PERSON_PRESENCE_VOTES_* = 3/2/0`
+trên giả định **tag ≈ 1 phiếu**. Thêm nữa, seeder này **không** cập nhật weight dòng đã có, nên đổi scale giữa
+chừng tạo ra DB lẫn hai thang (đã xảy ra với `8.0` ngày 2026-09-03, sửa bằng migration
+`ElementInputMapWeightScaleRevert`). Muốn tag nặng/nhẹ hơn nền phòng thì chỉnh `INTERIOR_PRIOR_VOTES`, không
+chỉnh scale.
 
 ## Đường dẫn
 

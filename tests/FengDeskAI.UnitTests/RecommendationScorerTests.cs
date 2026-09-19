@@ -88,8 +88,8 @@ public sealed class RecommendationScorerTests
         // Trọng số trục cá nhân cũng phải khớp seed, và vì lý do NGƯỢC ĐỜI hơn nhóm penalty: DB thiếu
         // row thì rơi về default code, nên nếu hai chỗ lệch, seed xong tính năng lại TẮT đi thay vì bật
         // lên — đúng vết đã xảy ra khi default là 0.50 còn seed ghi 0.00.
-        Assert.Equal(0.50m, p.PersonalWeightPrivate);
-        Assert.Equal(0.30m, p.PersonalWeightShared);
+        Assert.Equal(0.30m, p.PersonalWeightPrivate); // v3.5: 0.50 → 0.30
+        Assert.Equal(0.20m, p.PersonalWeightShared);  // v3.5: 0.30 → 0.20
         Assert.Equal(0.00m, p.PersonalWeightPublic);
     }
 
