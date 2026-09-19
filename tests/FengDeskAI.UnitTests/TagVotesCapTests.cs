@@ -196,7 +196,7 @@ public sealed class TagVotesCapTests
 
     // ===================== C. Tham số =====================
 
-    [Fact(DisplayName = "CAP-09 [Normal] Defaults match the seeded values (cap 5, Wp 0.30/0.20) and stamp 3.5")]
+    [Fact(DisplayName = "CAP-09 [Normal] Defaults match the seeded values (cap 5, Wp 0.30/0.20) and stamp ≥ 3.5")]
     public void ScoringParameters_Defaults_MatchSeed()
     {
         var d = ScoringParameters.Default;
@@ -204,7 +204,8 @@ public sealed class TagVotesCapTests
         Assert.Equal(0.30m, d.PersonalWeightPrivate);
         Assert.Equal(0.20m, d.PersonalWeightShared);
         Assert.Equal(0.00m, d.PersonalWeightPublic);
-        Assert.Equal("3.5", ScoringFormulaVersions.Current);
+        // Cap vào từ 3.5; bản sau vẫn phải mang nó ⇒ so ≥ thay vì đóng đinh.
+        Assert.True(string.CompareOrdinal(ScoringFormulaVersions.Current, ScoringFormulaVersions.V35) >= 0);
     }
 
     [Fact(DisplayName = "CAP-10 [Normal] TAG_VOTES_CAP is read from the params table")]

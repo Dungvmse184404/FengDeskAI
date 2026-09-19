@@ -109,7 +109,7 @@ Phủ happy path cho đủ 241 endpoint là không khả thi trong khung thời 
 ```
 test.yml    ← chạy trên mọi PR và push. Postgres service container.
               dotnet build → UnitTests → ApiTests
-deploy.yml  ← thêm `needs: test`, chỉ chạy khi test xanh
+deploy.yml  ← chạy test trước rồi deploy với `if: always()` (từ 2026-09-20 test đỏ không chặn deploy — xem CLAUDE.md §Test & CI)
 ```
 
 Chặn merge cần bật **branch protection** cho `main` trên giao diện GitHub (bắt buộc PR + status check `test`) — thao tác thủ công, không cấu hình được từ repo.
