@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Runtime.CompilerServices;
 using System.Text.Json;
 using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Domain.Enums.Catalog;
@@ -33,12 +34,20 @@ public sealed class OccupationGoldenSetTests
     private static List<GoldenCase> Cases()
         => ((IEnumerable<GoldenCase>)RecommendationGoldenSetTests.Cases()).ToList();
 
-    private static string RepoRoot()
+    /// <summary>
+    /// Gốc repo tìm theo hai đường: đi ngược từ thư mục chạy test (bin/ trong repo — CI, IDE), rồi từ đường
+    /// dẫn file nguồn này (<see cref="CallerFilePathAttribute"/> — build ra thư mục ngoài repo bằng <c>-o</c>).
+    /// </summary>
+    private static string RepoRoot([CallerFilePath] string sourcePath = "")
     {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "FengDeskAI.slnx")))
-            dir = dir.Parent;
-        return dir?.FullName ?? throw new InvalidOperationException("Không tìm thấy gốc repo (FengDeskAI.slnx).");
+        foreach (var start in new[] { AppContext.BaseDirectory, Path.GetDirectoryName(sourcePath) })
+        {
+            var dir = start is null ? null : new DirectoryInfo(start);
+            while (dir is not null && !File.Exists(Path.Combine(dir.FullName, "FengDeskAI.slnx")))
+                dir = dir.Parent;
+            if (dir is not null) return dir.FullName;
+        }
+        throw new InvalidOperationException("Không tìm thấy gốc repo (FengDeskAI.slnx).");
     }
 
     /// <summary>Hồ sơ Σ=1 theo nghề, đúng file seed đang chạy.</summary>

@@ -60,8 +60,10 @@ public sealed class PersonalNeedV36Tests
         Params = Prms,
     };
 
+    // ScoreSinglePersonal = đúng cửa vào của GET /products/{id}/personal-fit (nhánh PersonalNeed, không lọc).
+    // ScoreSingle là "fit theo phòng" — dùng nhầm sẽ chấm vật Carry theo gap phòng.
     private static ScoredProduct Fit(PersonalTarget target, ElementVector p)
-        => new RecommendationScorer().ScoreSingle(ContextOf(target), new ProductFacts(Guid.NewGuid(), p, new HashSet<string>(), ProductPlacement.Carry));
+        => new RecommendationScorer().ScoreSinglePersonal(ContextOf(target), new ProductFacts(Guid.NewGuid(), p, new HashSet<string>(), ProductPlacement.Carry));
 
     [Fact(DisplayName = "NEED-36-01 [Normal] The real chart yields need Thổ .6/Kim .4 and avoid Thủy·Mộc·Hỏa")]
     public void TuTru_RealChart_HasNeedAndAvoid()
@@ -115,8 +117,11 @@ public sealed class PersonalNeedV36Tests
     {
         // Hỏa khắc Nạp Âm Kim VÀ là kỵ thần: bị trừ qua avoidHit, MINOR_CLASH phải bỏ qua nó.
         var scored = Fit(TuTruTarget(), V(kim: .567m, moc: .18m, hoa: .253m));
-        var minor = scored.Breakdown!.Penalties.Single(p => p.Code == ScoringParamCodes.MinorClashPenalty);
-        Assert.False(minor.Applied);
+        // Khi mọi hành khắc mệnh đều đã nằm trong kỵ thần, clashShare = 0 ⇒ engine không dựng dòng MINOR_CLASH
+        // (dòng khắc mệnh mang mã USER_CONFLICT, applied = false). Cả hai dạng đều là "không tính hai lần".
+        var minor = scored.Breakdown!.Penalties.SingleOrDefault(p => p.Code == ScoringParamCodes.MinorClashPenalty);
+        Assert.True(minor is null || !minor.Applied);
+        Assert.DoesNotContain(scored.Breakdown!.Penalties, p => p.Applied);
         Assert.Equal(-0.033m, scored.Score);
     }
 
