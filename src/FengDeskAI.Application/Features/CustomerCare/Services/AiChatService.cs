@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Common.Sanitization;
@@ -46,6 +46,20 @@ public sealed class AiChatService : IAiChatService
         _options = options.Value;
         _logger = logger;
     }
+
+    /// <summary>Số lần nhắc model khi nó "hứa" gọi tool bằng text mà không emit tool_calls.</summary>
+    private const int MaxStallNudges = 2;
+
+    /// <summary>Số lần bắt model gen lại khi lộ tên tool/tham số nội bộ cho user.</summary>
+    private const int MaxToolLeakNudges = 2;
+
+    /// <summary>Cụm từ "hứa hẹn" đặc trưng — model nói sẽ đi lấy dữ liệu rồi dừng, không có tool call.</summary>
+    private static readonly string[] StallMarkers =
+    {
+        //"đang lấy dữ liệu", "đang truy", "đang chạy", "đang gọi", "đang kiểm tra", "đang tra",
+        //"chờ mình", "chờ chút", "chờ xíu", "vài giây", "giây lát", "chút nhé", "ngay nhé",
+        //"fetching", "retrieving", "one moment", "let me check", "let me fetch", "calling the tool",
+    };
 
     public async Task<IServiceResult<AiChatResponse>> SendAsync(
         Guid userId, string? userRole, string? userEmail, string? userDisplayName,
@@ -122,12 +136,12 @@ public sealed class AiChatService : IAiChatService
         }
         catch (Exception ex)
         {
-            // clientCancelled=true  -> chính request gốc từ browser (HttpContext.RequestAborted) đã bị hủy
-            //                          (user đóng tab/back/mất mạng phía họ) -> KHÔNG phải lỗi hạ tầng AI.
-            // clientCancelled=false -> browser vẫn đang chờ bình thường; lỗi nằm ở socket riêng
-            //                          .NET <-> Ollama (OS/ngrok cắt giữa chừng) -> đáng để điều tra hạ tầng.
             _logger.LogError(ex, "[AiChat] Gọi LLM thất bại (chatbox {ChatboxId}, model {Model}, clientCancelled={ClientCancelled}).",
                 chatbox.Id, model, ct.IsCancellationRequested);
+
+            // CHỦ Ý giữ nguyên tin user đã lưu ở bước 2: user vẫn thấy câu mình đã gửi sau khi reload và
+            // dùng "sửa & gửi lại" để thử lại khi LLM sống. Đánh đổi đã biết: lịch sử có một tin user
+            // không kèm câu trả lời, lượt sau payload gửi model sẽ có 2 lượt user liên tiếp.
             await activity.PhaseAsync("error", null, ct: ct);
             return ServiceResult<AiChatResponse>.Failure(
                 ApiStatusCodes.ServiceUnavailable, "Không kết nối được tới dịch vụ AI. Vui lòng thử lại sau.");
@@ -189,24 +203,57 @@ public sealed class AiChatService : IAiChatService
         var content = request.NewMessage ?? message.Content;
         var images = request.ImageUrls ?? message.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).ToList();
 
-        // Cắt lịch sử TRƯỚC khi gọi LLM — nếu SendAsync lỗi thì lịch sử đã cắt nhưng tin mới chưa gửi,
-        // user thấy hội thoại dừng ở điểm rewind và có thể gửi lại (chấp nhận).
-        await _uow.ChatMessages.SoftDeleteFromAsync(message.ChatboxId, message.CreatedAt, message.Id, ct);
-
-        return await SendAsync(userId, userRole, userEmail, userDisplayName, new AiChatRequest
+        try
         {
-            ChatboxId = message.ChatboxId,
-            Message = content,
-            ImageUrls = images,
-            Model = request.Model,
-        }, ct);
+            return await _uow.ExecuteInTransactionAsync<IServiceResult<AiChatResponse>>(async innerCt =>
+            {
+                await _uow.ChatMessages.SoftDeleteFromAsync(
+                    message.ChatboxId, message.CreatedAt, message.Id, innerCt);
+
+                var result = await SendAsync(userId, userRole, userEmail, userDisplayName, new AiChatRequest
+                {
+                    ChatboxId = message.ChatboxId,
+                    Message = content,
+                    ImageUrls = images,
+                    Model = request.Model,
+                }, innerCt);
+
+                if (!result.IsSuccess)
+                    throw new RewindAbortedException(result);
+
+                return result;
+            }, ct);
+        }
+        catch (RewindAbortedException ex)
+        {
+            // Trả lại nguyên văn lỗi của SendAsync (503 "Không kết nối được tới dịch vụ AI"…).
+            _logger.LogInformation(
+                "[AiChat] Rewind bị hủy (chatbox {ChatboxId}, message {MessageId}): {Message}. Lịch sử đã rollback.",
+                message.ChatboxId, message.Id, ex.Result.Message);
+            return ex.Result;
+        }
+    }
+
+    /// <summary>
+    /// Tín hiệu nội bộ để <c>ExecuteInTransactionAsync</c> rollback khi <see cref="SendAsync"/> trả
+    /// <c>Failure</c>. Result pattern không ném exception cho lỗi nghiệp vụ, nhưng transaction chỉ
+    /// rollback theo exception — nên cần một exception "giả" mang theo kết quả gốc.
+    /// KHÔNG bao giờ thoát ra khỏi <see cref="RewindAsync"/>.
+    /// </summary>
+    private sealed class RewindAbortedException : Exception
+    {
+        public RewindAbortedException(IServiceResult<AiChatResponse> result)
+            : base("Rewind aborted - rollback lịch sử đã cắt.")
+            => Result = result;
+
+        public IServiceResult<AiChatResponse> Result { get; }
     }
 
     public IServiceResult<AiChatConfigResponse> GetConfig()
         => ServiceResult<AiChatConfigResponse>.Success(
             new AiChatConfigResponse(_options.MaxHistoryTurns, _options.MaxHistoryTurns * 2));
 
-    /// <summary>Phòng riêng user↔AI: có AiBot, có đúng user này, không có user khác nào tham gia.</summary>
+    /// <summary>Phòng riêng user AI: có AiBot, có đúng user này, không có user khác nào tham gia.</summary>
     private static bool IsPrivateAiRoom(Chatbox chatbox, Guid userId) =>
         chatbox.Participants.Any(p => p.ParticipantType == ParticipantType.AiBot)
         && chatbox.Participants.Any(p => p.UserId == userId)
@@ -338,7 +385,7 @@ public sealed class AiChatService : IAiChatService
                     stalledCandidate = completion;
                 messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content));
                 messages.Add(new AiChatMessage(AiChatRoles.System,
-                    "You announced you would fetch data but did NOT emit any tool call — the user received nothing. " +
+                    "You announced you would fetch data but did NOT emit any tool call - the user received nothing. " +
                     "Act NOW in this turn: emit the required tool call immediately, or if no tool is needed, " +
                     "give the complete final answer. Never announce or promise an action again."));
                 continue;
@@ -359,7 +406,7 @@ public sealed class AiChatService : IAiChatService
                 _logger.LogInformation("[AiChat] Model lộ tên tool/tham số nội bộ — yêu cầu gen lại (còn {Left} lần).", toolLeakNudgesLeft);
                 messages.Add(new AiChatMessage(AiChatRoles.Assistant, completion.Content));
                 messages.Add(new AiChatMessage(AiChatRoles.System,
-                    "Your previous reply exposed internal tool/function names and/or their parameters — this is " +
+                    "Your previous reply exposed internal tool/function names and/or their parameters - this is " +
                     "NEVER allowed, even if the user asked directly. Rewrite your answer NOW: describe only WHAT " +
                     "you can help with, in plain natural language, with zero tool names, parameter names, tables, " +
                     "or code-like identifiers."));
@@ -461,20 +508,6 @@ public sealed class AiChatService : IAiChatService
     }
 
 
-    /// <summary>Số lần nhắc model khi nó "hứa" gọi tool bằng text mà không emit tool_calls.</summary>
-    private const int MaxStallNudges = 2;
-
-    /// <summary>Số lần bắt model gen lại khi lộ tên tool/tham số nội bộ cho user.</summary>
-    private const int MaxToolLeakNudges = 2;
-
-    /// <summary>Cụm từ "hứa hẹn" đặc trưng — model nói sẽ đi lấy dữ liệu rồi dừng, không có tool call.</summary>
-    private static readonly string[] StallMarkers =
-    {
-        "đang lấy dữ liệu", "đang truy", "đang chạy", "đang gọi", "đang kiểm tra", "đang tra",
-        "chờ mình", "chờ chút", "chờ xíu", "vài giây", "giây lát", "chút nhé",
-        "fetching", "retrieving", "one moment", "let me check", "let me fetch", "calling the tool",
-    };
-
     /// <summary>
     /// Content KHÔNG kèm tool_calls nhưng lộ dấu hiệu "sắp đi lấy dữ liệu": nhắc tên tool literal
     /// (vi phạm luôn quy tắc bảo mật tên tool) hoặc chứa cụm hứa hẹn → cần nhắc model gọi tool thật.
@@ -569,6 +602,7 @@ public sealed class AiChatService : IAiChatService
             ["search_products"] = "Searching for suitable products",
             ["get_product"] = "Looking up product details",
             ["recommend_products"] = "Recommending products by feng shui",
+            ["recommend_personal_items"] = "Choosing items to wear or carry by your destiny",
             ["list_my_workspaces"] = "Fetching your space profiles",
             ["get_my_profile"] = "Fetching your account info",
             ["list_my_orders"] = "Fetching your orders",
@@ -786,7 +820,7 @@ public sealed class AiChatService : IAiChatService
 
         "## LANGUAGE & FORMAT PROTOCOLS\n" +
         "- **THINKING LANGUAGE:** Conduct all internal reasoning strictly in **English** inside thinking blocks.\n" +
-        "- **RESPONSE LANGUAGE:** Dynamically reply in the user's language (default: friendly, energetic Vietnamese using \"bạn\" or  \"you\" ). Skip greetings/small talk; go straight to the point.\n" +
+        "- **RESPONSE LANGUAGE:** Dynamically reply in the user's language (default: friendly, energetic Vietnamese using \"bạn\" or  \"you\" ). \n" +
         "- **RESPONSE FORMAT:** **Prioritize presenting structured data using Markdown Tables** (e.g., product specs, order summaries, destiny readings, options) for scannability and high clarity.\n\n" +
 
         "## FUNCTION CALLING PROTOCOL\n" +
@@ -807,8 +841,9 @@ public sealed class AiChatService : IAiChatService
         "- **For SELF:** Call `get_my_profile` first for birth info, then call `compute_destiny_chart`. **For OTHERS:** Call `compute_destiny_chart` directly with provided info.\n" +
         "- Present readings using tool's Vietnamese data (nạp âm, cung mệnh, Đông/Tây Tứ Trạch, favorable directions with cung names & meanings, Tuyệt Mệnh warnings). Present using **Tables** for readability.\n" +
         "- If `missing` is non-empty, provide the partial reading first, then ask for missing info (e.g., birth time) for deeper Tứ Trụ.\n" +
-        "- Use `favorableElementCodes` (or destiny element) as `element` filter in `search_products`/`recommend_products`.\n" +
-        "- NEVER calculate destiny info manually—always use tools. End with a one-line disclaimer that feng shui is for reference.\n\n" +
+        "- Use `favorableElementCodes` (or destiny element) as the `element` filter in `search_products`.\n" +
+        "- **PICK THE RIGHT SUGGESTION TOOL:** items placed in a room (desk decor, plants, statues) -> `recommend_products`; items worn or carried (bracelet, pendant, ring, keychain, car hanger) -> `recommend_personal_items`. Never give compass placement advice for worn/carried items.\n" +
+        "- NEVER calculate destiny info manually-always use tools. End with a one-line disclaimer that feng shui is for reference.\n\n" +
 
         "## ORDERING PROTOCOL\n" +
         "- To place an order, call `prepare_order` (uses default address unless specified). Show the FULL summary (items, variant, quantity, unit price, shipping fee, total, address) in a **Table** and ask for confirmation.\n" +
@@ -830,7 +865,7 @@ public sealed class AiChatService : IAiChatService
         if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
             parts.Add(_options.SystemPrompt!.Trim());
         if (maxReplyChars is { } limit && limit > 0)
-            parts.Add($"**This is a small chat widget — answer BRIEFLY and concisely, and do NOT exceed {limit} characters.** If you need to say more, summarize the key points and invite the customer to open the full assistant page.");
+            parts.Add($"**This is a small chat widget - answer BRIEFLY and concisely, and do NOT exceed {limit} characters.** If you need to say more, summarize the key points and invite the customer to open the full assistant page.");
         if (!string.IsNullOrWhiteSpace(userDisplayName))
             parts.Add($"The user you are talking to is named {userDisplayName!.Trim()}.");
 

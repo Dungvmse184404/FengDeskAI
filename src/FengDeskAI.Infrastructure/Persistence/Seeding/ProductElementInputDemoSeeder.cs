@@ -9,33 +9,34 @@ using Microsoft.Extensions.Logging;
 namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
 /// <summary>
-/// Gán chất liệu/màu/hình khối (product_element_inputs) cho sản phẩm demo → engine dùng auto-calc
-/// vector (tầng 2) + cache vào 5 cột products. Idempotent: bỏ qua product đã có input.
-/// Chạy sau khi element_input_map + demo products đã seed.
+/// Gán chất liệu/màu/hình khối (<c>product_element_inputs</c>) cho sản phẩm demo → engine dùng
+/// auto-calc vector (tầng 2) + cache vào 5 cột <c>products.element_*</c>. Data đọc từ
+/// <c>catalog-demo.json</c> (xem <see cref="CatalogDemoFile"/>), khớp theo <b>tên đầy đủ</b>.
+///
+/// <para>
+/// Idempotent theo kiểu <b>đồng bộ</b>, không phải "đã có thì bỏ qua": tập (kind, code) trong DB được
+/// kéo về đúng file, vector cache tính lại, rồi <see cref="DemoProductFengShuiSync.Audit"/> cảnh báo nếu
+/// vector thuần một hành hoặc hành trội ≠ hành chính khai. Chạy sau <c>element_input_map</c> + seeder 21.
+/// </para>
 /// </summary>
 public class ProductElementInputDemoSeeder : IDataSeeder
 {
+    private const string FileName = "catalog-demo.json";
+
     private readonly AppDbContext _context;
+    private readonly SeedDataLoader _loader;
     private readonly ILogger<ProductElementInputDemoSeeder> _logger;
 
-    public ProductElementInputDemoSeeder(AppDbContext context, ILogger<ProductElementInputDemoSeeder> logger)
+    public ProductElementInputDemoSeeder(
+        AppDbContext context, SeedDataLoader loader, ILogger<ProductElementInputDemoSeeder> logger)
     {
         _context = context;
+        _loader = loader;
         _logger = logger;
     }
 
     public int Order => 22; // sau ProductFengShuiDemoSeeder (21)
     public string Name => "Product element inputs (demo tier-2 vectors)";
-
-    // (Tên chứa, [(kind, code)...]) — code khớp ElementInputMapSeeder.
-    private static readonly (string Match, (ElementInputKind Kind, string Code)[] Inputs)[] Map =
-    {
-        ("Kim Tiền",      new[] { (ElementInputKind.Material, "Wood"),     (ElementInputKind.Color, "Green") }),
-        ("Lưỡi Hổ",       new[] { (ElementInputKind.Material, "Wood"),     (ElementInputKind.Color, "Green") }),
-        ("thạch anh",     new[] { (ElementInputKind.Material, "Crystal"),  (ElementInputKind.Color, "White") }),
-        ("Tỳ Hưu",        new[] { (ElementInputKind.Material, "Metal"),    (ElementInputKind.Color, "White") }),
-        ("muối Himalaya", new[] { (ElementInputKind.Material, "SaltRock"), (ElementInputKind.Color, "Orange"), (ElementInputKind.Shape, "Round") }),
-    };
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
@@ -45,40 +46,48 @@ public class ProductElementInputDemoSeeder : IDataSeeder
             _logger.LogInformation("element_input_map trống — bỏ qua seed product element inputs.");
             return;
         }
+
+        var byName = _loader.Load<CatalogDemoFile>(FileName).ByName();
+        if (byName.Count == 0) return;
+
         var resolver = new ElementInputResolver(map);
         var prms = ScoringParameters.FromRows(await _context.Set<ScoringParam>().AsNoTracking().ToListAsync(ct));
 
         var inputSet = _context.Set<ProductElementInput>();
-        var products = await _context.Set<Product>().Include(p => p.Elements).ToListAsync(ct);
+        var names = byName.Keys.ToList();
+        var products = await _context.Set<Product>()
+            .Include(p => p.Elements)
+            .Where(p => names.Contains(p.Name))
+            .ToListAsync(ct);
+        var productIds = products.Select(p => p.Id).ToList();
+        var existingByProduct = (await inputSet.Where(i => productIds.Contains(i.ProductId)).ToListAsync(ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         int touched = 0;
         foreach (var p in products)
         {
-            var m = Map.FirstOrDefault(x => p.Name.Contains(x.Match, StringComparison.OrdinalIgnoreCase));
-            if (m.Match is null) continue;
-            if (await inputSet.AnyAsync(i => i.ProductId == p.Id, ct)) continue; // đã có input
+            var row = byName[p.Name];
+            if (row.ElementInputs.Count == 0 || p.IsVectorOverridden) continue; // override tay thì file không có quyền
 
-            var entities = m.Inputs.Select(i => new ProductElementInput
-            {
-                ProductId = p.Id,
-                InputKind = i.Kind,
-                InputCode = i.Code,
-            }).ToList();
-            await inputSet.AddRangeAsync(entities, ct);
+            var desired = DemoProductFengShuiSync.ParseInputs(
+                row.ElementInputs.Select(i => (i.Kind, i.Code)), _logger, FileName, p.Name);
+            var existing = existingByProduct.GetValueOrDefault(p.Id) ?? new List<ProductElementInput>();
 
-            // Cache vector (tầng 2) vào cột products.
-            var vector = ProductVectorProvider.Build(
-                isOverridden: false, overriddenVector: null, inputs: entities, resolver: resolver,
-                productElements: p.Elements.Select(e => (e.Element, e.IsPrimary)), p: prms);
-            p.ElementTho = vector.Tho;
-            p.ElementKim = vector.Kim;
-            p.ElementThuy = vector.Thuy;
-            p.ElementMoc = vector.Moc;
-            p.ElementHoa = vector.Hoa;
-            touched++;
+            var (inputs, changed) = DemoProductFengShuiSync.SyncInputs(
+                p, desired, existing, inputSet, resolver, _logger, FileName);
+
+            // Cache lại vector mỗi lần: hành chính/phụ (seeder 21) hoặc element_input_map có thể vừa đổi
+            // dù tập input không đổi.
+            var before = (p.ElementTho, p.ElementKim, p.ElementThuy, p.ElementMoc, p.ElementHoa);
+            var vector = DemoProductFengShuiSync.CacheVector(p, inputs.ToList(), resolver, prms);
+            DemoProductFengShuiSync.Audit(p, vector, _logger, FileName);
+
+            if (changed || before != (p.ElementTho, p.ElementKim, p.ElementThuy, p.ElementMoc, p.ElementHoa))
+                touched++;
         }
 
         if (touched > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed product_element_inputs cho {Count} product demo.", touched);
+        _logger.LogInformation("Đồng bộ product_element_inputs + vector cho {Count} product demo.", touched);
     }
 }

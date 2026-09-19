@@ -35,7 +35,11 @@ public class CartService : ICartService
 
         var cart = await _uow.Carts.GetOrCreateAsync(userId, ct);
         var existing = await _uow.Carts.GetItemAsync(cart.Id, request.ProductItemId, ct);
-        var newQuantity = (existing?.Quantity ?? 0) + request.Quantity;
+
+        // Cộng dồn bằng long rồi mới so sánh: phép `+` trên int KHÔNG checked, nên
+        // `existing.Quantity + int.MaxValue` tràn thành số ÂM. Số âm lọt qua chốt tồn kho ngay bên
+        // dưới (âm luôn < Stock) và được lưu vào giỏ, làm sai mọi phép tính tiền phía sau.
+        var newQuantity = (long)(existing?.Quantity ?? 0) + request.Quantity;
 
         if (newQuantity > productItem.Stock)
             return ServiceResult<CartResponse>.Failure(ApiStatusCodes.BadRequest, string.Format(ApiStatusMessages.Cart.OutOfStockFormat, productItem.Stock));
@@ -52,7 +56,8 @@ public class CartService : ICartService
         }
         else
         {
-            existing.Quantity = newQuantity;
+            // An toàn vì đã chặn newQuantity > Stock (int) ở trên.
+            existing.Quantity = (int)newQuantity;
         }
 
         await _uow.SaveChangesAsync(ct);

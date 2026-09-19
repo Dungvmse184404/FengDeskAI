@@ -11,7 +11,27 @@ namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 /// <summary>
 /// Seed vector Ideal + Interior cho từng loại không gian hệ thống (khớp theo Name).
 /// Data đọc từ <c>seed-data/workspace-type-elements.json</c>. Chạy sau <see cref="WorkspaceTypeSeeder"/>.
-/// Idempotent theo (type, source, element). Weight nhân với hệ số scale.
+/// Khớp theo (type, source, element). Weight nhân với hệ số scale.
+/// <para>
+/// <b>UPSERT, không chỉ insert</b>: row đã tồn tại mà weight khác file seed thì được CẬP NHẬT.
+/// Trước đây seeder chỉ Add rồi bỏ qua row cũ — nên sửa vector trong JSON xong chạy lại seed vẫn báo
+/// "thêm 0 row", DB giữ giá trị cũ, file seed nói một đằng DB chạy một nẻo mà không ai biết.
+/// </para>
+/// <para>
+/// Chỉ đụng loại phòng <c>IsSystemSeeded = true</c>. Row có trong DB nhưng KHÔNG còn trong file seed
+/// được GIỮ NGUYÊN (không xóa) — tránh thổi bay hành mà admin cố ý thêm tay trong console.
+/// </para>
+/// <para>
+/// <b>Và chỉ đụng row chưa ai chỉnh tay</b> (<c>UpdatedBy is null</c>). Bảng này CÓ endpoint admin —
+/// <c>PUT /api/admin/scoring/workspace-type-elements</c> — nên upsert vô điều kiện như trước là mỗi
+/// lần deploy lại thổi bay toàn bộ hiệu chỉnh vector phòng của người vận hành, im lặng. Vector phòng
+/// là thứ quyết định gap của MỌI gợi ý, nên mất hiệu chỉnh ở đây là đổi ranking toàn hệ thống.
+/// </para>
+/// <para>
+/// Hệ quả cần biết: sau khi admin chỉnh một hành qua API, hành đó <b>ngừng</b> nhận cập nhật từ file
+/// seed. Muốn đổi lại giá trị nền cho row đã bị chỉnh thì đi bằng data migration có mệnh đề
+/// <c>WHERE</c> canh đúng giá trị cũ, giống <c>ScoringPenaltiesV32</c>.
+/// </para>
 /// </summary>
 public class WorkspaceTypeElementSeeder : IDataSeeder
 {
@@ -58,25 +78,37 @@ public class WorkspaceTypeElementSeeder : IDataSeeder
             .ToListAsync(ct);
 
         var set = _context.Set<WorkspaceTypeElement>();
-        var existing = (await set.Select(x => new { x.WorkspaceTypeId, x.Source, x.Element }).ToListAsync(ct))
-            .Select(x => (x.WorkspaceTypeId, x.Source, x.Element)).ToHashSet();
+        // Nạp ENTITY (không projection) để còn sửa được weight — projection chỉ đọc, không update nổi.
+        var existing = (await set.ToListAsync(ct))
+            .ToDictionary(x => (x.WorkspaceTypeId, x.Source, x.Element));
 
-        int added = 0;
+        int added = 0, updated = 0, kept = 0;
         foreach (var type in types)
         {
             if (!byName.TryGetValue(type.Name, out var cfg)) continue;
 
-            added += await AddSourceAsync(set, existing, type.Id, WorkspaceElementSources.Ideal, cfg.Ideal, scale, ct);
-            added += await AddSourceAsync(set, existing, type.Id, WorkspaceElementSources.Interior, cfg.Interior, scale, ct);
+            var (a1, u1, k1) = await UpsertSourceAsync(set, existing, type.Id, WorkspaceElementSources.Ideal, cfg.Ideal, scale, ct);
+            var (a2, u2, k2) = await UpsertSourceAsync(set, existing, type.Id, WorkspaceElementSources.Interior, cfg.Interior, scale, ct);
+            added += a1 + a2;
+            updated += u1 + u2;
+            kept += k1 + k2;
         }
 
-        if (added > 0) await _context.SaveChangesAsync(ct);
-        _logger.LogInformation("Seed workspace_type_elements: thêm {Added} row (scale {Scale}).", added, scale);
+        if (added > 0 || updated > 0) await _context.SaveChangesAsync(ct);
+        _logger.LogInformation(
+            "Seed workspace_type_elements: thêm {Added} row, cập nhật {Updated} row, "
+            + "giữ nguyên {Kept} row admin đã chỉnh (scale {Scale}).",
+            added, updated, kept, scale);
     }
 
-    private static async Task<int> AddSourceAsync(
+    /// <summary>
+    /// Đồng bộ 5 hành của một (type, source) về đúng file seed. Trả về (số row thêm, số row sửa).
+    /// Cột weight là <c>numeric(4,3)</c> nên so sánh sau khi làm tròn 3 chữ số — nếu không, sai số
+    /// thập phân khiến lần seed nào cũng báo "đã cập nhật" dù giá trị không hề đổi.
+    /// </summary>
+    private static async Task<(int Added, int Updated, int Kept)> UpsertSourceAsync(
         DbSet<WorkspaceTypeElement> set,
-        HashSet<(Guid, string, FengShuiElement)> existing,
+        Dictionary<(Guid, string, FengShuiElement), WorkspaceTypeElement> existing,
         Guid typeId, string source, Vector v, decimal scale,
         CancellationToken ct)
     {
@@ -89,20 +121,38 @@ public class WorkspaceTypeElementSeeder : IDataSeeder
             (FengShuiElement.Hoa, v.Hoa),
         };
 
-        int added = 0;
+        int added = 0, updated = 0, kept = 0;
         foreach (var (element, weight) in rows)
         {
             if (weight <= 0m) continue;
-            if (existing.Contains((typeId, source, element))) continue;
-            await set.AddAsync(new WorkspaceTypeElement
+            var target = Math.Round(weight * scale, 3);
+
+            if (existing.TryGetValue((typeId, source, element), out var current))
+            {
+                if (Math.Round(current.Weight, 3) == target) continue;
+
+                if (current.UpdatedBy is not null)
+                {
+                    kept++; // admin đã chỉnh qua API — deploy không được đè
+                    continue;
+                }
+
+                current.Weight = target;
+                updated++;
+                continue;
+            }
+
+            var entity = new WorkspaceTypeElement
             {
                 WorkspaceTypeId = typeId,
                 Source = source,
                 Element = element,
-                Weight = weight * scale,
-            }, ct);
+                Weight = target,
+            };
+            await set.AddAsync(entity, ct);
+            existing[(typeId, source, element)] = entity;
             added++;
         }
-        return added;
+        return (added, updated, kept);
     }
 }

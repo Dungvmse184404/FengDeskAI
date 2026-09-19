@@ -14,4 +14,14 @@ public interface IRecommendationScorer
     /// hay lệch vibe chỉ phản ánh vào điểm/caution, dùng cho trang chi tiết sản phẩm.
     /// </summary>
     ScoredProduct ScoreSingle(ScoringContext context, ProductFacts product);
+
+    /// <summary>
+    /// Chấm điểm 1 sản phẩm theo BẢN MỆNH người dùng (nhánh <see cref="ScoringTarget.PersonalNeed"/>) —
+    /// v3.2 §10.6 · R3. Cũng không bao giờ loại bỏ, như <see cref="ScoreSingle"/>.
+    /// <para>
+    /// Khác <see cref="ScoreSingle"/> ở chỗ mục tiêu là <see cref="ScoringContext.PersonalNeedVector"/>
+    /// chứ không phải gap của phòng: vật mang theo người đi cùng chủ nhân, không thuộc phòng nào.
+    /// </para>
+    /// </summary>
+    ScoredProduct ScoreSinglePersonal(ScoringContext context, ProductFacts product);
 }

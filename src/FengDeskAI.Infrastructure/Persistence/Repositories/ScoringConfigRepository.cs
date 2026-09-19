@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Interfaces.Repositories;
+﻿using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -33,6 +33,28 @@ public class ScoringConfigRepository : IScoringConfigRepository
     public Task<List<ProductElementInput>> GetProductElementInputsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default)
         => _context.Set<ProductElementInput>().AsNoTracking()
             .Where(i => productIds.Contains(i.ProductId)).ToListAsync(ct);
+
+    public async Task<Dictionary<Guid, IReadOnlyCollection<ProductElementInput>>> GetProductElementInputsByProductAsync(
+        IReadOnlyCollection<Guid> productIds, CancellationToken ct = default)
+        => (await GetProductElementInputsAsync(productIds, ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+
+    public Task<List<OccupationElementProfile>> GetOccupationProfileAsync(Guid occupationId, CancellationToken ct = default)
+        => _context.Set<OccupationElementProfile>().AsNoTracking()
+            .Where(m => m.OccupationId == occupationId).ToListAsync(ct);
+
+    public Task<List<Occupation>> GetOccupationsAsync(bool includeInactive = false, CancellationToken ct = default)
+        => _context.Set<Occupation>().AsNoTracking()
+            .Include(o => o.Profile)
+            .Where(o => includeInactive || o.IsActive)
+            .OrderBy(o => o.SortOrder).ThenBy(o => o.Code)
+            .ToListAsync(ct);
+
+    public Task<Occupation?> GetOccupationByCodeAsync(string code, CancellationToken ct = default)
+        => _context.Set<Occupation>()
+            .Include(o => o.Profile)
+            .FirstOrDefaultAsync(o => o.Code == code, ct);
 
     public async Task ReplaceProductElementInputsAsync(Guid productId, IEnumerable<ProductElementInput> inputs, CancellationToken ct = default)
     {

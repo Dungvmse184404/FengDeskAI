@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums;
+﻿using FengDeskAI.Domain.Enums;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
@@ -39,9 +39,9 @@ public static class FortuneCalculator
 
         var missing = new List<string>();
         if (gender is not (Gender.Male or Gender.Female))
-            missing.Add("gender — needed for Bát Trạch cung mệnh + favorable directions");
+            missing.Add("gender - needed for Bát Trạch cung mệnh + favorable directions");
         if (birthTime is null)
-            missing.Add("birthTime — needed for the hour pillar to complete the Tứ Trụ reading");
+            missing.Add("birthTime - needed for the hour pillar to complete the Tứ Trụ reading");
 
         return new FortuneChart(
             solarBirthDate,

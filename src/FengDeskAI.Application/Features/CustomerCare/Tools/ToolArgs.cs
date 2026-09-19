@@ -20,6 +20,13 @@ internal static class ToolArgs
     }
 
     /// <summary>
+    /// Đọc tham số enum (LLM luôn gửi dạng chuỗi). Không parse được / thiếu → null, KHÔNG ném:
+    /// tool phải tự xử lý thiếu tham số chứ không làm hỏng cả lượt chat.
+    /// </summary>
+    public static T? GetEnum<T>(JsonElement e, string name) where T : struct, Enum
+        => Enum.TryParse<T>(GetString(e, name), ignoreCase: true, out var parsed) ? parsed : null;
+
+    /// <summary>
     /// Encoder mặc định escape mọi ký tự non-ASCII → tiếng Việt trong tool result biến thành
     /// chuỗi escape dạng u+0169/u+1EA1... Model nhỏ giải mã escape unicode rất kém
     /// (từng "dịch" sai tên user thành họ khác) → giữ UTF-8 thô để model đọc thẳng.

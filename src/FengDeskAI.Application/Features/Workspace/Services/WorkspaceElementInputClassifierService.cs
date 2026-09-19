@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using System.Text.Json.Serialization;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
@@ -66,7 +66,9 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
             if (already.Count > 0)
             {
                 var existingResult = new ClassifyElementInputResponse(
-                    candidateCode, already.Select(m => new ElementContributionDto(m.Element, m.Weight)).ToList());
+                    candidateCode,
+                    already.Select(m => m.LabelVi).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? label,
+                    already.Select(m => new ElementContributionDto(m.Element, m.Weight)).ToList());
                 return ServiceResult<ClassifyElementInputResponse>.Success(existingResult);
             }
         }
@@ -82,7 +84,10 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
             // Think=false + temperature 0: cần JSON ngắn gọn, ổn định — không cần model "suy nghĩ".
             var completion = await _client.CompleteAsync(
                 _options.Model, messages, tools: null,
-                options: new AiCompletionOptions(Temperature: 0, JsonMode: true, Think: false), ct: ct);
+                // JSON trả về chỉ ~60 token — đặt trần để một lượt lỗi không kéo dài lê thê.
+                options: new AiCompletionOptions(
+                    Temperature: 0, JsonMode: true, Think: false, MaxOutputTokens: 200),
+                ct: ct);
 
             var raw = ParseRaw(completion.Content);
             var normalized = Normalize(raw, label);
@@ -90,10 +95,10 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
             {
                 _logger.LogWarning("[ElementInputClassifier] AI không trả hành hợp lệ cho label \"{Label}\": {RawContent}", label, completion.Content);
                 return ServiceResult<ClassifyElementInputResponse>.Failure(
-                    ApiStatusCodes.UnprocessableEntity, "Không nhận diện được hành phù hợp — thử mô tả cụ thể hơn (vd chất liệu chính).");
+                    ApiStatusCodes.UnprocessableEntity, "Không nhận diện được hành phù hợp - thử mô tả cụ thể hơn (vd chất liệu chính).");
             }
 
-            var persisted = await PersistAsync(request.Kind, normalized, ct);
+            var persisted = await PersistAsync(request.Kind, normalized, label, ct);
 
             _logger.LogInformation(
                 "[ElementInputClassifier] Phân loại \"{Label}\" ({Kind}) → {Code}: {Elements}",
@@ -113,7 +118,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
     private static string BuildPrompt() =>
         "Bạn là bộ phân loại ngũ hành phong thủy cho một VẬT PHẨM/VẬT TRANG TRÍ mới do người dùng tự gõ tên " +
         "(không có sẵn trong danh sách hệ thống). Đọc TÊN vật phẩm (tiếng Việt hoặc tiếng Anh) và trả về " +
-        "CHÍNH XÁC MỘT đối tượng JSON — KHÔNG markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON.\n\n" +
+        "CHÍNH XÁC MỘT đối tượng JSON - KHÔNG markdown, KHÔNG giải thích, KHÔNG chữ nào ngoài JSON.\n\n" +
 
         "## SCHEMA\n" +
         "{\n" +
@@ -122,7 +127,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
         "}\n\n" +
 
         "## QUY TẮC\n" +
-        "- Dựa trên chất liệu/hình dáng/công năng đặc trưng NHẤT của vật phẩm để suy luận hành — không suy diễn viển vông.\n" +
+        "- Dựa trên chất liệu/hình dáng/công năng đặc trưng NHẤT của vật phẩm để suy luận hành - không suy diễn viển vông.\n" +
         "- Vật phẩm rõ ràng thuộc 1 hành duy nhất → 1 phần tử, weight=1.\n" +
         "- Vật phẩm pha trộn rõ 2 đặc tính (vd vừa kim loại vừa có nước) → 2 phần tử.\n" +
         "- KHÔNG vượt quá 2 phần tử. KHÔNG bịa hành ngoài 5 hành trên.\n\n" +
@@ -188,7 +193,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
         }
 
         var top = merged.OrderByDescending(kv => kv.Value).Take(MaxElements).ToList();
-        if (top.Count == 0) return new ClassifyElementInputResponse(code, new List<ElementContributionDto>());
+        if (top.Count == 0) return new ClassifyElementInputResponse(code, originalLabel, new List<ElementContributionDto>());
 
         var clamped = top.Select(kv => (kv.Key, Weight: Math.Clamp(kv.Value, MinWeight, MaxWeight))).ToList();
         var total = clamped.Sum(c => c.Weight);
@@ -196,7 +201,7 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
             .Select(c => new ElementContributionDto(c.Key, Math.Round(c.Weight / total, 3)))
             .ToList();
 
-        return new ClassifyElementInputResponse(code, normalized);
+        return new ClassifyElementInputResponse(code, originalLabel, normalized);
     }
 
     /// <summary>PascalCase, chỉ chữ/số, tối đa 30 ký tự. Trả null nếu không còn ký tự nào hợp lệ.</summary>
@@ -227,12 +232,14 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
     /// (map cũ nếu đã có — tránh trả 2 kết quả khác nhau cho cùng 1 code do đụng độ hiếm gặp).
     /// </summary>
     private async Task<ClassifyElementInputResponse> PersistAsync(
-        ElementInputKind kind, ClassifyElementInputResponse result, CancellationToken ct)
+        ElementInputKind kind, ClassifyElementInputResponse result, string userLabel, CancellationToken ct)
     {
         var existing = await _inputMap.FindAsync(x => x.InputKind == kind && x.InputCode == result.Code, ct);
         if (existing.Count > 0)
             return new ClassifyElementInputResponse(
-                result.Code, existing.Select(m => new ElementContributionDto(m.Element, m.Weight)).ToList());
+                result.Code,
+                existing.Select(m => m.LabelVi).FirstOrDefault(l => !string.IsNullOrWhiteSpace(l)) ?? userLabel,
+                existing.Select(m => new ElementContributionDto(m.Element, m.Weight)).ToList());
 
         foreach (var e in result.Elements)
         {
@@ -240,6 +247,11 @@ public sealed class WorkspaceElementInputClassifierService : IWorkspaceElementIn
             {
                 InputKind = kind,
                 InputCode = result.Code,
+                // Chữ user gõ CHÍNH LÀ nhãn hiển thị — dẫn chứng thuyết phục nhất trong dòng nhận định.
+                LabelVi = userLabel,
+                // Chờ duyệt: chỉ người tạo thấy trong picker/AI intake của mình (CreatedBy do DbContext
+                // tự gán). Admin xem trong console rồi chọn công khai hoặc giữ riêng tư.
+                Visibility = ElementInputVisibility.Pending,
                 Element = e.Element,
                 Weight = e.Weight,
             }, ct);

@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Sales.DTOs;
@@ -32,13 +32,13 @@ public sealed class ConfirmOrderTool : IAiTool
 
     public string Description =>
         "Confirm a draft order previously created by prepare_order and place the real order. ONLY call this " +
-        "after the user's NEXT message clearly agrees to the summary you already read back to them — never in " +
+        "after the user's NEXT message clearly agrees to the summary you already read back to them - never in " +
         "the same turn you show the summary. Never call this with a draftId you made up.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
         ["draftId"] = new("string", "The draftId returned by prepare_order, if you still have it. " +
-            "Omit it if you no longer have the exact id — the system will use the user's latest prepared draft."),
+            "Omit it if you no longer have the exact id - the system will use the user's latest prepared draft."),
         ["paymentMethod"] = new("string", "Payment method (default PayOS). COD must be explicitly requested by the user.", Enum: new[] { "PayOS", "COD" }),
     };
 
@@ -63,7 +63,7 @@ public sealed class ConfirmOrderTool : IAiTool
         }
         else
         {
-            return ToolArgs.Error("No active draft found (expired or already used) — call prepare_order again.");
+            return ToolArgs.Error("No active draft found (expired or already used) - call prepare_order again.");
         }
 
         // 1 lần dùng: mọi lượt gọi sau (kể cả khi lỗi bên dưới) đều báo hết hạn.
@@ -73,7 +73,7 @@ public sealed class ConfirmOrderTool : IAiTool
         var paymentMethod = PaymentMethod.PayOS;
         var paymentMethodText = ToolArgs.GetString(arguments, "paymentMethod");
         if (!string.IsNullOrWhiteSpace(paymentMethodText) && !Enum.TryParse(paymentMethodText, true, out paymentMethod))
-            return ToolArgs.Error("Invalid 'paymentMethod' — must be 'PayOS' or 'COD'.");
+            return ToolArgs.Error("Invalid 'paymentMethod' - must be 'PayOS' or 'COD'.");
 
         var checkoutRequest = new CheckoutRequest
         {
@@ -85,7 +85,7 @@ public sealed class ConfirmOrderTool : IAiTool
         // Re-validate giá/tồn kho trước khi tạo đơn thật — không tin snapshot cũ trong draft.
         var previewResult = await _orders.PreviewShippingFeeAsync(context.UserId, checkoutRequest, ct);
         if (!previewResult.IsSuccess || previewResult.Data is null)
-            return ToolArgs.Error(previewResult.Message ?? "Could not re-validate the order — call prepare_order again.");
+            return ToolArgs.Error(previewResult.Message ?? "Could not re-validate the order - call prepare_order again.");
 
         var expectedSubtotal = draft.UnitPriceSnapshot * draft.Quantity;
         if (previewResult.Data.Subtotal != expectedSubtotal)
@@ -93,7 +93,7 @@ public sealed class ConfirmOrderTool : IAiTool
             var newUnitPrice = previewResult.Data.Subtotal / draft.Quantity;
             return ToolArgs.Error(
                 $"The price changed since prepare_order (was {draft.UnitPriceSnapshot:#,0}đ, now {newUnitPrice:#,0}đ). " +
-                "No order was created — tell the user the new price and call prepare_order again if they still want to proceed.");
+                "No order was created - tell the user the new price and call prepare_order again if they still want to proceed.");
         }
 
         var checkoutResult = await _orders.CheckoutAsync(context.UserId, checkoutRequest, ct);
@@ -121,7 +121,7 @@ public sealed class ConfirmOrderTool : IAiTool
                 status = order.Status.ToString(),
                 checkoutUrl = (string?)null,
                 expiresInMinutes = 15,
-                warning = paymentResult.Message ?? "Order created, but the payment link could not be generated — tell the user to retry from their order page.",
+                warning = paymentResult.Message ?? "Order created, but the payment link could not be generated - tell the user to retry from their order page.",
             });
         }
 
@@ -137,7 +137,7 @@ public sealed class ConfirmOrderTool : IAiTool
             status = order.Status.ToString(),
             expiresInMinutes = 15,
             note = "Payment link and QR code are ALREADY displayed to the user as an attachment below your reply. " +
-                   "Do NOT repeat or invent any payment URL — just confirm the order and remind them to pay within 15 minutes.",
+                   "Do NOT repeat or invent any payment URL - just confirm the order and remind them to pay within 15 minutes.",
         });
     }
 }

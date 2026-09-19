@@ -30,4 +30,11 @@ public interface IProductService
 
     /// <summary>Khai báo/cập nhật thuộc tính phong thủy cho sản phẩm (làm ứng viên gợi ý).</summary>
     Task<IServiceResult<ProductFengShuiResponse>> SetFengShuiAsync(Guid productId, Guid userId, bool isAdmin, SetProductFengShuiRequest request, CancellationToken ct = default);
+
+    /// <summary>
+    /// Duyệt thẻ mục tiêu phong thủy của sản phẩm (quyền SÀN — manager trở lên). Thẻ không nằm trong
+    /// danh sách bị hạ về chưa duyệt. Chỉ thẻ đã duyệt mới tham gia lọc gợi ý.
+    /// </summary>
+    Task<IServiceResult<ProductFengShuiResponse>> ApproveAspirationsAsync(
+        Guid productId, Guid approverId, ApproveProductAspirationsRequest request, CancellationToken ct = default);
 }

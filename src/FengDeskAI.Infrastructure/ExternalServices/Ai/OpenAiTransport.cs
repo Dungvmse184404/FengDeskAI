@@ -41,6 +41,7 @@ internal sealed class OpenAiTransport : IAiChatTransport
             Messages = ToWireMessages(messages, cfg.SupportsVision),
             Tools = tools is { Count: > 0 } ? tools.Select(ToWireTool).ToList() : null,
             Temperature = options?.Temperature,
+            MaxTokens = options?.MaxOutputTokens,
             ResponseFormat = options?.JsonMode == true ? new OpenAiResponseFormat { Type = "json_object" } : null,
             Stream = false,
         };
@@ -186,6 +187,10 @@ internal sealed class OpenAiTransport : IAiChatTransport
         [JsonPropertyName("temperature")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public double? Temperature { get; init; }
+
+        [JsonPropertyName("max_tokens")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public int? MaxTokens { get; init; }
 
         [JsonPropertyName("response_format")]
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]

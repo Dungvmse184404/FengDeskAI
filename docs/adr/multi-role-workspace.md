@@ -7,7 +7,7 @@
 
 ## Bối cảnh
 
-- User đăng ký mặc định là **Customer**; có thể tự nâng cấp thành **Garden Owner** (self-service, xem `FIX_GARDEN_OWNER_FLOW.md`).
+- User đăng ký mặc định là **Customer**; có thể tự nâng cấp thành **Garden Owner** (self-service, xem [`fix-garden-owner-flow.md`](./fix-garden-owner-flow.md)).
 - `UserRole` là **bit-flag** → một user giữ nhiều role cùng lúc (vd `Customer | GardenOwner`).
 - Hiện tại menu trộn lẫn mục mua hàng (Đơn mua) với mục bán hàng (Kênh người bán) → cần tách theo workspace.
 

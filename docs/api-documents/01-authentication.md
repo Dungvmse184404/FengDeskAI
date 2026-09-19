@@ -1,4 +1,4 @@
-# 01 — Authentication
+﻿# 01 — Authentication
 
 [← Mục lục](./README.md)
 
@@ -294,6 +294,7 @@ Cấp access token mới (token rotation).
 | `phone` | string? | | 10 số bắt đầu bằng `0`. Null/rỗng = **xóa** số điện thoại |
 | `gender` | enum `Gender` | ✓ | `Unspecified`/`Male`/`Female`/`Other` |
 | `dateOfBirth` | date? | | Không được ở tương lai, năm ≥ 1900. Null = **xóa** |
+| `occupationCode` | string? | | Mã nghề, vd `"IT"` — **tuỳ chọn**, không chặn gì. `null` = **giữ nguyên**, `""` = **xóa**. Mã lạ hoặc nghề đã tắt → 400. Danh sách ở `GET /api/occupations` |
 
 **Response `data`** = `UserSummary` đã cập nhật (kèm `fengShui` tính lại).
 
@@ -302,6 +303,10 @@ Cấp access token mới (token rotation).
 | `400` | Họ tên trống / SĐT sai định dạng / ngày sinh ở tương lai hoặc trước 1900 |
 | `404` | Không tìm thấy người dùng |
 | `409` | SĐT đã được tài khoản khác dùng |
+
+> ⚠️ `occupationCode` là field **duy nhất** trong body này phân biệt `null` với chuỗi rỗng. `PUT` ghi
+> đè cả hồ sơ, nên nếu `null` cũng xóa thì mọi client cũ chưa biết field này sẽ âm thầm xóa nghề của
+> user mỗi lần họ sửa số điện thoại.
 
 > ⚠️ Đổi `dateOfBirth` hoặc `gender` làm **đổi mệnh Nạp Âm / cung Kua** đã tính → khối `fengShui` và mọi gợi ý sản phẩm thay đổi theo. FE nên xác nhận với user trước khi gửi. Gửi lại đúng SĐT cũ của chính mình **không** bị báo trùng.
 

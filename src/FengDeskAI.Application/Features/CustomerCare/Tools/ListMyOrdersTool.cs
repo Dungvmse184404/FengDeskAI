@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Interfaces.External;
@@ -14,7 +14,7 @@ public sealed class ListMyOrdersTool : IAiTool
     public ListMyOrdersTool(IOrderService orders) => _orders = orders;
 
     public string Name => "list_my_orders";
-    public string Description => "List the user's most recent orders (order code, total amount, payment/delivery status) — use to check purchase/payment history.";
+    public string Description => "List the user's most recent orders (order code, total amount, payment/delivery status) - use to check purchase/payment history.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {

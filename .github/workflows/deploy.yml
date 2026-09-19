@@ -5,7 +5,13 @@ on:
     branches: [main]
 
 jobs:
+  # Cổng chặn: deploy chỉ chạy khi toàn bộ test xanh. Dùng lại test.yml qua workflow_call để
+  # không có hai bản cấu hình test lệch nhau.
+  test:
+    uses: ./.github/workflows/test.yml
+
   deploy:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Deploy via SSH

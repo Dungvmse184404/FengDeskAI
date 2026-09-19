@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums.Workspace;
+﻿using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
@@ -26,7 +26,9 @@ public sealed record BaTuChart(
     string BodyStrength,                              // "Thân vượng" / "Thân nhược"
     IReadOnlyList<string> FavorableElements,          // dụng thần gợi ý (tên VN)
     IReadOnlyList<string> FavorableElementCodes,      // enum code (Kim/Moc/Thuy/Hoa/Tho) — filter sản phẩm
-    string MethodNote);
+    string MethodNote,
+    IReadOnlyList<string>? UnfavorableElements = null,     // kỵ thần (tên VN) — v3.6
+    IReadOnlyList<string>? UnfavorableElementCodes = null); // kỵ thần (enum code) — v3.6
 
 /// <summary>
 /// Tính Tứ Trụ (Bát Tự) rút gọn — deterministic, AI chỉ diễn giải kết quả:
@@ -161,6 +163,17 @@ public static class BaTuCalculator
             ? new[] { FengShuiCalculator.GetGeneratedElement(dayMaster), FengShuiCalculator.GetControlledElement(dayMaster) }
             : new[] { supporter, dayMaster };
 
+        // ── Kỵ thần (v3.6) — đối xứng với dụng thần: thân nhược kỵ thứ làm hao (thực thương, tài) và thứ
+        //    khắc mình (quan sát); thân vượng kỵ thứ bồi thêm (ấn, tỷ kiếp). Còn lại là nhàn thần.
+        var unfavorable = strong
+            ? new[] { supporter, dayMaster }
+            : new[]
+            {
+                FengShuiCalculator.GetGeneratedElement(dayMaster),
+                FengShuiCalculator.GetControlledElement(dayMaster),
+                FengShuiCalculator.GetControllingElement(dayMaster),
+            };
+
         var missing = dist.Where(kv => kv.Value == 0m).Select(kv => ElementVn(kv.Key)).ToList();
 
         return new BaTuChart(
@@ -173,10 +186,12 @@ public static class BaTuCalculator
             FavorableElements: favorable.Select(ElementVn).ToList(),
             FavorableElementCodes: favorable.Select(e => e.ToString()).ToList(),
             MethodNote: (birthTime is null
-                ? "Thiếu giờ sinh — chỉ tính 3 trụ (năm/tháng/ngày); kết quả vượng nhược và dụng thần là sơ bộ. "
+                ? "Thiếu giờ sinh - chỉ tính 3 trụ (năm/tháng/ngày); kết quả vượng nhược và dụng thần là sơ bộ. "
                 : "") +
                 "Phương pháp rút gọn: trụ năm theo Lập Xuân, trụ tháng theo tiết khí; 23h gộp vào giờ Tý cùng ngày; " +
-                "chưa xét hợp-xung-hình-hại giữa các chi.");
+                "chưa xét hợp-xung-hình-hại giữa các chi.",
+            UnfavorableElements: unfavorable.Select(ElementVn).ToList(),
+            UnfavorableElementCodes: unfavorable.Select(e => e.ToString()).ToList());
     }
 
     private static BaTuPillar MakePillar(string name, int canIdx, int chiIdx)

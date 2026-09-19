@@ -1,0 +1,16 @@
+// Copy file này thành `appsettings.Testing.json` (bỏ đuôi .example) rồi sửa mật khẩu Postgres của bạn.
+// File `appsettings.Testing.json` đã nằm trong .gitignore (mẫu **/appsettings.*.json) nên không lên git.
+//
+// Yêu cầu:
+//   - Postgres CỤC BỘ (localhost/127.0.0.1). TestDatabaseGuard chặn mọi host từ xa.
+//   - Database RIÊNG cho test, không dùng chung với DB dev — test sẽ ghi và xóa dữ liệu thật.
+//
+// Tạo database trước khi chạy lần đầu:
+//   createdb -h localhost -U postgres fengdeskai_test
+//
+// Biến môi trường ConnectionStrings__DefaultConnection nếu có sẽ được ưu tiên hơn file này (CI dùng cách đó).
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=fengdeskai_test;Username=postgres;Password=THAY-MAT-KHAU-CUA-BAN"
+  }
+}

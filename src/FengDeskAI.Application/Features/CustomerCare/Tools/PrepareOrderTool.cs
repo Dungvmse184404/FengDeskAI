@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.Sales.DTOs;
@@ -38,15 +38,15 @@ public sealed class PrepareOrderTool : IAiTool
     public string Description =>
         "Prepare a draft order for ONE product before checkout: resolves the variant, checks stock and the " +
         "shipping address (user's default, or a specific saved one via shippingAddressId), and previews the " +
-        "shipping fee. Returns a draftId + summary — read the summary back to the user and WAIT for their " +
+        "shipping fee. Returns a draftId + summary - read the summary back to the user and WAIT for their " +
         "explicit confirmation before calling confirm_order. Never invent a draftId; it must come from this tool's result.";
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
-        ["productId"] = new("string", "Product id (GUID) — from a prior recommend/search result.", Required: true),
+        ["productId"] = new("string", "Product id (GUID) - from a prior recommend/search result.", Required: true),
         ["quantity"] = new("integer", $"Quantity to buy (default 1, max {MaxQuantity})."),
-        ["productItemId"] = new("string", "Specific variant id (GUID) — required only when the product has multiple variants (ask the user to pick one first)."),
-        ["shippingAddressId"] = new("string", "Id of a saved address (GUID) — from list_my_addresses, when the user wants to ship to a " +
+        ["productItemId"] = new("string", "Specific variant id (GUID) - required only when the product has multiple variants (ask the user to pick one first)."),
+        ["shippingAddressId"] = new("string", "Id of a saved address (GUID) - from list_my_addresses, when the user wants to ship to a " +
             "specific address instead of their default. Omit to use their default address."),
     };
 
@@ -90,7 +90,7 @@ public sealed class PrepareOrderTool : IAiTool
         }
 
         if (quantity > item.Stock)
-            return ToolArgs.Error($"Only {item.Stock} unit(s) of this variant left in stock — ask the user to lower the quantity.");
+            return ToolArgs.Error($"Only {item.Stock} unit(s) of this variant left in stock - ask the user to lower the quantity.");
 
         // 2) Resolve the shipping address: a specific saved one (via shippingAddressId, must belong to the
         // user) or the default. This tool never lets the AI invent an address — only ids the user actually owns.
@@ -100,7 +100,7 @@ public sealed class PrepareOrderTool : IAiTool
         {
             chosenAddress = await _uow.UserAddresses.GetByIdForUserAsync(saId, context.UserId, ct);
             if (chosenAddress is null)
-                return ToolArgs.Error("Address not found — call list_my_addresses to see valid saved addresses.");
+                return ToolArgs.Error("Address not found - call list_my_addresses to see valid saved addresses.");
         }
         else
         {

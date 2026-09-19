@@ -1,4 +1,5 @@
-using FengDeskAI.Domain.Common;
+﻿using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Entities.Workspace;
 using FengDeskAI.Domain.Enums;
 
@@ -32,6 +33,13 @@ public class User : BaseEntity
 
     /// <summary>"sub" claim từ Google ID token. Null nếu chưa từng link Google.</summary>
     public string? GoogleId { get; set; }
+
+    /// <summary>
+    /// Nghề nghiệp — <b>tuỳ chọn</b>, không chặn đăng ký (ADR v3.2 Q8). Null = chưa khai, engine bỏ qua delta
+    /// nghề nghiệp thay vì đoán.
+    /// </summary>
+    public Guid? OccupationId { get; set; }
+    public Occupation? Occupation { get; set; }
 
     public ICollection<RefreshToken> RefreshTokens { get; set; } = new List<RefreshToken>();
     public ICollection<WorkspaceProfile> WorkspaceProfiles { get; set; } = new List<WorkspaceProfile>();

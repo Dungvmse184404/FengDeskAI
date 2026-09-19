@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Interfaces.External;
+﻿using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Contracts.Recommendation;
 using Microsoft.Extensions.Logging;
 
@@ -53,7 +53,7 @@ public sealed class MockAiRecommendationClient : IAiRecommendationClient
         if (c.CautionFacts.Count > 0)
             parts.Add("Lưu ý: " + string.Join(" ", c.CautionFacts));
 
-        parts.Add("Một điểm nhấn vừa hợp phong thủy vừa nâng tầm bàn làm việc — rất đáng để sở hữu.");
+        parts.Add("Một điểm nhấn vừa hợp phong thủy vừa nâng tầm bàn làm việc - rất đáng để sở hữu.");
         return string.Join(" ", parts);
     }
 

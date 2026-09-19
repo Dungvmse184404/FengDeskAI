@@ -121,7 +121,7 @@ public class WorkspaceProfilesController : ApiControllerBase
     /// <summary>Từ vựng màu/vật liệu/hình khối hợp lệ — cho FE dựng tag picker "hiện trạng phòng hiện tại".</summary>
     [HttpGet("element-inputs")]
     public async Task<IActionResult> GetElementInputVocabulary(CancellationToken ct)
-        => ToActionResult(await _service.GetElementInputVocabularyAsync(ct));
+        => ToActionResult(await _service.GetElementInputVocabularyAsync(CurrentUserId, ct));
 
     /// <summary>User gõ tên 1 tag mới (chưa có sẵn) → AI phân loại thành hành + weight, lưu luôn vào vocabulary.</summary>
     [HttpPost("element-inputs/classify")]

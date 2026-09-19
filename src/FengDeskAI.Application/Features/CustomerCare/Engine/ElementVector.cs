@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Enums.Workspace;
+﻿using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 
@@ -12,6 +12,12 @@ public readonly record struct ElementVector(
     decimal Tho, decimal Kim, decimal Thuy, decimal Moc, decimal Hoa)
 {
     public static ElementVector Zero { get; } = new(0m, 0m, 0m, 0m, 0m);
+
+    /// <summary>
+    /// Phân bố đều 0.2 × 5 (Σ=1) — mốc "không nghiêng về hành nào". Hồ sơ nghề trừ đi vector này ra
+    /// <c>δ</c> có Σ=0, cùng hình dạng với gap phòng (ADR occupation-product-fit-v1.md §2).
+    /// </summary>
+    public static ElementVector Uniform { get; } = new(0.2m, 0.2m, 0.2m, 0.2m, 0.2m);
 
     /// <summary>Đọc giá trị theo enum hành.</summary>
     public decimal this[FengShuiElement e] => e switch
@@ -30,6 +36,13 @@ public readonly record struct ElementVector(
     public ElementVector Scale(decimal k)
         => new(Tho * k, Kim * k, Thuy * k, Moc * k, Hoa * k);
 
+    /// <summary>
+    /// Chia từng thành phần cho <paramref name="k"/>. Chia thẳng chứ KHÔNG nhân <c>1/k</c>: với decimal,
+    /// <c>1/0.3</c> đã làm tròn một lần rồi nhân là làm tròn lần hai, lệch so với chia trực tiếp.
+    /// </summary>
+    public ElementVector Divide(decimal k)
+        => new(Tho / k, Kim / k, Thuy / k, Moc / k, Hoa / k);
+
     /// <summary>Hiệu 2 vector — dùng tính Gap. KHÔNG chuẩn hóa lại.</summary>
     public ElementVector Subtract(ElementVector o)
         => new(Tho - o.Tho, Kim - o.Kim, Thuy - o.Thuy, Moc - o.Moc, Hoa - o.Hoa);
@@ -42,6 +55,41 @@ public readonly record struct ElementVector(
         decimal sum = t + k + w + m + h;
         if (sum == 0m) return Zero;
         return new(t / sum, k / sum, w / sum, m / sum, h / sum);
+    }
+
+    /// <summary>
+    /// Nâng từng trục lên luỹ thừa <paramref name="alpha"/> — <b>nén tương phản</b> theo định luật
+    /// luỹ thừa Stevens (dạng hiện đại của Weber–Fechner).
+    ///
+    /// <para>
+    /// Cảm nhận "phòng này nhiều hành X tới đâu" tăng theo <c>khốiLượng^α</c> chứ không tuyến tính:
+    /// thêm 2 cây vào phòng đã có 10 cây là chuyện lớn, thêm 2 cây vào phòng đã có 100 cây thì gần
+    /// như không ai nhận ra. Với <c>α &lt; 1</c>, mức dịch tương đối bằng <c>α · Δm/m</c> — tỉ lệ với
+    /// thay đổi TƯƠNG ĐỐI, đúng trực giác đó.
+    /// </para>
+    ///
+    /// <para>
+    /// <c>α = 1</c> <b>thoát sớm, trả về chính vector này</b> — không đi qua <see cref="Math.Pow"/>,
+    /// nên kill-switch cho kết quả byte-identical chứ không phải "gần đúng tới chữ số thứ n".
+    /// </para>
+    ///
+    /// <para>
+    /// ⚠️ <c>decimal</c> không có luỹ thừa phân số nên phải mượn <c>double</c>. Để engine giữ tính tái
+    /// lập, kết quả <b>lượng tử hoá về 9 chữ số thập phân</b>: sai khác 1 ulp của <c>Math.Pow</c> giữa
+    /// các nền tảng (~1e-16 tương đối) bị nuốt hoàn toàn, mà độ phân giải vẫn xa hơn mức 3 chữ số API trả.
+    /// </para>
+    ///
+    /// <para>Trục ≤ 0 trả 0: IEEE cho <c>0^0 = 1</c>, sẽ biến một hành KHÔNG có mặt thành có mặt.</para>
+    /// </summary>
+    public ElementVector Pow(decimal alpha)
+    {
+        if (alpha == 1m) return this;
+
+        static decimal Axis(decimal value, decimal a)
+            => value <= 0m ? 0m : Math.Round((decimal)Math.Pow((double)value, (double)a), 9);
+
+        return new(Axis(Tho, alpha), Axis(Kim, alpha), Axis(Thuy, alpha),
+                   Axis(Moc, alpha), Axis(Hoa, alpha));
     }
 
     /// <summary>Tích vô hướng Σ_e a[e]·b[e].</summary>

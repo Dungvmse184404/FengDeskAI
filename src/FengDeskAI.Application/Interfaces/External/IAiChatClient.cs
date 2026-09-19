@@ -33,8 +33,20 @@ public sealed record AiChatCompletion(string Content, string Model, IReadOnlyLis
 /// 1 lần rồi gộp lại, KHÔNG đổi contract phía trên (vẫn trả về 1 <see cref="AiChatCompletion"/> đầy
 /// đủ). Mục đích duy nhất: giữ traffic chảy liên tục qua proxy/tunnel (vd ngrok free) có ngắt kết nối
 /// khi im lặng quá lâu — câu trả lời càng dài (ảnh, tool nhiều bước...) càng dễ dính nếu stream=false.</param>
+/// <param name="MaxOutputTokens">
+/// Trần số token model được sinh (Ollama <c>num_predict</c> / OpenAI <c>max_tokens</c>).
+/// null = không giới hạn (mặc định của Ollama) — RẤT nguy hiểm khi bật think: model có thể suy luận
+/// hàng nghìn token trước khi trả JSON. Với tác vụ trích xuất schema cố định, đặt trần là cách
+/// rẻ nhất để chặn trường hợp xấu nhất.
+/// </param>
+/// <param name="NumCtx">
+/// Ghi đè cửa sổ ngữ cảnh cho riêng lượt gọi này (Ollama <c>num_ctx</c>). null = theo cấu hình provider.
+/// Request chỉ có chữ không cần ctx lớn như request có ảnh — ctx nhỏ hơn thì prefill nhanh hơn và
+/// KV cache chiếm ít VRAM hơn.
+/// </param>
 public sealed record AiCompletionOptions(
-    double? Temperature = null, bool JsonMode = false, bool? Think = null, bool Stream = false);
+    double? Temperature = null, bool JsonMode = false, bool? Think = null, bool Stream = false,
+    int? MaxOutputTokens = null, int? NumCtx = null);
 
 /// <summary>Loại delta khi stream: chuỗi suy luận (thinking) hay nội dung đáp án (content).</summary>
 public enum AiStreamKind { Thinking, Content }

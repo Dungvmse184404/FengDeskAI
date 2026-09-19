@@ -1,0 +1,58 @@
+name: Test
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  # Cho deploy.yml gọi lại workflow này làm cổng chặn, khỏi phải chép đôi cấu hình.
+  workflow_call:
+
+env:
+  # Thông tin của container Postgres dùng-một-lần trong CI: sinh ra rồi hủy cùng job, không truy cập
+  # được từ ngoài runner. KHÔNG phải secret — để ở đây (một chỗ duy nhất) thay vì rải trong workflow.
+  # Mọi connection string thật đều đi qua secrets/biến môi trường, không bao giờ nằm trong repo.
+  POSTGRES_USER: postgres
+  POSTGRES_PASSWORD: postgres
+  POSTGRES_DB: fengdeskai_test
+
+jobs:
+  test:
+    name: Build & test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ${{ env.POSTGRES_USER }}
+          POSTGRES_PASSWORD: ${{ env.POSTGRES_PASSWORD }}
+          POSTGRES_DB: ${{ env.POSTGRES_DB }}
+        ports:
+          - 5432:5432
+        # Job chờ Postgres sẵn sàng rồi mới chạy step đầu tiên.
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore
+        run: dotnet restore FengDeskAI.slnx
+
+      - name: Build
+        run: dotnet build FengDeskAI.slnx --no-restore --configuration Release
+
+      - name: Test
+        env:
+          # ApiTestFactory chỉ đọc connection string từ biến này — không có giá trị mặc định trong
+          # code. Thiếu biến thì TestDatabaseGuard chặn ngay, không âm thầm chạy vào DB nào khác.
+          ConnectionStrings__DefaultConnection: >-
+            Host=localhost;Port=5432;Database=${{ env.POSTGRES_DB }};Username=${{ env.POSTGRES_USER }};Password=${{ env.POSTGRES_PASSWORD }}
+        run: dotnet test FengDeskAI.slnx --no-build --configuration Release --logger "console;verbosity=normal"

@@ -63,8 +63,11 @@ public class CatalogMappingProfile : Profile
                 s.Elements.Where(e => e.IsPrimary).Select(e => e.Element.ToString()).FirstOrDefault()))
             .ForMember(d => d.SecondaryElements, o => o.MapFrom(s =>
                 s.Elements.Where(e => !e.IsPrimary).Select(e => e.Element.ToString()).ToList()))
-            .ForMember(d => d.SizeClass, o => o.MapFrom(s => s.SizeClass != null ? s.SizeClass.ToString() : null))
+            .ForMember(d => d.Placement, o => o.MapFrom(s => s.Placement.ToString()))
             .ForMember(d => d.Vibes, o => o.MapFrom(s => s.Vibes.Select(v => v.VibeCode).ToList()))
+            // Chỉ thẻ ĐÃ DUYỆT mới lộ ra API công khai — thẻ vendor mới đề xuất không được hiển thị như đã xác nhận.
+            .ForMember(d => d.Aspirations, o => o.MapFrom(s =>
+                s.Aspirations.Where(a => a.IsApproved).Select(a => a.Aspiration.ToString()).ToList()))
             .ForMember(d => d.Styles, o => o.MapFrom(s => s.Styles.Select(st => st.StyleCode).ToList()));
 
         // Product list card

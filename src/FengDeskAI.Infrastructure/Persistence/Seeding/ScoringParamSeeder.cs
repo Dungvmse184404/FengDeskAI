@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Recommendation;
+﻿using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -6,8 +6,17 @@ using Microsoft.Extensions.Logging;
 namespace FengDeskAI.Infrastructure.Persistence.Seeding;
 
 /// <summary>
-/// Seed 9 tham số engine chấm điểm v3 (PHẦN F). Data đọc từ <c>seed-data/scoring-params.json</c>.
+/// Seed tham số engine chấm điểm v3 (PHẦN F). Data đọc từ <c>seed-data/scoring-params.json</c>.
 /// Idempotent theo code. LƯU Ý: các cặp *Share cần giữ tổng = 1.0 — chỉ chỉnh scale khi hiểu rõ engine.
+///
+/// <para>
+/// <b>⚠️ Cố ý CHỈ CHÈN, không đồng bộ giá trị row đã có.</b> Bảng này là tham số engine mà người vận hành chỉnh runtime qua
+/// <c>PUT /api/admin/scoring/params/{code}</c> — seeder ghi đè mỗi lần khởi động sẽ xoá sạch hiệu
+/// chỉnh của họ, gồm cả kill-switch <c>PERSONAL_WEIGHT_*</c> và <c>VIBE_FILTER_HARD</c>.
+/// Muốn đổi giá trị nền của row đã tồn tại thì đi bằng <b>data migration</b> có mệnh đề <c>WHERE</c>
+/// canh đúng giá trị cũ — xem <c>ScoringPenaltiesV32</c>. Như vậy thay đổi nằm trong lịch sử
+/// migration: review được, rollback được, và không âm thầm đổi hành vi chấm điểm mỗi lần deploy.
+/// </para>
 /// </summary>
 public class ScoringParamSeeder : IDataSeeder
 {
@@ -21,6 +30,9 @@ public class ScoringParamSeeder : IDataSeeder
         _loader = loader;
         _logger = logger;
     }
+
+    /// <summary>Khớp <c>ScoringParamConfiguration</c> (<c>HasMaxLength(200)</c>).</summary>
+    private const int DescriptionMaxLength = 200;
 
     public int Order => 2;
     public string Name => "Scoring params (engine v3)";
@@ -43,11 +55,22 @@ public class ScoringParamSeeder : IDataSeeder
         foreach (var row in file.Rows)
         {
             if (existing.Contains(row.Code)) continue;
+
+            // Cột description là varchar(200): mô tả dài hơn làm SaveChanges nổ và kéo cả app không lên
+            // (đã xảy ra 2026-09-19 với DB trống). Cắt + cảnh báo thay vì chết — mô tả chỉ để đọc.
+            var description = row.Description ?? "";
+            if (description.Length > DescriptionMaxLength)
+            {
+                _logger.LogWarning("scoring-params.json: mô tả của {Code} dài {Length} > {Max} ký tự — cắt bớt.",
+                    row.Code, description.Length, DescriptionMaxLength);
+                description = description[..DescriptionMaxLength];
+            }
+
             await set.AddAsync(new ScoringParam
             {
                 Code = row.Code,
                 Value = row.Value * scale,
-                Description = row.Description,
+                Description = description,
             }, ct);
             added++;
         }

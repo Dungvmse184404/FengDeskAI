@@ -17,7 +17,13 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.Property(p => p.Name).HasColumnName("name").HasMaxLength(255).IsRequired();
         builder.Property(p => p.Description).HasColumnName("description");
         builder.Property(p => p.IsActive).HasColumnName("is_active").HasDefaultValue(true);
-        builder.Property(p => p.SizeClass).HasColumnName("size_class").HasConversion<string>().HasMaxLength(10);
+        // NOT NULL + default 'Desk': Postgres tự backfill catalog cũ, engine khỏi mang nhánh IS NULL.
+        builder.Property(p => p.Placement)
+            .HasColumnName("placement")
+            .HasConversion<string>()
+            .HasMaxLength(20)
+            .HasDefaultValue(Domain.Enums.Catalog.ProductPlacement.Desk)
+            .IsRequired();
 
         // Cache vector ngũ hành (engine v3).
         builder.Property(p => p.ElementTho).HasColumnName("element_tho").HasColumnType("numeric(4,3)");
@@ -63,6 +69,11 @@ public class ProductConfiguration : IEntityTypeConfiguration<Product>
         builder.HasMany(p => p.Vibes)
             .WithOne(v => v.Product)
             .HasForeignKey(v => v.ProductId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(p => p.Aspirations)
+            .WithOne(a => a.Product)
+            .HasForeignKey(a => a.ProductId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasMany(p => p.Styles)

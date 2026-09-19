@@ -1,4 +1,4 @@
-using FengDeskAI.Domain.Entities.Recommendation;
+﻿using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
@@ -15,6 +15,26 @@ public interface IScoringConfigRepository
     Task<List<WorkPurposeElementModifier>> GetWorkPurposeModifiersAsync(WorkPurpose purpose, CancellationToken ct = default);
     Task<List<WorkspaceProfileInput>> GetWorkspaceProfileInputsAsync(Guid workspaceProfileId, CancellationToken ct = default);
     Task<List<ProductElementInput>> GetProductElementInputsAsync(IReadOnlyCollection<Guid> productIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Như trên nhưng đã nhóm theo <c>ProductId</c> — dạng mà
+    /// <c>PlacedProductVectorBuilder.Build</c> nhận. Đặt ở repo để phần nhóm không bị chép ở mỗi
+    /// service gọi tới: đó đúng là kiểu trùng lặp đã làm radar và bộ gợi ý trôi khỏi nhau (§19).
+    /// </summary>
+    Task<Dictionary<Guid, IReadOnlyCollection<ProductElementInput>>> GetProductElementInputsByProductAsync(
+        IReadOnlyCollection<Guid> productIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// Hồ sơ ngũ hành Σ=1 của một nghề (N3). Rỗng khi nghề chưa có hồ sơ — engine coi như không có
+    /// nghề nghiệp, đúng ý: thiếu dữ liệu thì đừng đoán.
+    /// </summary>
+    Task<List<OccupationElementProfile>> GetOccupationProfileAsync(Guid occupationId, CancellationToken ct = default);
+
+    /// <summary>Danh sách nghề đang bật, kèm hồ sơ — cho màn hình chọn nghề và màn quản trị.</summary>
+    Task<List<Occupation>> GetOccupationsAsync(bool includeInactive = false, CancellationToken ct = default);
+
+    /// <summary>Một nghề theo mã bất biến, kèm hồ sơ. <c>null</c> khi không có.</summary>
+    Task<Occupation?> GetOccupationByCodeAsync(string code, CancellationToken ct = default);
 
     /// <summary>Thay toàn bộ input (màu/vật liệu/hình khối) của 1 sản phẩm. Chưa commit — caller lưu qua UoW.</summary>
     Task ReplaceProductElementInputsAsync(Guid productId, IEnumerable<ProductElementInput> inputs, CancellationToken ct = default);

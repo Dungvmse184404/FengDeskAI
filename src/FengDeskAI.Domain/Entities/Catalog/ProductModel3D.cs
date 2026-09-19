@@ -35,7 +35,7 @@ public class ProductModel3D : BaseEntity
     public string? ErrorMessage { get; set; }
 
     /// <summary>
-    /// Toggle hiển thị của garden owner/garden staff — ĐỘC LẬP với <see cref="Status"/>. Tắt → FE ẩn
+    /// Toggle hiển thị của garden owner/garden staff — ĐỘC LẬP với <see cref="Status"/>. Tắt -> FE ẩn
     /// hẳn phần 3D trên trang sản phẩm (chỉ còn ảnh 2D), không xóa dữ liệu model đã sinh.
     /// </summary>
     public bool IsEnabled { get; set; } = true;
