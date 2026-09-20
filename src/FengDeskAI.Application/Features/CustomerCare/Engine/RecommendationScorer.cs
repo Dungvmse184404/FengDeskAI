@@ -192,15 +192,15 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 }
 
                 userPenaltyReason = scaled
-                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant}. Mức cân nhắc theo "
+                    ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)}. Mức cân nhắc theo "
                         + $"trọng số cá nhân của không gian: {ctx.Params.UserConflictPenalty:0.00} × "
                         + $"{ctx.PersonalWeight:0.00} = {userPenalty:0.00}."
-                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} - trục cá nhân đang tắt "
+                    : $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - trục cá nhân đang tắt "
                         + $"nên cân nhắc ở mức đầy đủ {userPenalty:0.00}.";
 
                 cautions.Add(scaled
-                    ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - chưa hợp với bạn ({userPenalty:0.00})."
-                    : $"Hành {productDominant} khắc bản mệnh {personalDominant} - nên cân nhắc"
+                    ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - chưa hợp với bạn ({userPenalty:0.00})."
+                    : $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - nên cân nhắc"
                         + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
             }
             else if (policy.Target == ScoringTarget.PersonalNeed
@@ -233,7 +233,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             {
                 // Ở chế độ Scaled, DescribePersonalAffinity (bước 2d) đã nói về quan hệ mệnh ↔ sản phẩm
                 // với nhiều thông tin hơn — thêm dòng này nữa là lặp.
-                facts.Add($"Hành {productDominant} không khắc bản mệnh {personalDominant}.");
+                facts.Add($"Hành {ElementSemantics.ElementName(productDominant)} không khắc bản mệnh {ElementSemantics.ElementName(personalDominant)}.");
             }
         }
 
@@ -516,7 +516,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         var hit = direction.Enumerate()
             .Where(x => x.Value > 0m && productVector[x.Element] > 0m)
             .OrderByDescending(x => x.Value * productVector[x.Element])
-            .Take(2).Select(x => $"{x.Element} ({x.Value:+0.00;-0.00})").ToList();
+            .Take(2).Select(x => $"{ElementSemantics.ElementName(x.Element)} ({x.Value:+0.00;-0.00})").ToList();
 
         if (hit.Count > 0)
             return $"Sản phẩm cấp {string.Join(" và ", hit)} - đúng {wantedLabel}.";
@@ -524,7 +524,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         var miss = direction.Enumerate()
             .Where(x => x.Value < 0m && productVector[x.Element] > 0m)
             .OrderBy(x => x.Value)
-            .Take(2).Select(x => $"{x.Element} ({x.Value:+0.00;-0.00})").ToList();
+            .Take(2).Select(x => $"{ElementSemantics.ElementName(x.Element)} ({x.Value:+0.00;-0.00})").ToList();
 
         return miss.Count > 0
             ? $"Sản phẩm cấp {string.Join(" và ", miss)} - {unwantedLabel}."
@@ -552,17 +552,17 @@ public sealed class RecommendationScorer : IRecommendationScorer
             facts.Add(relation switch
             {
                 FengShuiRelation.TuongHoa =>
-                    $"Hành {productDominant} tỷ hòa với bản mệnh {personalDominant} của bạn.",
+                    $"Hành {ElementSemantics.ElementName(productDominant)} tỷ hòa với bản mệnh {ElementSemantics.ElementName(personalDominant)} của bạn.",
                 FengShuiRelation.TuongSinh =>
-                    $"Hành {productDominant} tương sinh, nuôi dưỡng bản mệnh {personalDominant} của bạn.",
-                _ => $"Hành {productDominant} thuận với bản mệnh {personalDominant} của bạn.",
+                    $"Hành {ElementSemantics.ElementName(productDominant)} tương sinh, nuôi dưỡng bản mệnh {ElementSemantics.ElementName(personalDominant)} của bạn.",
+                _ => $"Hành {ElementSemantics.ElementName(productDominant)} thuận với bản mệnh {ElementSemantics.ElementName(personalDominant)} của bạn.",
             });
         }
         else if (personalScore < -0.05m)
         {
             cautions.Add(relation == FengShuiRelation.BiKhac
-                ? $"Hành {productDominant} khắc bản mệnh {personalDominant} - chưa hợp với bạn."
-                : $"Hành {productDominant} làm hao khí bản mệnh {personalDominant} - hợp ở mức vừa phải.");
+                ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - chưa hợp với bạn."
+                : $"Hành {ElementSemantics.ElementName(productDominant)} làm hao khí bản mệnh {ElementSemantics.ElementName(personalDominant)} - hợp ở mức vừa phải.");
         }
     }
 
@@ -604,6 +604,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
             .OrderByDescending(x => x.Value).Take(2).Select(x => x.Element).ToList();
         var topExcess = target.Enumerate().Where(x => x.Value < 0)
             .OrderBy(x => x.Value).Take(2).Select(x => x.Element).ToList();
+        // Câu chữ đi ra user ⇒ tên có dấu (ElementName), không để lộ mã enum "Moc"/"Thuy".
+        string dominantVi = ElementSemantics.ElementName(productDominant);
 
         bool personal = targetKind == ScoringTarget.PersonalNeed;
 
@@ -612,12 +614,12 @@ public sealed class RecommendationScorer : IRecommendationScorer
             var bumped = topNeeded.Where(e => productVector[e] > 0m).ToList();
             if (bumped.Count > 0)
                 facts.Add(personal
-                    ? $"Mang hành {string.Join("/", bumped)} - đúng hành bản mệnh bạn cần được bồi."
-                    : $"Bù năng lượng hành {string.Join("/", bumped)} đang thiếu của phòng.");
+                    ? $"Mang hành {string.Join("/", bumped.Select(ElementSemantics.ElementName))} - đúng hành bản mệnh bạn cần được bồi."
+                    : $"Bù năng lượng hành {string.Join("/", bumped.Select(ElementSemantics.ElementName))} đang thiếu của phòng.");
             else
                 facts.Add(personal
-                    ? $"Hành trội {productDominant} hài hòa với bản mệnh của bạn."
-                    : $"Hành trội {productDominant} hài hòa với nhu cầu của phòng.");
+                    ? $"Hành trội {dominantVi} hài hòa với bản mệnh của bạn."
+                    : $"Hành trội {dominantVi} hài hòa với nhu cầu của phòng.");
         }
         else
         {
@@ -625,7 +627,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             // với gap phòng; giữ lời văn riêng phòng khi không có hành thừa nào khớp.
             var worsened = topExcess.Where(e => productVector[e] > 0m).ToList();
             if (worsened.Count > 0)
-                cautions.Add($"Bơm thêm hành {string.Join("/", worsened)} vốn đã thừa trong phòng - nên cân nhắc.");
+                cautions.Add($"Bơm thêm hành {string.Join("/", worsened.Select(ElementSemantics.ElementName))} vốn đã thừa trong phòng - nên cân nhắc.");
             else
                 cautions.Add(personal
                     ? "Hành của vật phẩm chưa khớp hành bản mệnh bạn đang cần."

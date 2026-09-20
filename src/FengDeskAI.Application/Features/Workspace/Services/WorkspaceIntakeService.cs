@@ -27,8 +27,10 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     private const int MaxDeskAreaCm2 = 100_000;
     private const int MaxImages = 3;
     private static readonly TimeSpan VocabularyCacheTtl = TimeSpan.FromMinutes(10);
-    // Kết quả job giữ đủ lâu để client F5/kết nối lại vẫn lấy được, nhưng không phình bộ nhớ.
-    private static readonly TimeSpan JobResultTtl = TimeSpan.FromMinutes(10);
+    // Kết quả job giữ đủ lâu để client quay lại lấy được (user đóng modal, đi chỗ khác, "một lúc sau"
+    // mở lại intake vẫn thấy AI đã điền — FE ghi nhớ operationId trong nháp), nhưng không phình bộ nhớ:
+    // mỗi entry chỉ là một draft nhỏ. 30' là ngưỡng FE cũng coi nháp intake là còn sống.
+    private static readonly TimeSpan JobResultTtl = TimeSpan.FromMinutes(30);
 
     private static readonly JsonSerializerOptions RawJsonOptions = new()
     {

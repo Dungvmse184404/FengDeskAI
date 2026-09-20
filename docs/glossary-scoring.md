@@ -270,7 +270,7 @@ không phòng — `ElementDirection.ForPersonalNeed`.
 | 3 | `P_user` (khắc mệnh) | `ScoreOne` — `UserConflictPenalty` khi hành trội khắc, `MinorClashPenalty × clashShare` khi phần phụ khắc | `USER_CONFLICT_PENALTY`, `MINOR_CLASH_PENALTY` | `breakdown.penalties[]` (`applied=false` vẫn trả) | `ScoreWaterfall` dòng trừ; `ClashBadge` cạnh `ScoreBadge`; `ConflictResolutionBanner` |
 | 4 | `P_dir` (hướng đặt) | `ScoreOne`, theo `PlacementPolicy.DirectionMode` | `DIRECTION_PENALTY` | `breakdown.penalties[]` | `ScoreWaterfall` |
 | 5 | `P_vibe` (lệch cảm hứng) | `ScoreOne` | `VIBE_MISMATCH_PENALTY`, `VIBE_UNKNOWN_PENALTY`, `VIBE_FILTER_HARD` | `breakdown.penalties[]` | `ScoreWaterfall` |
-| 6 | `d` = `combinedDirection`, `priorityVector = normalize(max(d,0))` | `ElementDirection.ForWorkspaceGap` / `WithOccupation` | `Wp`, `Wo` | `breakdown.vectors.combinedDirection`, `.priorityVector` | `ProductFitPanel` "hệ thống đang ưu tiên bù hành nào"; `PersonalWeightControls` kéo `Wp` mô phỏng lại **ở FE** bằng `lib/breakdown.ts::combinedDirection` (cùng công thức, không gọi API) |
+| 6 | `d` = `combinedDirection`, `priorityVector = normalize(max(d,0))` | `ElementDirection.ForWorkspaceGap` / `WithOccupation` | `Wp`, `Wo` | `breakdown.vectors.combinedDirection`, `.priorityVector` | `ProductFitPanel` "hệ thống đang ưu tiên bù hành nào" (tooltip trục đỏ); `RoomNeedCard` ghi tĩnh "cân theo X% phòng · Y% bản mệnh · Z% nghề". Slider mô phỏng `Wp` ở trang sản phẩm đã bỏ (20/09/2026); `lib/breakdown.ts::combinedDirection` vẫn dùng để tô trục |
 | 7 | `ĝ` = `normalizedGap` | `ElementDirection.ForWorkspaceGap` | — | `breakdown.vectors.normalizedGap` | `ElementBars` biến thể fit — nhãn "Bù tốt"/"Thêm thừa" do `ProductFitPanel` gán theo dấu `gap[e]` và `GAP_THRESHOLD` |
 | 8 | `r` = `ruleScoreVector` | `ScoringContext.RuleScoreOf` → `FengShuiRuleSeeder` (25 luật) | admin sửa `feng_shui_rules` | `breakdown.vectors.ruleScore` | `PersonalFitPanel` / `ProductFitPanel` thanh có dấu "hợp/khắc mệnh" |
 | 9 | `ô` = `occupationDirection` (đã chặn) / `occupationRawDirection` | `OccupationAxis.Build` | `OCCUPATION_WEIGHT` + bảng `occupation_element_profiles` | `breakdown.vectors.occupationDirection`, `breakdown.occupation{code,nameVi,weight}` | `OccupationDirectionPanel` (thanh có dấu, nhãn đỏ "khắc mệnh" khi bị chặn) |
@@ -387,7 +387,8 @@ Phép thử nhanh khi nghi "đi ngược": mở `ScoreWaterfall` — nếu dòng
 
 | Gì | File (`FengDeskAI_FE/src/features/recommendation/…`) |
 |---|---|
-| bản sao `d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô` cho slider `Wp` (không gọi API) — **đổi cách trộn ở BE thì đổi cả đây** | `lib/breakdown.ts` (`combinedDirection`, `simulateScore`) |
+| bản sao `d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô` để tô trục radar (không gọi API) — **đổi cách trộn ở BE thì đổi cả đây** | `lib/breakdown.ts` (`combinedDirection`, `simulateScore`) |
+| tên hành **có dấu** trong mọi `reasonVi`/`matchFacts`/`cautionFacts`/`destinyLabelVi` — engine phải đi qua `ElementSemantics.ElementName`, không nội suy enum thô (`"Moc"`) | `Engine/ElementSemantics.cs`; FE: `constants.ts::elementVi` |
 | `displayPercent`, ngưỡng "Bù tốt/Thêm thừa" (`GAP_THRESHOLD`), 5 tông màu | `components/element-vector/constants.ts` |
 | mức "Rất hợp / Phù hợp / Trung tính / Cân nhắc" | `components/element-vector/ScoreBadge.tsx` (`tierFor`) |
 | radar (lý tưởng / hiện tại / xem trước / phần của bạn / ưu tiên của bạn) | `components/element-vector/ElementRadarChart.tsx` |

@@ -35,7 +35,7 @@ Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / 
 | Method | Path | Quyền | Mô tả |
 |--------|------|-------|-------|
 | POST | `/api/workspace/parse-description` | **CustomerOnly** | Bắt đầu job parse — trả `operationId` **ngay**, không chờ LLM |
-| GET | `/api/workspace/parse-description/{operationId}` | **CustomerOnly** | Poll kết quả job (fallback khi lỡ mất event realtime; hết hạn → `404`) |
+| GET | `/api/workspace/parse-description/{operationId}` | **CustomerOnly** | Poll kết quả job (fallback khi lỡ mất event realtime). Job giữ **30'** kể từ lúc bắt đầu/kết thúc (`JobResultTtl`) để FE nối lại sau khi user đóng modal / đổi trang / F5 — FE lưu `operationId` trong nháp `localStorage`; hết hạn → `404` |
 | GET | `/api/workspace/speech-config` | **CustomerOnly** | Cấu hình STT (tắt → FE fallback Web Speech) |
 | POST | `/api/workspace/transcriptions` | **CustomerOnly** | Ghi âm → text (multipart, field `file`) |
 | POST | `/api/workspace/images` | Authenticated | Upload ảnh phòng để đính kèm vào intake |

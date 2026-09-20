@@ -1,4 +1,4 @@
-﻿# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
+# ADR — Giải thích điểm số (Score Explainability), Chuẩn hoá thang điểm & Yếu tố nghề nghiệp
 
 > **Trạng thái:** **ACCEPTED** rev.5 — 13/13 quyết định đã chốt 08/09/2026 (bảng ở PHẦN E)
 > **Đã xong:** 12 doc liên quan + bộ test `RecommendationScorerTests.cs`. **Chưa xong:** code engine (P1).
