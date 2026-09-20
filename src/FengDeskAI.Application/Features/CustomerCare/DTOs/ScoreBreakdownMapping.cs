@@ -97,12 +97,12 @@ public static class ScoreBreakdownMapping
     {
         const decimal visible = 0.005m;
         var up = direction.Enumerate().Where(x => x.Value >= visible)
-            .OrderByDescending(x => x.Value).Select(x => x.Element.ToString()).ToList();
+            .OrderByDescending(x => x.Value).Select(x => ElementSemantics.ElementName(x.Element)).ToList();
         var down = direction.Enumerate().Where(x => x.Value <= -visible)
-            .OrderBy(x => x.Value).Select(x => x.Element.ToString()).ToList();
+            .OrderBy(x => x.Value).Select(x => ElementSemantics.ElementName(x.Element)).ToList();
         var blocked = rawDirection.Enumerate()
             .Where(x => x.Value >= visible && direction[x.Element] < visible)
-            .Select(x => x.Element.ToString()).ToList();
+            .Select(x => ElementSemantics.ElementName(x.Element)).ToList();
 
         var parts = new List<string>();
         if (up.Count > 0) parts.Add($"cần {string.Join(", ", up)}");
@@ -113,7 +113,7 @@ public static class ScoreBreakdownMapping
             : $"Nghề {occupationNameVi} không nghiêng về hành nào sau khi chặn.";
 
         if (blocked.Count > 0 && destiny is { } mine)
-            head += $" Nghề còn cần {string.Join(", ", blocked)} nhưng hành đó khắc bản mệnh {mine} nên không được cộng"
+            head += $" Nghề còn cần {string.Join(", ", blocked)} nhưng hành đó khắc bản mệnh {ElementSemantics.ElementName(mine)} nên không được cộng"
                   + " - nghề đổi mức ưa thích, không đổi bản mệnh.";
 
         return head;
@@ -178,9 +178,9 @@ public static class ScoreBreakdownMapping
     public static string? DestinyLabel(FengShuiElement? destiny, DateTime? dateOfBirth)
     {
         if (destiny is not { } element) return null;
-        if (dateOfBirth is not { } dob) return element.ToString();
+        if (dateOfBirth is not { } dob) return ElementSemantics.ElementName(element);
 
         int lunarYear = FengShuiCalculator.GetLunarYear(dob);
-        return $"{element} - {FengShuiCalculator.GetNapAmName(lunarYear)} ({lunarYear})";
+        return $"{ElementSemantics.ElementName(element)} - {FengShuiCalculator.GetNapAmName(lunarYear)} ({lunarYear})";
     }
 }
