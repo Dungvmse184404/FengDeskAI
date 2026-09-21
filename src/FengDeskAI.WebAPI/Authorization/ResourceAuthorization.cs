@@ -44,7 +44,7 @@ public sealed class ResourceAccessHandler : AuthorizationHandler<ResourceAccessR
             ResourceOperation.AssignDelivery =>
                 await CanAssignDeliveryAsync(resource.Id, userId),
             ResourceOperation.ViewDelivery =>
-                await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: true, allowCustomer: true),
+                await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: false, allowCustomer: true),
             ResourceOperation.UpdateDelivery =>
                 await CanAccessDeliveryAsync(resource.Id, userId, requireAssignment: true, allowCustomer: false),
             _ => false,

@@ -236,7 +236,10 @@ public class OrderService : IOrderService
         if (!isAdmin && !isOwner && !isStoreStaff)
             return ServiceResult<PagedResult<StoreDeliveryResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
-        var staffScope = !isAdmin && !isOwner ? userId : (Guid?)null;
+        // Accepted staff được xem toàn bộ đơn giao của cửa hàng để nắm hàng đợi công việc.
+        // Việc cập nhật trạng thái vẫn chỉ dành cho staff được gán delivery (kiểm tra ở
+        // UpdateDeliveryStatusAsync và ResourceOperation.UpdateDelivery).
+        Guid? staffScope = null;
         var (deliveries, total) = await _uow.Orders.GetDeliveriesForStoreAsync(
             storeId, staffScope, page.Skip, page.PageSize, ct);
         var items = _mapper.Map<List<StoreDeliveryResponse>>(deliveries);
@@ -657,9 +660,8 @@ public class OrderService : IOrderService
         if (delivery is null)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
         var isOwner = await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct);
-        var isAssignedStaff = delivery.AssignedStaffId == userId
-            && await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
-        if (!isAdmin && delivery.Order.CustomerId != userId && !isOwner && !isAssignedStaff)
+        var isStoreStaff = await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
+        if (!isAdmin && delivery.Order.CustomerId != userId && !isOwner && !isStoreStaff)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
         var order = delivery.Order;

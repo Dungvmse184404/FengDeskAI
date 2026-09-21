@@ -29,6 +29,6 @@ public interface IOrderService
     /// <summary>[DEV] Tạo delivery (gom theo store, Pending) cho order chưa có delivery nào — không lọc chủ sở hữu, không gọi nhà vận chuyển. Trả số delivery vừa tạo.</summary>
     Task<IServiceResult<int>> EnsureDeliveriesAsync(Guid orderId, CancellationToken ct = default);
 
-    /// <summary>Garden owner/staff: chi tiết một đơn giao (sản phẩm + địa chỉ nhận) để đóng gói. Yêu cầu CanManageAsync(store) hoặc admin.</summary>
+    /// <summary>Garden owner/accepted staff: xem chi tiết một đơn giao của cửa hàng (sản phẩm + địa chỉ nhận). Quyền cập nhật vẫn yêu cầu staff được phân công.</summary>
     Task<IServiceResult<DeliveryOrderDetailResponse>> GetDeliveryDetailAsync(Guid deliveryId, Guid userId, bool isAdmin, CancellationToken ct = default);
 }

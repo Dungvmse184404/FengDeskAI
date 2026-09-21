@@ -103,6 +103,39 @@ public sealed class AuthorizationTests
         Assert.Equal(isAssigned, context.HasSucceeded);
     }
 
+    [Fact]
+    public async Task GardenStaff_CanViewUnassignedDeliveryOfAcceptedStore()
+    {
+        var userId = Guid.NewGuid();
+        var storeId = Guid.NewGuid();
+        var deliveryId = Guid.NewGuid();
+        var uow = new Mock<IUnitOfWork>();
+        var orders = new Mock<IOrderRepository>();
+        var stores = new Mock<IStoreRepository>();
+        uow.SetupGet(x => x.Orders).Returns(orders.Object);
+        uow.SetupGet(x => x.Stores).Returns(stores.Object);
+        orders.Setup(x => x.GetDeliveryWithOrderAsync(deliveryId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new Delivery
+            {
+                Id = deliveryId,
+                GardenStoreId = storeId,
+                AssignedStaffId = Guid.NewGuid(),
+                Order = new Order { CustomerId = Guid.NewGuid() },
+            });
+        stores.Setup(x => x.IsOwnerAsync(storeId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(false);
+        stores.Setup(x => x.IsAcceptedStaffAsync(storeId, userId, It.IsAny<CancellationToken>()))
+            .ReturnsAsync(true);
+
+        var context = new AuthorizationHandlerContext(
+            new[] { new ResourceAccessRequirement(ResourceOperation.ViewDelivery) },
+            Principal(userId),
+            new ResourceReference(deliveryId));
+        await new ResourceAccessHandler(uow.Object).HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
+    }
+
     private static ClaimsPrincipal Principal(Guid userId)
         => new(new ClaimsIdentity(new[]
         {
