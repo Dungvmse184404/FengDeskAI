@@ -71,7 +71,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivering")]
     public async Task<IActionResult> SimulateDelivering(Guid deliveryId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Shipped, ct));
     }
 
