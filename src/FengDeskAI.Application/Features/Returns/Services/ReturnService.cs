@@ -244,33 +244,6 @@ public class ReturnService : IReturnService
         return await LoadDetailAsync(id, ct);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(
-        Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(request.TrackingCode))
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ReturnTrackingRequired);
-        if (request.TrackingCode.Trim().Length > 100)
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ReturnTrackingRequired);
-
-        var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
-        if (rr is null || rr.CustomerId != userId)
-            return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
-        if (rr.Status != ReturnRequestStatus.ReturnInTransit)
-            return InvalidTransition(rr.Status, ReturnRequestStatus.ReturnInTransit);
-
-        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
-        {
-            rr.SubmitReturnShipment(request.TrackingCode);
-            LogTransition(rr, rr.Status, $"Khách đã gửi hàng trả, mã vận đơn: {rr.ReturnTrackingCode}", userId);
-            await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnRequested,
-                "Khách đã gửi hàng trả", "Khách hàng đã khai báo mã vận đơn trả hàng. Vui lòng theo dõi và xác nhận khi nhận được hàng.",
-                rr.Id, ct);
-            return null;
-        }, ct);
-
-        return await LoadDetailAsync(id, ct);
-    }
-
     public async Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
     {
         if (files is null || files.Count == 0)
@@ -363,15 +336,12 @@ public class ReturnService : IReturnService
         if (error is not null) return error;
         if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.ItemReceived, rr.Reason))
             return InvalidTransition(rr.Status, ReturnRequestStatus.ItemReceived);
-        if (string.IsNullOrWhiteSpace(rr.ReturnTrackingCode))
-            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.ReturnShipmentNotSubmitted);
-
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
             var now = DateTime.UtcNow;
             var from = rr.Status;
             rr.ConfirmItemReceived(now);      // ReturnInTransit → ItemReceived
-            LogTransition(rr, from, "Vendor xác nhận đã nhận hàng trả", actor.UserId);
+            LogTransition(rr, from, "Vendor xác nhận thực tế đã nhận hàng trả (không tích hợp vận chuyển chiều trả)", actor.UserId);
             rr.MoveToReviewing();             // ItemReceived → Reviewing (chuyển cho Staff quyết định)
             LogTransition(rr, ReturnRequestStatus.ItemReceived, "Chuyển sang bước Staff ra quyết định", actor.UserId);
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnReceived, "Đã nhận hàng trả",
@@ -415,12 +385,12 @@ public class ReturnService : IReturnService
             LogTransition(rr, routedFrom,
                 rr.Reason == ReturnReason.PlantHealth
                     ? "Cây chết — bỏ qua thu hồi, chuyển thẳng bước quyết định"
-                    : "Yêu cầu khách gửi hàng trả về để thu hồi", actor.UserId);
+                    : "Chờ cửa hàng xác nhận thực tế đã nhận lại hàng; khách tự thỏa thuận phương thức gửi/trả", actor.UserId);
 
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Yêu cầu đang được xử lý",
                 rr.Reason == ReturnReason.PlantHealth
                     ? "Nền tảng đã tiếp nhận yêu cầu và đang xem xét (không cần gửi trả cây)."
-                    : "Nền tảng đã tiếp nhận. Vui lòng gửi hàng trả về theo hướng dẫn.",
+                    : "Nền tảng đã tiếp nhận. Vui lòng liên hệ cửa hàng để tự thỏa thuận cách gửi hoặc bàn giao hàng trả; hệ thống không yêu cầu mã vận đơn.",
                 rr.Id, ReferenceType.Return, ct);
             await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnRequested,
                 "Có yêu cầu trả hàng mới",

@@ -11,7 +11,7 @@ public static class RefundStateMachine
     public static bool CanTransition(RefundStatus from, RefundStatus to) => from switch
     {
         RefundStatus.Pending =>
-            to is RefundStatus.Processing or RefundStatus.Cancelled,
+            to is RefundStatus.Processing or RefundStatus.ManagerReview or RefundStatus.Cancelled,
 
         RefundStatus.Processing =>
             to is RefundStatus.Completed or RefundStatus.Failed,
@@ -20,7 +20,7 @@ public static class RefundStateMachine
             to is RefundStatus.Processing or RefundStatus.ManagerReview,
 
         RefundStatus.ManagerReview =>
-            to is RefundStatus.Processing or RefundStatus.Completed,
+            to is RefundStatus.Processing or RefundStatus.Completed or RefundStatus.Cancelled,
 
         _ => false, // Completed / Cancelled là terminal
     };
