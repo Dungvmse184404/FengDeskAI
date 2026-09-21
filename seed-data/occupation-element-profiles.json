@@ -1,0 +1,52 @@
+{
+  "_comment": "Hồ sơ ngũ hành theo nghề (N3, ADR occupation-product-fit-v1.md §2). BẢN NHÁP - FINANCE và CONSTRUCT do người ra đề soạn, 6 nghề còn lại do AI soạn theo cùng văn phong, CHƯA qua chuyên gia phong thủy duyệt. Σ share mỗi nghề = 1.000 (seeder ném nếu lệch > 0.001). Seeder CHỈ chèn cho nghề chưa có dòng nào; sửa sau đi qua PUT /api/admin/scoring/occupations/{code}/profile. Hồ sơ có trong DB KHÔNG tự tác động điểm: OCCUPATION_WEIGHT seed 0, nâng qua API admin sau khi đối chiếu golden set.",
+  "rows": [
+    { "occupation": "FINANCE",   "element": "Kim",  "share": 0.50, "why": "tiền tệ, kim loại quý, số liệu chính xác" },
+    { "occupation": "FINANCE",   "element": "Thuy", "share": 0.30, "why": "luồng tiền, thanh khoản, đầu tư" },
+    { "occupation": "FINANCE",   "element": "Tho",  "share": 0.10, "why": "tài sản cố định, quỹ dự trữ" },
+    { "occupation": "FINANCE",   "element": "Hoa",  "share": 0.05, "why": "giao dịch điện tử, chứng khoán" },
+    { "occupation": "FINANCE",   "element": "Moc",  "share": 0.05, "why": "hợp đồng, giấy tờ" },
+
+    { "occupation": "CONSTRUCT", "element": "Tho",  "share": 0.50, "why": "đất đai, gạch đá, nền móng vững chắc" },
+    { "occupation": "CONSTRUCT", "element": "Moc",  "share": 0.30, "why": "vật liệu gỗ, cây cối, bản vẽ thiết kế" },
+    { "occupation": "CONSTRUCT", "element": "Kim",  "share": 0.10, "why": "máy móc thi công, khung sắt thép" },
+    { "occupation": "CONSTRUCT", "element": "Hoa",  "share": 0.05, "why": "ánh sáng không gian, năng lượng mặt trời" },
+    { "occupation": "CONSTRUCT", "element": "Thuy", "share": 0.05, "why": "cảnh quan nước, sơn thủy" },
+
+    { "occupation": "IT",        "element": "Thuy", "share": 0.40, "why": "trí tuệ, luồng dữ liệu, linh hoạt" },
+    { "occupation": "IT",        "element": "Kim",  "share": 0.30, "why": "logic, máy móc, độ chính xác" },
+    { "occupation": "IT",        "element": "Hoa",  "share": 0.15, "why": "điện, màn hình, năng lượng xử lý" },
+    { "occupation": "IT",        "element": "Moc",  "share": 0.10, "why": "phát triển, tăng trưởng sản phẩm" },
+    { "occupation": "IT",        "element": "Tho",  "share": 0.05, "why": "hạ tầng, nền tảng ổn định" },
+
+    { "occupation": "SALES",     "element": "Hoa",  "share": 0.35, "why": "nhiệt huyết, giao tiếp, thuyết phục" },
+    { "occupation": "SALES",     "element": "Kim",  "share": 0.30, "why": "tiền bạc, quyết đoán, chốt đơn" },
+    { "occupation": "SALES",     "element": "Thuy", "share": 0.20, "why": "lưu thông, quan hệ, mạng lưới" },
+    { "occupation": "SALES",     "element": "Moc",  "share": 0.10, "why": "mở rộng thị trường" },
+    { "occupation": "SALES",     "element": "Tho",  "share": 0.05, "why": "uy tín, nền tảng khách hàng" },
+
+    { "occupation": "EDU",       "element": "Moc",  "share": 0.40, "why": "tri thức, phát triển, nuôi dưỡng" },
+    { "occupation": "EDU",       "element": "Thuy", "share": 0.30, "why": "trí tuệ, nghiên cứu, tư duy" },
+    { "occupation": "EDU",       "element": "Hoa",  "share": 0.15, "why": "truyền đạt, thắp sáng" },
+    { "occupation": "EDU",       "element": "Tho",  "share": 0.10, "why": "nền tảng, kiên nhẫn" },
+    { "occupation": "EDU",       "element": "Kim",  "share": 0.05, "why": "kỷ luật, chuẩn mực" },
+
+    { "occupation": "HEALTH",    "element": "Moc",  "share": 0.35, "why": "sinh khí, hồi phục, sự sống" },
+    { "occupation": "HEALTH",    "element": "Thuy", "share": 0.30, "why": "thanh lọc, dược liệu, dịch thể" },
+    { "occupation": "HEALTH",    "element": "Tho",  "share": 0.20, "why": "nuôi dưỡng, ổn định, chăm sóc" },
+    { "occupation": "HEALTH",    "element": "Kim",  "share": 0.10, "why": "dụng cụ y tế, phẫu thuật" },
+    { "occupation": "HEALTH",    "element": "Hoa",  "share": 0.05, "why": "năng lượng, cấp cứu" },
+
+    { "occupation": "CREATIVE",  "element": "Hoa",  "share": 0.40, "why": "cảm hứng, biểu đạt, ánh sáng" },
+    { "occupation": "CREATIVE",  "element": "Moc",  "share": 0.30, "why": "sáng tạo, sinh sôi ý tưởng" },
+    { "occupation": "CREATIVE",  "element": "Thuy", "share": 0.20, "why": "linh hoạt, cảm xúc, dòng chảy" },
+    { "occupation": "CREATIVE",  "element": "Kim",  "share": 0.05, "why": "kỹ thuật, tinh xảo" },
+    { "occupation": "CREATIVE",  "element": "Tho",  "share": 0.05, "why": "chất liệu, nền tảng" },
+
+    { "occupation": "OTHER",     "element": "Kim",  "share": 0.20, "why": "trung tính - phân bố đều nên trục nghề tự tắt" },
+    { "occupation": "OTHER",     "element": "Moc",  "share": 0.20, "why": "trung tính" },
+    { "occupation": "OTHER",     "element": "Thuy", "share": 0.20, "why": "trung tính" },
+    { "occupation": "OTHER",     "element": "Hoa",  "share": 0.20, "why": "trung tính" },
+    { "occupation": "OTHER",     "element": "Tho",  "share": 0.20, "why": "trung tính" }
+  ]
+}

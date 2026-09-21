@@ -1,4 +1,4 @@
-using AutoMapper;
+﻿using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
@@ -487,7 +487,7 @@ public class ReturnService : IReturnService
                 // Hết hàng thay thế → fallback sang hoàn tiền (không dead-end).
                 var exFrom = rr.Status;
                 rr.FallbackToRefund(); // Exchanging → Refunding
-                LogTransition(rr, exFrom, "Hết hàng thay thế — chuyển sang hoàn tiền", actor.UserId);
+                LogTransition(rr, exFrom, "Hết hàng thay thế - chuyển sang hoàn tiền", actor.UserId);
                 rr.RefundAmount = ReturnWorkflow.ComputeRefundAmount(rr.Items);
                 await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn tiền (hết hàng đổi) ticket #{rr.Id}", ct);
                 await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Chuyển sang hoàn tiền",
@@ -528,6 +528,20 @@ public class ReturnService : IReturnService
             var from = rr.Status;
             rr.Reject(actor.UserId, DateTime.UtcNow, request.Reason);
             LogTransition(rr, from, $"Từ chối: {request.Reason}", actor.UserId);
+
+            // Máy trạng thái cho phép Refunding → Rejected, nên staff có thể từ chối một ticket đã
+            // duyệt hoàn tiền (vd phát hiện gian lận sau khi duyệt). Lệnh hoàn tiền lúc đó vẫn đang
+            // Pending, và lượt quét SLA (ProcessPendingRefundsAsync) chỉ lọc theo Status == Pending —
+            // nó sẽ CHI TIỀN cho một ticket đã bị từ chối. Phải hủy lệnh cùng lúc.
+            //
+            // Chỉ hủy khi còn Pending: lệnh đã Processing/Completed thì tiền đã rời đi, hủy ở đây là
+            // nói dối sổ sách — ca đó phải đi đường hoàn tiền ngược, không thuộc phạm vi từ chối.
+            if (rr.Refund is { Status: RefundStatus.Pending } refund)
+            {
+                refund.Cancel(actor.UserId);
+                LogTransition(rr, from, $"Hủy lệnh hoàn tiền đang chờ do ticket bị từ chối: {request.Reason}", actor.UserId);
+            }
+
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu trả hàng bị từ chối",
                 $"Yêu cầu của bạn đã bị từ chối. Lý do: {request.Reason}", rr.Id, ReferenceType.Return, ct);
             return null;

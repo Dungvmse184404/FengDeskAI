@@ -164,7 +164,7 @@ features/invitations/
 - [ ] Endpoints invite/list/revoke + invitations/mine + accept/reject; validate state machine.
 - [ ] `NotificationType.StaffInvited` (+ accepted/rejected), `ReferenceType.StaffInvitation`; gửi noti khi mời (+ SignalR).
 - [ ] Enrich response staff: name/email/phone + status.
-- [ ] Cập nhật `docs/api-documents/15-stores.md` + `99-appendix-models.md` (enum mới).
+- [ ] Cập nhật [`docs/api-documents/15-stores.md`](../api-documents/15-stores.md) + [`99-appendix-models.md`](../api-documents/99-appendix-models.md) (enum mới).
 
 **Frontend**
 - [ ] `UserSearchCombobox` (debounce, dropdown kiểu GitHub) + `InviteStaffModal`.

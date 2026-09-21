@@ -91,7 +91,7 @@ public sealed class AiTextSanitizer : IAiTextSanitizer
             .Where(t => !string.IsNullOrWhiteSpace(t))
             .Select(t => t.Trim())
             .Distinct(StringComparer.OrdinalIgnoreCase)
-            .OrderByDescending(t => t.Length) // từ dài khớp trước, tránh bị từ ngắn "ăn" mất
+            .OrderByDescending(t => t.Length) // từ dài khớp trước
             .Select(Regex.Escape)
             .ToList();
 

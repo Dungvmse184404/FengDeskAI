@@ -4,7 +4,7 @@
 
 Controller: `Model3DRequestsController` · Route gốc: `/api/model3d-requests` · **Toàn bộ endpoint yêu cầu policy `StaffOrAbove`** (`UserRole.Staff` / `Manager` / `Admin` — nhân sự nền tảng, KHÁC `garden_staff_assignments` của từng store).
 
-Xử lý **thủ công** hàng chờ Regenerate (yêu cầu "tạo lại model 3D" khi sản phẩm đã có model). Request Initial (lần sinh đầu tiên) chạy tự động, không đi qua controller này — xem [02-products.md](./02-products.md#model-3d-sinh-từ-ảnh-qua-meshy-ai--multi-image-1–4-ảnh). Thiết kế đầy đủ: `docs/adr/refactor-model3d-request-flow.md`.
+Xử lý **thủ công** hàng chờ Regenerate (yêu cầu "tạo lại model 3D" khi sản phẩm đã có model). Request Initial (lần sinh đầu tiên) chạy tự động, không đi qua controller này — xem [02-products.md](./02-products.md#model-3d-sinh-từ-ảnh-qua-meshy-ai--multi-image-1–4-ảnh). Thiết kế đầy đủ: [`docs/adr/refactor-model3d-request-flow.md`](../adr/refactor-model3d-request-flow.md).
 
 **Không có bước claim/khóa** — bất kỳ staff nào cũng xem và xử lý được mọi request, `assignedStaffId` chỉ mang tính audit "ai làm gần nhất", không phải quyền độc quyền.
 

@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Interfaces.Repositories;
+﻿using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Enums;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -18,6 +18,9 @@ public class UserRepository : GenericRepository<User>, IUserRepository
 
     public Task<User?> GetByGoogleIdAsync(string googleId, CancellationToken ct = default)
         => _set.FirstOrDefaultAsync(u => u.GoogleId == googleId, ct);
+
+    public Task<User?> GetByIdWithOccupationAsync(Guid id, CancellationToken ct = default)
+        => _set.Include(u => u.Occupation).FirstOrDefaultAsync(u => u.Id == id, ct);
 
     public Task<bool> EmailExistsAsync(string email, CancellationToken ct = default)
         => _set.AnyAsync(u => u.Email == email, ct);

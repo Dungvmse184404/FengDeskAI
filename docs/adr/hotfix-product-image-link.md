@@ -150,4 +150,4 @@ router.push(`/seller/products/${product.id}`);
 - [ ] FE: thêm `addProductImageByUrl` + nối vào form tạo/sửa sản phẩm (đoạn trên).
 - [ ] Build: `dotnet build FengDeskAI.slnx`.
 - [ ] Test 3 bước ở trên (201 + ảnh xuất hiện trong `GET /api/products/{id}`).
-- [ ] Cập nhật `Documents/API_GUIDE.md` (phần Product images) — thêm dòng endpoint mới.
+- [ ] Cập nhật `Documents/API_GUIDE.md` (nay là [`docs/api-documents/02-products.md`](../api-documents/02-products.md), phần Product images) — thêm dòng endpoint mới.

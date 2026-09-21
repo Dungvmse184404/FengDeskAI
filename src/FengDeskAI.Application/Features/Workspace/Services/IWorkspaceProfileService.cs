@@ -18,7 +18,7 @@ public interface IWorkspaceProfileService
     Task<IServiceResult> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default);
 
     /// <summary>Từ vựng màu/vật liệu/hình khối hợp lệ — cho FE dựng tag picker "hiện trạng phòng hiện tại".</summary>
-    Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(CancellationToken ct = default);
+    Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(Guid userId, CancellationToken ct = default);
 
     // ===== Đặt sản phẩm đã mua vào workspace (radar tính lúc đọc, chỉ lưu mapping) =====
 

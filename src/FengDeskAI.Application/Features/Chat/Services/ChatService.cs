@@ -37,6 +37,11 @@ public class ChatService : IChatService
         if (userId == otherUserId)
             return ServiceResult<ChatboxResponse>.Failure(ApiStatusCodes.BadRequest, "Không thể chat với chính mình.");
 
+        // Participant tham chiếu user qua khóa ngoại — id đúng định dạng nhưng không có thật sẽ nổ
+        // ở SaveChanges (DbUpdateException → 500). Chặn trước để trả 404 đúng nghĩa.
+        if (await _uow.Users.GetByIdAsync(otherUserId, ct) is null)
+            return ServiceResult<ChatboxResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Auth.UserNotFound);
+
         var chatbox = await _uow.Chatboxes.GetOrCreateDirectAsync(userId, ChatSenderHelper.TypeFrom(userRole), otherUserId, ct);
         await _uow.SaveChangesAsync(ct);
         return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
@@ -103,12 +108,14 @@ public class ChatService : IChatService
 
     public async Task<IServiceResult<ChatboxResponse>> GetOrStartStoreSupportAsync(Guid userId, string? userRole, Guid storeId, CancellationToken ct = default)
     {
+        // Phòng tham chiếu store qua khóa ngoại — kiểm tra trước khi tạo, nếu không SaveChanges
+        // ném DbUpdateException → 500 thay vì 404.
+        var store = await _uow.Stores.GetByIdAsync(storeId, ct);
+        if (store is null)
+            return ServiceResult<ChatboxResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+
         var chatbox = await _uow.Chatboxes.GetOrCreateStoreSupportRoomAsync(userId, ChatSenderHelper.TypeFrom(userRole), storeId, ct);
-        if (chatbox.Title is null)
-        {
-            var store = await _uow.Stores.GetByIdAsync(storeId, ct);
-            chatbox.Title = store is not null ? store.Name : "Cửa hàng";
-        }
+        chatbox.Title ??= store.Name;
         await _uow.SaveChangesAsync(ct);
         return ServiceResult<ChatboxResponse>.Success(_mapper.Map<ChatboxResponse>(chatbox));
     }

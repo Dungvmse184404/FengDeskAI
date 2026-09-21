@@ -1,4 +1,5 @@
 using FengDeskAI.Domain.Common;
+using FengDeskAI.Domain.Enums.Catalog;
 
 namespace FengDeskAI.Domain.Entities.Catalog;
 
@@ -15,6 +16,8 @@ public class ProductItem : BaseEntity
     public decimal Price { get; set; }
     public int Stock { get; set; }
     public string? Sku { get; set; }
+
+    public SizeClass? SizeClass { get; set; }
 
     // ===== Thông số kiện hàng cho vận chuyển (GHN yêu cầu weight + kích thước) =====
     /// <summary>Cân nặng (gram). Mặc định 500g.</summary>

@@ -101,7 +101,7 @@
 ## G. Cập nhật tài liệu
 
 - **ERD** `Documents/ERD/SEP490_FengDeskAI.drawio` (trang Logical): thêm bảng `garden_store_owners`, bỏ FK `owner_user_id` của `garden_stores`, vẽ lại quan hệ.
-- Cập nhật `README.md` / `CLAUDE.md` phần role nếu cần.
+- Cập nhật [`README.md`](../../README.md) / [`CLAUDE.md`](../../CLAUDE.md) phần role nếu cần.
 
 ## Tổng kết bảng bị tác động
 

@@ -145,4 +145,4 @@ Thêm message cho nhóm `Order` (hoặc `Shipping`):
 | **Sửa** | `WebAPI/Controllers/OrdersController.cs` (thêm `POST .../deliveries/{id}/shipment`) |
 | **Sửa** | `Application/Common/Constants/ApiStatusMessage.cs` (3 message mới) |
 | **Không đổi** | `OrderWorkflow.cs` (transition + rollup đã đúng), `PaymentsController.cs`, enums `OrderStatus`/`DeliveryStatus` |
-| **Cập nhật doc** | `Documents/ard/GHN_INTEGRATION.md`, `AHAMOVE_INTEGRATION.md`, `Documents/API_GUIDE.md` (mô tả 2 bước Nhận / Tạo ship) |
+| **Cập nhật doc** | [`ghn-integration.md`](./ghn-integration.md), [`ahamove-integration.md`](./ahamove-integration.md), `Documents/API_GUIDE.md` (nay là [`docs/api-documents/09-orders.md`](../api-documents/09-orders.md) — mô tả 2 bước Nhận / Tạo ship) |

@@ -57,7 +57,7 @@ Nên `GhnShippingProvider.ResolveShopId` ([GhnShippingProvider.cs:82](../../src/
 | # | Vấn đề | Vị trí | Hệ quả |
 |---|---|---|---|
 | P1 | Gọi HTTP bên ngoài **bên trong DB transaction** | `OrderService.CreateDeliveryShipmentAsync` (~dòng 520) | Transaction giữ mở suốt thời gian round-trip mạng (giữ connection pool, khoá row); GHN chậm/timeout = transaction treo |
-| P2 | Lỗi provider **thoát khỏi Result pattern** | `GhnShippingProvider.PostAsync` ném `HttpRequestException` | FE nhận **500 + stack trace**, không có mã lỗi nghiệp vụ. Trái quy ước "không ném exception cho lỗi nghiệp vụ" trong CLAUDE.md |
+| P2 | Lỗi provider **thoát khỏi Result pattern** | `GhnShippingProvider.PostAsync` ném `HttpRequestException` | FE nhận **500 + stack trace**, không có mã lỗi nghiệp vụ. Trái quy ước "không ném exception cho lỗi nghiệp vụ" trong [`CLAUDE.md`](../../CLAUDE.md#quy-ước-code-quan-trọng--theo-đúng-pattern-hiện-có) |
 | P3 | **Mất message lỗi của GHN** | `PostAsync` ném `$"GHN {action} thất bại ({status})"` | Body GHN (`"Lỗi lấy thông tin shop"`) chỉ có trong log; không truyền được lý do cho garden owner |
 | P4 | **Không check `code` trong body** | `SendAsync` chỉ check `dto.Data is null` | GHN có thể trả HTTP 200 kèm `code != 200` → coi như thành công sai |
 | P5 | **Rủi ro vận đơn mồ côi** | `CreateDeliveryShipmentAsync` | GHN tạo đơn xong mà commit DB fail → GHN có vận đơn, DB rollback sạch, không ai biết. Đã gửi `client_order_code = delivery.Id` nhưng code chưa xử lý lỗi trùng để phục hồi |

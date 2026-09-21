@@ -1,4 +1,4 @@
-using System.Diagnostics.CodeAnalysis;
+﻿using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using FengDeskAI.Application.Features.CustomerCare;
 using FengDeskAI.Application.Features.Workspace;
@@ -292,6 +292,8 @@ public static class DependencyInjection
         services.AddScoped<SeedDataLoader>();
         services.AddScoped<IDataSeeder, StyleVibeSeeder>();
         services.AddScoped<IDataSeeder, ScoringParamSeeder>();
+        services.AddScoped<IDataSeeder, OccupationSeeder>();
+        services.AddScoped<IDataSeeder, OccupationElementProfileSeeder>();
         services.AddScoped<IDataSeeder, ElementInputMapSeeder>();
         services.AddScoped<IDataSeeder, WorkPurposeModifierSeeder>();
         services.AddScoped<IDataSeeder, WorkspaceTypeSeeder>();
@@ -302,6 +304,8 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, CatalogDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductFengShuiDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductElementInputDemoSeeder>();
+        services.AddScoped<IDataSeeder, PlacementProductDemoSeeder>();
+        services.AddScoped<IDataSeeder, ProductAspirationDemoSeeder>();
 
         return services;
     }

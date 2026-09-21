@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Interfaces.Security;
+﻿using FengDeskAI.Application.Interfaces.Security;
 using FengDeskAI.Domain.Common;
 using FengDeskAI.Domain.Entities.Chat;
 using FengDeskAI.Domain.Entities.Geography;
@@ -91,6 +91,10 @@ public class AppDbContext : DbContext
     public DbSet<WorkPurposeElementModifier> WorkPurposeElementModifiers => Set<WorkPurposeElementModifier>();
     public DbSet<ScoringParam> ScoringParams => Set<ScoringParam>();
 
+    // P5 — nghề nghiệp bẻ vector điểm quan hệ `r` (ADR v3.2 §11)
+    public DbSet<Occupation> Occupations => Set<Occupation>();
+    public DbSet<OccupationElementProfile> OccupationElementProfiles => Set<OccupationElementProfile>();
+
     /// <summary>Map tới hàm Postgres <c>unaccent()</c> (extension unaccent) — chỉ dùng trong truy vấn EF
     /// để tìm kiếm không phân biệt dấu. Cần CREATE EXTENSION unaccent (đã bật trong migration).</summary>
     public static string Unaccent(string input) => throw new InvalidOperationException("Chỉ dùng trong truy vấn EF.");
@@ -103,12 +107,12 @@ public class AppDbContext : DbContext
         modelBuilder.HasDbFunction(typeof(AppDbContext).GetMethod(nameof(Unaccent), new[] { typeof(string) })!)
             .HasName("unaccent");
 
-        // Khoá chính do ỨNG DỤNG sinh (BaseEntity.Id = Guid.NewGuid()), không phải DB sinh.
-        // Nếu để mặc định (ValueGeneratedOnAdd), khi EF phát hiện một entity MỚI qua navigation
-        // (vd order.StatusLogs.Add(...) trên order đang tracked) nó suy trạng thái theo khoá:
-        // khoá khác Guid.Empty ⇒ coi như đã có trong DB ⇒ đánh Modified ⇒ sinh UPDATE trên dòng
-        // không tồn tại ⇒ DbUpdateConcurrencyException "affected 0 row(s)".
-        // Khai ValueGeneratedNever cho đúng bản chất thì entity đó được đánh Added như mong đợi.
+        // Khoá chính do ỨNG DỤNG sinh (BaseEntity.Id = Guid.NewGuid())
+        //public abstract class BaseEntity
+        //{
+        //    public Guid Id { get; set; } = Guid.NewGuid();
+        //    ...
+        //}
         foreach (var entityType in modelBuilder.Model.GetEntityTypes()
                      .Where(t => typeof(BaseEntity).IsAssignableFrom(t.ClrType)))
         {

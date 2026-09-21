@@ -134,7 +134,7 @@ if (requireSellerAccess) {
 - [ ] `StoreRepository.GetForUserAsync` (owner OR `Status==Accepted`).
 - [ ] `StoreService.GetMineAsync` gọi `GetForUserAsync`.
 - [ ] (Tùy chọn) `StoreResponse.IsOwner` + mapping.
-- [ ] Cập nhật `docs/api-documents/15-stores.md` (mô tả `/stores/mine` gồm cả accepted-staff).
+- [ ] Cập nhật [`docs/api-documents/15-stores.md`](../api-documents/15-stores.md) (mô tả `/stores/mine` gồm cả accepted-staff).
 
 **Frontend**
 - [ ] Sửa `useHasSellerWorkspaceAccess` dùng `getMyShopsRequest`.

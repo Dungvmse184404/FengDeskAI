@@ -150,7 +150,7 @@ qua danh sách hàng chờ chung, không theo từng product).
 - [x] WebAPI: `Model3DRequestsController` (route riêng `/api/model3d-requests`, policy `StaffOrAbove`)
 - [x] WebAPI: cập nhật `ProductsController` (bỏ `POST .../model-3d` cũ, thêm `POST/GET .../model-3d/requests`, `PATCH .../model-3d/toggle`)
 - [x] DTO/Mapping: `ProductModel3DResponse` thêm `isEnabled`; `Model3DRequestResponse` (owner, che giấu lỗi hết credit) tách khỏi `Model3DRequestQueueItemResponse` (staff, đầy đủ)
-- [x] Cập nhật `docs/api-documents/02-products.md` (mục Model 3D) + file mới `docs/api-documents/26-model3d-requests.md` + `99-appendix-models.md` (3 enum mới)
+- [x] Cập nhật [`docs/api-documents/02-products.md`](../api-documents/02-products.md) (mục Model 3D) + file mới [`docs/api-documents/26-model3d-requests.md`](../api-documents/26-model3d-requests.md) + [`99-appendix-models.md`](../api-documents/99-appendix-models.md) (3 enum mới)
 - [ ] FE: `3DSection.tsx` — gọi `GET /model-3d`, check `isEnabled` trước khi render, ẩn hoàn toàn nếu `false` (chưa làm — sẽ code tiếp theo yêu cầu riêng)
 - [ ] **User tự chạy `dotnet ef migrations add AddModel3DRequestFlow`** — sandbox không có .NET SDK nên không tạo được migration/Designer/Snapshot chính xác, xem mục 11.
 

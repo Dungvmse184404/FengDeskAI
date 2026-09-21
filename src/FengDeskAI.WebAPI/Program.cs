@@ -31,12 +31,17 @@ if (!string.IsNullOrWhiteSpace(port))
 builder.Services.AddControllers(options =>
 {
     options.Filters.Add<UnauthorizedExceptionFilter>();
+
+    // Lưới an toàn: đổi exception do dữ liệu người dùng gửi (chuỗi quá dài, số vượt miền cột,
+    // FK không tồn tại, transition sai trạng thái) thành 4xx/409 thay vì 500 trần.
+    // Đặt SAU filter 401 ở trên để không giành mất ca thiếu user claim.
+    options.Filters.Add<ApiExceptionFilter>();
 })
 .AddJsonOptions(options =>
 {
-    // Enum nhận/trả dưới dạng tên (vd "Moc", "Office") — vẫn chấp nhận số khi deserialize.
-    options.JsonSerializerOptions.Converters.Add(
-        new System.Text.Json.Serialization.JsonStringEnumConverter());
+    // Enum nhận/trả dưới dạng tên (vd "Moc", "Office") — vẫn chấp nhận số khi deserialize, nhưng số
+    // ngoài miền (999) bị từ chối bằng 400 thay vì lọt xuống DB (DEF-12).
+    options.JsonSerializerOptions.Converters.Add(new FengDeskAI.WebAPI.Common.StrictEnumConverterFactory());
 });
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddHttpContextAccessor();
@@ -220,3 +225,8 @@ app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
 
 app.Run();
+
+// Lộ type Program cho WebApplicationFactory<Program> ở tests/FengDeskAI.ApiTests.
+// Top-level statements sinh ra class Program internal — partial này chỉ nâng nó thành public,
+// không đổi hành vi runtime.
+public partial class Program { }
