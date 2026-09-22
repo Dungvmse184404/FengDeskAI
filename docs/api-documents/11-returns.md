@@ -87,10 +87,15 @@ Content-Type: application/json
 ```
 
 Response giữ `status = Exchanging` và trả cả `replacementDeliveryId` lẫn
-`replacementDelivery` (`status`, provider, tracking, trackingUrl, ETA). Carrier webhook
-hoặc cập nhật delivery thủ công sang `Delivered` sẽ tự chuyển ticket sang `Completed`.
-Nếu tạo shipment ban đầu lỗi, delivery vẫn được giữ ở `Pending` để vendor xác nhận và gọi
-`POST /api/orders/deliveries/{replacementDeliveryId}/shipment` thử lại.
+`replacementDelivery` ở trạng thái `Pending`. Staff chỉ ra quyết định và tạo đơn thay thế,
+**không tự gọi nhà vận chuyển**. Garden Owner hoặc nhân viên được phân công xác nhận đơn
+qua `PATCH /api/orders/deliveries/{replacementDeliveryId}/status` (`Confirmed`), rồi gọi
+`POST /api/orders/deliveries/{replacementDeliveryId}/shipment` để gửi hàng thay thế.
+Carrier webhook hoặc cập nhật delivery sang `Delivered` sẽ tự chuyển ticket sang `Completed`.
+Để test local không cần giao hàng thật, gọi
+`POST /api/dev/deliveries/{replacementDeliveryId}/shipping/delivered` sau khi cửa hàng tạo
+vận đơn. Chỉ dùng **replacementDeliveryId**, không gọi endpoint theo `orderId` vì nó sẽ tác động
+cả delivery gốc. Endpoint giả lập chỉ hoạt động trong môi trường Development.
 
 Customer được xem delivery thay thế bằng:
 

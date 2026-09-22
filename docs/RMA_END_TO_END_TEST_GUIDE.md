@@ -350,18 +350,32 @@ Kỳ vọng:
 
 - Return thành `Exchanging`.
 - Có `replacementDeliveryId`/replacement delivery.
+- Replacement delivery bắt đầu ở `Pending`; Staff duyệt không tự tạo vận đơn.
 - Tồn kho sản phẩm thay thế giảm đúng số lượng.
 - Nếu sản phẩm thay thế rẻ hơn, có refund phần chênh lệch.
 - Không hiển thị nhầm nút “Duyệt hoàn tiền”.
 
 Hoàn tất replacement delivery:
 
+Garden Owner mở tab **Đơn giao**, tìm delivery có nhãn **Hàng đổi**, bấm **Xác nhận đơn đổi**
+(`Pending → Confirmed`), sau đó bấm **Gửi hàng đổi** để tạo vận đơn. Customer theo dõi
+trạng thái giao hàng trong chi tiết yêu cầu. Khi tạo vận đơn thành công, delivery ở `Preparing`.
+Để test callback của nhà vận chuyển cho **đúng delivery thay thế** (không dùng `orderId` vì
+order còn chứa delivery gốc), gọi API sau trong môi trường Development:
+
 ```http
-POST /api/dev/deliveries/{replacementDeliveryId}/delivered
+POST /api/dev/deliveries/{replacementDeliveryId}/shipping/delivered
 Authorization: Bearer {token}
 ```
 
-Kỳ vọng return thành `Completed` khi giao thay thế thành công.
+API tự đi qua bước `Shipped → Delivered`, cập nhật `deliveredAt`, progress log, rồi chuyển
+return `Exchanging → Completed`. Không cần gọi `/shipping/delivering` trước. Nếu chỉ muốn
+ép trạng thái thủ công mà không test webhook, có thể dùng
+`POST /api/dev/deliveries/{replacementDeliveryId}/delivered`.
+
+Các API `/api/dev/...` trả `404` ngoài môi trường Development. Trên server production,
+hãy để callback thật của nhà vận chuyển cập nhật delivery; không cấp cho Garden Owner quyền
+tự đánh dấu `Delivered`.
 
 ### TC-S08 — Đổi hàng hết tồn, fallback refund
 
