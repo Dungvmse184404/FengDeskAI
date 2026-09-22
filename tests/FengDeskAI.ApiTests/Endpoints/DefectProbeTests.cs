@@ -276,11 +276,11 @@ public sealed class DefectProbeTests
         Assert.Equal(stockBefore, stockAfter);
     }
 
-    [Fact(DisplayName = "DEF-15 [Money] Rejecting a refunding ticket must stop the pending refund from being paid out")]
-    public async Task RejectRefundingTicket_StopsThePendingRefund()
+    [Fact(DisplayName = "DEF-15 [Money] Rejecting a refunding ticket cancels its manual-review refund")]
+    public async Task RejectRefundingTicket_CancelsManualReviewRefund()
     {
-        // ReturnStateMachine cho phép Refunding → Rejected, nhưng RejectAsync không đụng tới lệnh
-        // hoàn tiền đang Pending. Lượt quét SLA sau đó vẫn chi tiền cho một ticket đã bị từ chối.
+        // Refund mới đi thẳng tới ManagerReview. Ticket bị từ chối phải hủy lệnh này
+        // trong cùng transaction để Manager không thể xác nhận chuyển tiền sau đó.
         var (ticketId, refundId) = await PendingRefundWithTicketAsync();
         var staff = _fixture.ClientFor(TestRole.Staff);
 
@@ -288,8 +288,7 @@ public sealed class DefectProbeTests
             new { reason = "Phát hiện dấu hiệu gian lận sau khi đã duyệt." });
         _output.WriteLine($"reject: {(int)reject.StatusCode} {await reject.Content.ReadAsStringAsync()}");
 
-        if (!reject.IsSuccessStatusCode)
-            return; // API đã chặn sẵn — không có defect, ca này xanh.
+        Assert.True(reject.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(reject, "từ chối ticket"));
 
         await RunSweepAsync(sp => sp.GetRequiredService<IRefundService>().ProcessPendingRefundsAsync());
 
@@ -297,8 +296,14 @@ public sealed class DefectProbeTests
         var status = refund.GetProperty("status").GetString();
         _output.WriteLine($"Trạng thái lệnh hoàn tiền sau khi từ chối ticket: {status}");
 
-        Assert.True(status is "Cancelled" or "Pending",
-            $"Ticket đã bị từ chối thì lệnh hoàn tiền không được đi tiếp, nhưng nó đang ở {status}.");
+        Assert.Equal("Cancelled", status);
+        var detail = await staff.GetAsync($"/api/returns/{ticketId}");
+        Assert.Equal("Rejected", (await ApiEnvelope.DataAsync(detail)).GetProperty("status").GetString());
+
+        var confirm = await _fixture.ClientFor(TestRole.Manager).PostAsJsonAsync(
+            $"/api/refunds/{refundId}/manager-confirm",
+            new { manualReason = "Không được chuyển tiền", evidenceUrl = "https://fake-storage.test/evidence.jpg" });
+        Assert.Equal(System.Net.HttpStatusCode.Conflict, confirm.StatusCode);
     }
 
     // ===================== Soft-delete =====================

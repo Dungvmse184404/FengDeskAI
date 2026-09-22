@@ -123,7 +123,7 @@ public class Refund : BaseEntity
         CompletedAt = nowUtc;
     }
 
-    /// <summary>Manager hủy trước khi tiền đi — áp dụng cho Pending hoặc ManagerReview.</summary>
+    /// <summary>Hủy trước khi tiền đi — áp dụng cho Pending hoặc ManagerReview.</summary>
     public void Cancel(Guid actorId)
     {
         TransitionTo(RefundStatus.Cancelled);

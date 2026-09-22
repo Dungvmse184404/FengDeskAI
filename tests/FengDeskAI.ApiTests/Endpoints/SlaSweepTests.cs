@@ -183,10 +183,10 @@ public sealed class SlaSweepTests
         Assert.Equal("ManagerReview", refund.GetProperty("status").GetString());
     }
 
-    [Fact(DisplayName = "SLA-10 [Normal] A refund in manager review can be confirmed manually")]
-    public async Task ManagerConfirm_AfterEscalation_CompletesRefund()
+    [Fact(DisplayName = "SLA-10 [Normal] A newly approved refund in manager review can be confirmed manually")]
+    public async Task ManagerConfirm_ManualReview_CompletesRefund()
     {
-        var refundId = await ManagerReviewRefundAsync();
+        var refundId = (await ManualReviewRefundWithTicketAsync()).RefundId;
 
         var response = await Manager().PostAsJsonAsync($"/api/refunds/{refundId}/manager-confirm", new
         {
@@ -201,7 +201,7 @@ public sealed class SlaSweepTests
     [Fact(DisplayName = "SLA-11 [Abnormal] Manual confirmation without evidence is refused")]
     public async Task ManagerConfirm_WithoutEvidence_IsRejected()
     {
-        var refundId = await ManagerReviewRefundAsync();
+        var refundId = (await ManualReviewRefundWithTicketAsync()).RefundId;
 
         var response = await Manager().PostAsJsonAsync($"/api/refunds/{refundId}/manager-confirm",
             new { manualReason = "Thiếu bằng chứng.", evidenceUrl = "" });
@@ -219,10 +219,10 @@ public sealed class SlaSweepTests
         Assert.Equal(System.Net.HttpStatusCode.Conflict, response.StatusCode);
     }
 
-    [Fact(DisplayName = "SLA-13 [Normal] The manager cancels a pending refund and the ticket is rejected")]
-    public async Task ManagerCancel_WhilePending_RejectsTicket()
+    [Fact(DisplayName = "SLA-13 [Normal] The manager cancels a manual-review refund and the ticket is rejected")]
+    public async Task ManagerCancel_WhileInManualReview_RejectsTicket()
     {
-        var (ticketId, refundId) = await PendingRefundWithTicketAsync();
+        var (ticketId, refundId) = await ManualReviewRefundWithTicketAsync();
 
         var cancel = await Manager().PostAsync($"/api/refunds/{refundId}/manager-cancel", null);
         Assert.True(cancel.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(cancel, "manager hủy hoàn tiền"));
@@ -323,8 +323,11 @@ public sealed class SlaSweepTests
 
     private async Task<Guid> PendingRefundAsync() => (await PendingRefundWithTicketAsync()).RefundId;
 
-    /// <summary>Một lệnh hoàn tiền vừa được duyệt — đang ở Pending, chưa ai điều phối.</summary>
-    private async Task<(Guid TicketId, Guid RefundId)> PendingRefundWithTicketAsync()
+    /// <summary>
+    /// Dựng ticket bằng API thật. Chính sách hiện tại không gọi PayOS refund: lệnh mới
+    /// được xếp thẳng vào ManagerReview để Manager chuyển khoản thủ công.
+    /// </summary>
+    private async Task<(Guid TicketId, Guid RefundId)> ManualReviewRefundWithTicketAsync()
     {
         var ticketId = await RequestedTicketAsync();
         var staff = Staff();
@@ -338,7 +341,24 @@ public sealed class SlaSweepTests
 
         var detail = await staff.GetAsync($"/api/returns/{ticketId}");
         var refundId = (await ApiEnvelope.DataAsync(detail)).GetProperty("refund").GetProperty("id").GetGuid();
+        Assert.Equal("ManagerReview", (await ReadRefundAsync(refundId)).GetProperty("status").GetString());
         return (ticketId, refundId);
+    }
+
+    /// <summary>
+    /// Dữ liệu legacy cho các test worker Pending/Failed: API production không tạo Pending nữa,
+    /// nên chỉ test fixture mới tua trạng thái DB để tiếp tục kiểm tra tính tương thích của worker.
+    /// </summary>
+    private async Task<(Guid TicketId, Guid RefundId)> PendingRefundWithTicketAsync()
+    {
+        var scenario = await ManualReviewRefundWithTicketAsync();
+        await _fixture.WithScopeAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            await db.Database.ExecuteSqlRawAsync(
+                "UPDATE refunds SET status = 'Pending' WHERE id = {0}", scenario.RefundId);
+        });
+        return scenario;
     }
 
     /// <summary>
@@ -353,26 +373,6 @@ public sealed class SlaSweepTests
         await RunAsync(sp => sp.GetRequiredService<IRefundService>().ProcessPendingRefundsAsync());
         await BackdateRefundProcessedAtAsync(refundId, DateTime.UtcNow.AddHours(-2));
         await RunAsync(sp => sp.GetRequiredService<IRefundService>().FailStaleProcessingRefundsAsync());
-        return refundId;
-    }
-
-    private async Task<Guid> ManagerReviewRefundAsync()
-    {
-        var refundId = await FailedRefundAsync();
-
-        for (var attempt = 0; attempt < 4; attempt++)
-        {
-            await RunAsync(sp => sp.GetRequiredService<IRefundService>().AutoProcessFailedRefundsAsync());
-            await BackdateRefundProcessedAtAsync(refundId, DateTime.UtcNow.AddHours(-2));
-            await RunAsync(sp => sp.GetRequiredService<IRefundService>().FailStaleProcessingRefundsAsync());
-        }
-
-        await RunAsync(sp => sp.GetRequiredService<IRefundService>().AutoProcessFailedRefundsAsync());
-
-        var status = (await ReadRefundAsync(refundId)).GetProperty("status").GetString();
-        Assert.True(status == "ManagerReview",
-            $"Chưa đẩy được lệnh hoàn tiền lên ManagerReview, hiện đang ở {status}.");
-
         return refundId;
     }
 

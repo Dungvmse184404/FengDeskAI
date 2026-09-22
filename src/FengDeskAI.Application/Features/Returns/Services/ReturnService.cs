@@ -523,6 +523,9 @@ public class ReturnService : IReturnService
         if (error is not null) return error;
         if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.Rejected, rr.Reason))
             return InvalidTransition(rr.Status, ReturnRequestStatus.Rejected);
+        if (rr.Refund is { } activeRefund
+            && !RefundStateMachine.CanTransition(activeRefund.Status, RefundStatus.Cancelled))
+            return Fail(ApiStatusCodes.Conflict, "Không thể từ chối yêu cầu khi lệnh hoàn tiền đã được xử lý.");
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
@@ -530,17 +533,14 @@ public class ReturnService : IReturnService
             rr.Reject(actor.UserId, DateTime.UtcNow, request.Reason);
             LogTransition(rr, from, $"Từ chối: {request.Reason}", actor.UserId);
 
-            // Máy trạng thái cho phép Refunding → Rejected, nên staff có thể từ chối một ticket đã
-            // duyệt hoàn tiền (vd phát hiện gian lận sau khi duyệt). Lệnh hoàn tiền lúc đó vẫn đang
-            // Pending, và lượt quét SLA (ProcessPendingRefundsAsync) chỉ lọc theo Status == Pending —
-            // nó sẽ CHI TIỀN cho một ticket đã bị từ chối. Phải hủy lệnh cùng lúc.
-            //
-            // Chỉ hủy khi còn Pending: lệnh đã Processing/Completed thì tiền đã rời đi, hủy ở đây là
-            // nói dối sổ sách — ca đó phải đi đường hoàn tiền ngược, không thuộc phạm vi từ chối.
-            if (rr.Refund is { Status: RefundStatus.Pending } refund)
+            // Lệnh hoàn hiện tại được đưa thẳng tới ManagerReview để chuyển khoản thủ công.
+            // Khi từ chối ticket, phải hủy lệnh chưa chi tiền trong cùng transaction;
+            // nếu không Manager vẫn có thể xác nhận hoàn tiền cho ticket Rejected.
+            // Processing/Completed không được hủy ở đây vì tiền có thể đã rời đi.
+            if (rr.Refund is { Status: RefundStatus.Pending or RefundStatus.ManagerReview } refund)
             {
                 refund.Cancel(actor.UserId);
-                LogTransition(rr, from, $"Hủy lệnh hoàn tiền đang chờ do ticket bị từ chối: {request.Reason}", actor.UserId);
+                LogTransition(rr, from, $"Hủy lệnh hoàn tiền chưa chi do ticket bị từ chối: {request.Reason}", actor.UserId);
             }
 
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu trả hàng bị từ chối",
