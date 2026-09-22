@@ -402,12 +402,10 @@ public static class ApiStatusMessages
         public const string RefundNotFound = "Không tìm thấy lệnh hoàn tiền.";
         public const string RefundNotRetryable = "Lệnh hoàn tiền không ở trạng thái có thể retry.";
         public const string RefundNotManualConfirmable = "Chỉ xác nhận thủ công khi lệnh hoàn tiền đang chờ Manager (ManagerReview).";
-        public const string RefundNotCancellable = "Chỉ hủy được lệnh hoàn tiền khi đang chờ xử lý (Pending).";
+        public const string RefundNotCancellable = "Chỉ hủy được lệnh hoàn tiền trước khi tiền được chuyển (Pending/ManagerReview).";
         public const string ManualEvidenceRequired = "Xác nhận thủ công cần đủ lý do và URL bằng chứng.";
         public const string WebhookInvalid = "Webhook hoàn tiền không hợp lệ.";
         public const string WebhookProcessed = "Đã xử lý webhook hoàn tiền.";
-        public const string ReturnTrackingRequired = "Vui lòng cung cấp mã vận đơn trả hàng.";
-        public const string ReturnShipmentNotSubmitted = "Khách hàng chưa khai báo mã vận đơn trả hàng.";
         public const string VendorResponseExpired = "Đã hết thời hạn phản hồi của cửa hàng.";
         public const string LiabilityForbidden = "Bạn không có quyền xem/thao tác công nợ của garden này.";
         public const string LiabilityNotFound = "Không tìm thấy khoản công nợ.";

@@ -57,7 +57,7 @@ public class RefundService : IRefundService
             Amount = amount,
             Method = method,
             IdempotencyKey = key,
-            Gateway = "payos",
+            Gateway = "manual",
             Note = reason,
         };
         ticket.Refund = refund;
@@ -73,8 +73,11 @@ public class RefundService : IRefundService
             }
         }
 
-        // Chỉ tạo Pending trong transaction của ticket. Worker dispatch sau commit để Pending là trạng thái
-        // quan sát/hủy được và transaction quyết định ticket không phải chờ provider.
+        // PayOS integration hiện không có API refund thật. Mọi lệnh hoàn mới đi thẳng vào
+        // ManagerReview để Manager chuyển tiền ngoài hệ thống rồi xác nhận kèm bằng chứng.
+        refund.QueueForManualReview();
+
+        // Không gọi external gateway bên trong transaction quyết định ticket.
         return refund;
     }
 
