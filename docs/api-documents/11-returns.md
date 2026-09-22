@@ -16,7 +16,7 @@ Requested
   └─ accept → UnderReview
        ├─ PlantHealth → Reviewing
        └─ WrongItem / DamagedPackage / NotAsDescribed → ReturnInTransit
-            └─ Garden Owner xác nhận đã nhận thực tế → ItemReceived → Reviewing
+            └─ ship-back + confirm-received → ItemReceived → Reviewing
 
 Reviewing
   ├─ reject → Rejected
@@ -38,25 +38,34 @@ response của `accept`/`confirm-received` trả trạng thái sau khi route xon
 | GET | `/api/returns/{id}` | Customer / store member / platform Staff+ | Chi tiết ticket |
 | POST | `/api/returns/{id}/cancel` | Customer | Chỉ từ `Requested` |
 | POST | `/api/returns/{id}/resubmit-evidence` | Customer | `NeedMoreEvidence → Requested`, multipart field `files` |
+| POST | `/api/returns/{id}/ship-back` | Customer | Ghi mã vận đơn khi `ReturnInTransit` |
 | POST | `/api/returns/{id}/images` | Customer | Thêm evidence khi `Requested/NeedMoreEvidence` |
 | DELETE | `/api/returns/{id}/images/{imageId}` | Customer | Xóa evidence khi `Requested/NeedMoreEvidence` |
 | GET | `/api/returns/stores/{storeId}` | Owner / accepted store staff / platform Staff+ | Ticket của store |
 | POST | `/api/returns/{id}/vendor-acknowledge` | Owner / accepted store staff / Admin | Phản hồi trong SLA, không quyết định ticket |
 | POST | `/api/returns/{id}/vendor-dispute` | Owner / accepted store staff / Admin | Phản đối trong SLA, không chặn Staff |
-| POST | `/api/returns/{id}/confirm-received` | Owner / accepted store staff / Admin | Xác nhận thực tế đã nhận hàng; không cần tracking; chuyển sang `Reviewing` |
+| POST | `/api/returns/{id}/confirm-received` | Owner / accepted store staff / Admin | Cần có tracking; `ReturnInTransit → ItemReceived → Reviewing` |
 | GET | `/api/returns/pending` | Staff / Manager / Admin | Queue `Requested/UnderReview/Reviewing` |
 | GET | `/api/returns/all` | Staff / Manager / Admin | Tất cả ticket |
 | POST | `/api/returns/{id}/accept` | Staff / Manager / Admin | Tiếp nhận và tự route theo `reason` |
 | POST | `/api/returns/{id}/request-more-evidence` | Staff / Manager / Admin | `Requested → NeedMoreEvidence` |
-| POST | `/api/returns/{id}/approve-refund` | Staff / Manager / Admin | `Reviewing → Refunding`, tạo refund `ManagerReview` |
+| POST | `/api/returns/{id}/approve-refund` | Staff / Manager / Admin | `Reviewing → Refunding`, tạo refund `Pending` |
 | POST | `/api/returns/{id}/approve-exchange` | Staff / Manager / Admin | `Reviewing → Exchanging`; hoàn tất khi delivery thay thế Delivered |
 | POST | `/api/returns/{id}/reject` | Staff / Manager / Admin | `Reviewing/NeedMoreEvidence → Rejected` |
 
-### Bàn giao hàng trả không tích hợp vận chuyển
+### Khai báo gửi trả
 
-Customer và cửa hàng tự thỏa thuận gửi bưu điện, ship ngoài hoặc bàn giao trực tiếp. Hệ thống
-không tạo vận đơn chiều trả và không yêu cầu tracking. Khi thực tế nhận hàng, Garden Owner gọi
-`POST /api/returns/{returnId}/confirm-received`; chỉ sau đó Staff mới duyệt hoàn tiền/đổi hàng.
+```http
+POST /api/returns/{returnId}/ship-back
+Content-Type: application/json
+
+{
+  "trackingCode": "GHN-RETURN-123456"
+}
+```
+
+Sau đó vendor gọi `POST /api/returns/{returnId}/confirm-received`. Backend từ chối xác
+nhận nếu customer chưa khai báo tracking code.
 
 ### Duyệt hoàn tiền
 
@@ -70,9 +79,9 @@ Content-Type: application/json
 }
 ```
 
-Response có `status = Refunding` và `refund.status = ManagerReview`. Do PayOS hiện chưa có API
-refund thật trong project, Manager chuyển tiền ngoài hệ thống, tải ảnh biên lai rồi gọi
-`POST /api/refunds/{refundId}/manager-confirm`. Khi đó refund và ticket cùng sang `Completed`.
+Response có `status = Refunding` và `refund.status = Pending`. Worker gửi refund sang
+gateway, chuyển `Pending → Processing`; webhook thành công chuyển refund và ticket sang
+`Completed`. `Processing` không có webhook trong 30 phút chuyển `Failed` để retry.
 
 ### Duyệt đổi hàng
 
@@ -87,15 +96,10 @@ Content-Type: application/json
 ```
 
 Response giữ `status = Exchanging` và trả cả `replacementDeliveryId` lẫn
-`replacementDelivery` ở trạng thái `Pending`. Staff chỉ ra quyết định và tạo đơn thay thế,
-**không tự gọi nhà vận chuyển**. Garden Owner hoặc nhân viên được phân công xác nhận đơn
-qua `PATCH /api/orders/deliveries/{replacementDeliveryId}/status` (`Confirmed`), rồi gọi
-`POST /api/orders/deliveries/{replacementDeliveryId}/shipment` để gửi hàng thay thế.
-Carrier webhook hoặc cập nhật delivery sang `Delivered` sẽ tự chuyển ticket sang `Completed`.
-Để test local không cần giao hàng thật, gọi
-`POST /api/dev/deliveries/{replacementDeliveryId}/shipping/delivered` sau khi cửa hàng tạo
-vận đơn. Chỉ dùng **replacementDeliveryId**, không gọi endpoint theo `orderId` vì nó sẽ tác động
-cả delivery gốc. Endpoint giả lập chỉ hoạt động trong môi trường Development.
+`replacementDelivery` (`status`, provider, tracking, trackingUrl, ETA). Carrier webhook
+hoặc cập nhật delivery thủ công sang `Delivered` sẽ tự chuyển ticket sang `Completed`.
+Nếu tạo shipment ban đầu lỗi, delivery vẫn được giữ ở `Pending` để vendor xác nhận và gọi
+`POST /api/orders/deliveries/{replacementDeliveryId}/shipment` thử lại.
 
 Customer được xem delivery thay thế bằng:
 
@@ -107,12 +111,15 @@ GET /api/shipping/deliveries/{replacementDeliveryId}/progress
 ## Refund sub-saga
 
 ```text
-ManagerReview
-  ├─ manager-confirm + evidence → Completed; ReturnRequest → Completed
-  ├─ manager-cancel → Cancelled; ReturnRequest → Rejected
-  └─ retry → Processing (dành cho gateway refund thật trong tương lai)
-
-Legacy/gateway path: Processing → Completed hoặc Failed → retry/ManagerReview.
+Pending
+  ├─ Manager cancel fraud → Cancelled; ReturnRequest → Rejected
+  └─ worker dispatch → Processing
+       ├─ webhook success → Completed; ReturnRequest → Completed nếu đang Refunding
+       └─ webhook error/timeout → Failed
+            ├─ retry (tối đa 3) → Processing
+            └─ hết retry → ManagerReview
+                 ├─ retry → Processing
+                 └─ manager-confirm → Completed
 ```
 
 | Method | Path | Actor | Mô tả |
@@ -122,7 +129,7 @@ Legacy/gateway path: Processing → Completed hoặc Failed → retry/ManagerRev
 | GET | `/api/refunds/{id}` | Manager / Admin | Chi tiết refund |
 | POST | `/api/refunds/{id}/retry` | Manager / Admin | Retry `Failed/ManagerReview` |
 | POST | `/api/refunds/{id}/manager-confirm` | Manager / Admin | Hoàn thủ công từ `ManagerReview`, bắt buộc reason/evidence |
-| POST | `/api/refunds/{id}/manager-cancel` | Manager / Admin | Từ `Pending/ManagerReview`, đồng thời reject ticket do fraud |
+| POST | `/api/refunds/{id}/manager-cancel` | Manager / Admin | Chỉ từ `Pending`, đồng thời reject ticket do fraud |
 
 Development-only, ngoài Development trả `404`:
 
@@ -139,7 +146,7 @@ Hai endpoint dev yêu cầu role Admin và đi qua cùng nghiệp vụ hoàn t�
 |---|---|---|---|
 | `Requested` | Cancel | — | Accept / request evidence |
 | `NeedMoreEvidence` | Resubmit evidence | — | Theo dõi deadline / reject |
-| `ReturnInTransit` | Tự thỏa thuận cách bàn giao ngoài hệ thống | Xác nhận khi thực tế đã nhận hàng | Chỉ theo dõi |
+| `ReturnInTransit` | Ship back nếu chưa có tracking | Confirm received khi đã có tracking | Chỉ theo dõi |
 | `Reviewing` | Theo dõi | Acknowledge/dispute nếu còn SLA | Approve refund/exchange hoặc reject |
 | `Refunding` | Theo dõi nested `refund.status` | — | Theo dõi refund saga |
 | `Exchanging` | Theo dõi `replacementDelivery` | Xử lý shipment nếu Pending | Theo dõi delivery thay thế |

@@ -6,9 +6,9 @@ namespace FengDeskAI.Application.Features.Returns.Services;
 
 /// <summary>
 /// Luồng RMA v2 (ticket trả hàng / hoàn tiền / đổi trả).
-/// - Customer: tạo ticket + bằng chứng, bổ sung bằng chứng, hủy, theo dõi; không khai tracking chiều trả.
+/// - Customer: tạo ticket + bằng chứng, bổ sung bằng chứng, hủy, theo dõi.
 /// - Staff (nền tảng): tiếp nhận & RA QUYẾT ĐỊNH (duyệt hoàn/đổi, từ chối, yêu cầu bổ sung). Vendor KHÔNG quyết.
-/// - Vendor (garden owner): góp ý trong SLA + xác nhận thực tế đã nhận hàng, không cần carrier integration.
+/// - Vendor (garden owner): góp ý trong SLA (acknowledge/dispute, non-blocking) + xác nhận đã nhận hàng.
 /// Quy tắc chuyển trạng thái ở <c>Domain.StateMachines.ReturnStateMachine</c>; transition sai → 409.
 /// </summary>
 public interface IReturnService
@@ -20,6 +20,7 @@ public interface IReturnService
     Task<IServiceResult<ReturnDetailResponse>> GetByIdAsync(Guid id, RmaActor actor, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> ResubmitEvidenceAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
+    Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default);
 
     Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default);
     Task<IServiceResult<ReturnDetailResponse>> DeleteImageAsync(Guid id, Guid imageId, Guid userId, CancellationToken ct = default);

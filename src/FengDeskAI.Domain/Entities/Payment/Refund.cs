@@ -73,12 +73,6 @@ public class Refund : BaseEntity
     /// <summary>Hết lượt retry → chờ Manager can thiệp.</summary>
     public void EscalateToManagerReview() => TransitionTo(RefundStatus.ManagerReview);
 
-    /// <summary>
-    /// Cổng hiện tại chưa hỗ trợ refund thật: đưa lệnh mới thẳng vào hàng chờ Manager
-    /// chuyển tiền ngoài hệ thống và tải bằng chứng, không giả lập Processing/webhook.
-    /// </summary>
-    public void QueueForManualReview() => TransitionTo(RefundStatus.ManagerReview);
-
     /// <summary>Auto-retry (Failed) hoặc Manager retry thủ công (ManagerReview) → gọi lại cổng.</summary>
     public void RetryToProcessing(string? gatewayRef, DateTime nowUtc)
     {
@@ -123,7 +117,7 @@ public class Refund : BaseEntity
         CompletedAt = nowUtc;
     }
 
-    /// <summary>Manager hủy trước khi tiền đi — áp dụng cho Pending hoặc ManagerReview.</summary>
+    /// <summary>Manager hủy (phát hiện gian lận trước khi tiền đi) — chỉ khi còn Pending.</summary>
     public void Cancel(Guid actorId)
     {
         TransitionTo(RefundStatus.Cancelled);

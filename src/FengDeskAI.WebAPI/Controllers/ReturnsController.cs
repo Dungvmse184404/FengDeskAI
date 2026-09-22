@@ -10,8 +10,8 @@ namespace FengDeskAI.WebAPI.Controllers;
 
 /// <summary>
 /// Ticket RMA v2 (trả hàng / hoàn tiền / đổi trả).
-/// - Customer: tạo ticket + bằng chứng, tự thỏa thuận cách gửi/trả ngoài hệ thống, theo dõi kết quả.
-/// - Vendor: góp ý trong SLA + xác nhận thực tế đã nhận hàng, không tích hợp vận chuyển chiều trả.
+/// - Customer: tạo ticket + bằng chứng, bổ sung bằng chứng, hủy, theo dõi.
+/// - Vendor (owner/accepted store staff): góp ý trong SLA (acknowledge/dispute — non-blocking) + xác nhận đã nhận hàng.
 /// - Staff (nền tảng): tiếp nhận + RA QUYẾT ĐỊNH (duyệt hoàn/đổi, từ chối, yêu cầu bổ sung).
 /// Transition không hợp lệ → HTTP 409. Refund do Manager (xem RefundsController); công nợ ở VendorLiabilitiesController.
 /// </summary>
@@ -50,6 +50,11 @@ public class ReturnsController : ApiControllerBase
     public async Task<IActionResult> ResubmitEvidence(Guid id, [FromForm] List<IFormFile>? files, CancellationToken ct)
         => ToActionResult(await _service.ResubmitEvidenceAsync(id, CurrentUserId, await ReadFilesAsync(files, ct), ct));
 
+    /// <summary>Khách khai báo mã vận đơn sau khi đã gửi hàng vật lý trả về cửa hàng.</summary>
+    [HttpPost("{id:guid}/ship-back")]
+    public async Task<IActionResult> ShipBack(Guid id, [FromBody] ShipBackRequest request, CancellationToken ct)
+        => ToActionResult(await _service.ShipBackAsync(id, CurrentUserId, request, ct));
+
     /// <summary>Tải THÊM ảnh bằng chứng (multipart, field "files"). Chỉ chủ ticket.</summary>
     [HttpPost("{id:guid}/images")]
     public async Task<IActionResult> UploadImages(Guid id, [FromForm] List<IFormFile> files, CancellationToken ct)
@@ -76,7 +81,7 @@ public class ReturnsController : ApiControllerBase
     public async Task<IActionResult> VendorDispute(Guid id, [FromBody] VendorDisputeRequest request, CancellationToken ct)
         => ToActionResult(await _service.VendorDisputeAsync(id, RmaActor, request, ct));
 
-    /// <summary>Vendor xác nhận thực tế đã nhận hàng trả; không yêu cầu tracking hay tích hợp vận chuyển chiều trả.</summary>
+    /// <summary>Vendor xác nhận đã nhận hàng trả (chỉ xác nhận, KHÔNG quyết định kết quả).</summary>
     [HttpPost("{id:guid}/confirm-received")]
     public async Task<IActionResult> ConfirmReceived(Guid id, CancellationToken ct)
         => ToActionResult(await _service.ConfirmItemReceivedAsync(id, RmaActor, ct));

@@ -60,6 +60,13 @@ public class RejectReturnRequest
     public string Reason { get; set; } = null!;
 }
 
+/// <summary>Khách khai báo đã gửi hàng vật lý trả về cửa hàng.</summary>
+public class ShipBackRequest
+{
+    /// <summary>Mã vận đơn chiều trả do đơn vị vận chuyển cấp.</summary>
+    public string TrackingCode { get; set; } = null!;
+}
+
 public class ApproveRefundRequest
 {
     /// <summary>Hoàn kho hàng trả nếu đã nhận & kiểm đạt (chỉ áp dụng lý do hàng vật lý).</summary>

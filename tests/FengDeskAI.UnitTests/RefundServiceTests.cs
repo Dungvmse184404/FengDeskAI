@@ -15,7 +15,7 @@ namespace FengDeskAI.UnitTests;
 public class RefundServiceTests
 {
     [Fact]
-    public async Task CreateRefundAsync_QueuesManagerReview_WithoutCallingGateway()
+    public async Task CreateRefundAsync_CreatesPending_WithoutCallingGatewayInsideTicketTransaction()
     {
         var returns = new Mock<IReturnRepository>();
         returns.Setup(r => r.GetRefundByIdempotencyKeyAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
@@ -32,8 +32,7 @@ public class RefundServiceTests
         var refund = await service.CreateRefundAsync(
             ticket, 100_000m, RefundMethod.BankTransfer, "test", CancellationToken.None);
 
-        Assert.Equal(RefundStatus.ManagerReview, refund.Status);
-        Assert.Equal("manual", refund.Gateway);
+        Assert.Equal(RefundStatus.Pending, refund.Status);
         Assert.Same(refund, ticket.Refund);
         gateway.Verify(g => g.RefundAsync(It.IsAny<RefundRequest>(), It.IsAny<CancellationToken>()), Times.Never);
     }
