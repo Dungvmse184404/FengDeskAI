@@ -83,6 +83,8 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .Include(p => p.Items)
             .Include(p => p.Images)
             .Include(p => p.Models3D)
+            // Store: chỉ để lấy Name cho thẻ sản phẩm ("bán bởi ..."). Quan hệ 1-1 nên không nhân dòng.
+            .Include(p => p.Store)
             .ToListAsync(ct);
 
         return (items, total);

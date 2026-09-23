@@ -359,7 +359,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 : ElementDirection.PersonalTargetOf(ctx.AdjustedIdeal, mine2, ctx.PersonalWeight),
             Components: BuildComponents(
                 ctx, policy, product, normalizedGap, gapScore, personalScore, destiny, occupation, occupationScore,
-                needCover, avoidHit),
+                needCover, avoidHit, ruleScoreVector),
             Penalties: BuildPenalties(
                 ctx, userPenalty, userPenaltyCode, userPenaltyLabel, userPenaltyReason,
                 userPenaltyParam, userPenaltyFactor, userPenaltyFactorLabel,
@@ -390,7 +390,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         ScoringContext ctx, PlacementPolicy policy, ProductFacts product,
         ElementVector normalizedGap, decimal gapScore, decimal? personalScore, FengShuiElement? destiny,
         OccupationAxis? occupation, decimal? occupationScore,
-        decimal? needCover = null, decimal? avoidHit = null)
+        decimal? needCover = null, decimal? avoidHit = null, ElementVector? ruleScore = null)
     {
         decimal wo = occupation?.Weight ?? 0m;
         var components = new List<ScoreComponent>();
@@ -403,14 +403,16 @@ public sealed class RecommendationScorer : IRecommendationScorer
             // Σ contribution = (1 − Wo)·(needCover − avoidHit) = (1 − Wo)·gapScore.
             decimal cover = needCover ?? gapScore;
             components.Add(new ScoreComponent(
-                ScoreComponentCodes.PersonalNeedScore, "Đáp ứng hành bạn cần",
+                ScoreComponentCodes.PersonalNeedScore,
+                cover > 0m ? "Đáp ứng hành bạn cần" : "Chưa đáp ứng hành bạn cần",
                 Value: cover, Weight: 1m - wo, Contribution: (1m - wo) * cover,
                 ReasonVi: DescribeNeedCover(normalizedGap, product.Vector)));
 
             if (ctx.PersonalAvoid.Count > 0 && avoidHit is { } hit)
             {
                 components.Add(new ScoreComponent(
-                    ScoreComponentCodes.PersonalAvoidScore, "Mang hành bạn nên tránh",
+                    ScoreComponentCodes.PersonalAvoidScore,
+                    hit > 0m ? "Mang hành bạn nên tránh" : "Không mang hành bạn nên tránh",
                     Value: -hit, Weight: 1m - wo, Contribution: -(1m - wo) * hit,
                     ReasonVi: DescribeAvoidHit(ctx.PersonalAvoid, product.Vector)));
             }
@@ -419,19 +421,25 @@ public sealed class RecommendationScorer : IRecommendationScorer
         {
             decimal wp = personalScore is null ? 0m : ctx.PersonalWeight;
             components.Add(new ScoreComponent(
-                ScoreComponentCodes.GapScore, "Khớp nhu cầu của phòng",
+                ScoreComponentCodes.GapScore, SignedLabel(gapScore, "nhu cầu của phòng"),
                 Value: gapScore, Weight: 1m - wp - wo, Contribution: (1m - wp - wo) * gapScore,
                 ReasonVi: DescribeVectorMatch(
-                    normalizedGap, product.Vector, "hành phòng đang thiếu", "hành phòng đã thừa")));
+                    normalizedGap, product.Vector, "hành phòng đang thiếu", "hành phòng đã thừa", gapScore)));
 
             if (personalScore is { } ps && destiny is { } mine)
             {
                 var relation = FengShuiCalculator.GetRelation(mine, product.Vector.Dominant());
                 components.Add(new ScoreComponent(
-                    ScoreComponentCodes.PersonalScore, "Hợp bản mệnh của bạn",
+                    ScoreComponentCodes.PersonalScore, SignedLabel(ps, "bản mệnh của bạn"),
                     Value: ps, Weight: wp, Contribution: wp * ps,
-                    ReasonVi: $"Hành trội {product.Vector.Dominant()} của sản phẩm {RelationVi(relation)} "
-                        + $"bản mệnh {mine} của bạn."));
+                    // Câu quan hệ (tương sinh/bị khắc…) đứng một mình dễ ngược dấu với con số: hành trội có
+                    // thể bị khắc mà tổng vẫn dương nhờ các hành còn lại. Nêu phần khớp/lệch trước, quan hệ sau.
+                    ReasonVi: (ruleScore is { } r
+                        ? DescribeVectorMatch(r, product.Vector, "hành hợp bản mệnh của bạn",
+                            "hành chưa hợp bản mệnh của bạn", ps) + " "
+                        : "")
+                        + $"Hành trội {ElementSemantics.ElementName(product.Vector.Dominant())} "
+                        + $"{RelationVi(relation)} bản mệnh {ElementSemantics.ElementName(mine)}."));
             }
         }
 
@@ -439,15 +447,25 @@ public sealed class RecommendationScorer : IRecommendationScorer
         if (occupation is { } axis && occupationScore is { } os)
         {
             components.Add(new ScoreComponent(
-                ScoreComponentCodes.OccupationScore, $"Hợp nghề {axis.NameVi}",
+                ScoreComponentCodes.OccupationScore, SignedLabel(os, $"nghề {axis.NameVi}"),
                 Value: os, Weight: wo, Contribution: wo * os,
                 ReasonVi: DescribeVectorMatch(
-                    axis.Direction, product.Vector, "hành nghề bạn cần", "hành nghề bạn nên tránh")
+                    axis.Direction, product.Vector, "hành nghề bạn cần", "hành nghề bạn nên tránh", os)
                     + ClampNoteVi(axis, destiny)));
         }
 
         return components;
     }
+
+    /// <summary>
+    /// Nhãn dòng waterfall phải ĐỒNG DẤU với con số của nó: "Hợp nhu cầu của phòng" mà hiện −0.093 đỏ thì
+    /// người đọc hiểu ngược. Ba mức theo dấu của <paramref name="value"/>; ngưỡng 0.005 = chỗ số hiển thị
+    /// (3 chữ số) đã làm tròn về 0.000 nên nói "hợp"/"chưa hợp" đều sai.
+    /// </summary>
+    private static string SignedLabel(decimal value, string subject)
+        => value > 0.005m ? $"Hợp {subject}"
+         : value < -0.005m ? $"Chưa hợp {subject}"
+         : $"Trung tính với {subject}";
 
     /// <summary>
     /// Phần nghề KHÔNG kéo được: các hành nghề muốn nâng nhưng khắc mệnh, đã bị chặn về 0 (ADR §3.2).
@@ -509,22 +527,40 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 vibeCode == ScoringParamCodes.VibeUnknownPenalty ? ctx.Params.VibeUnknownPenalty : ctx.Params.VibeMismatchPenalty),
         };
 
-    /// <summary>Câu giải thích chung cho "vector mục tiêu × vector sản phẩm": nêu đúng hành đã khớp.</summary>
+    /// <summary>
+    /// Câu giải thích chung cho "vector mục tiêu × vector sản phẩm": nêu đúng hành đã khớp.
+    ///
+    /// <para>
+    /// <paramref name="score"/> quyết định câu dẫn. Trước đây hàm luôn kể phần khớp trước, nên một dòng
+    /// tổng ÂM vẫn mở đầu bằng "đúng hành phòng đang thiếu" — đọc ngược hẳn con số đỏ bên cạnh. Khi tổng
+    /// âm thì phần lệch mới là ý chính; phần khớp (nếu có) nói sau ở dạng "có bù … nhưng chưa đủ".
+    /// </para>
+    /// </summary>
     internal static string DescribeVectorMatch(
-        ElementVector direction, ElementVector productVector, string wantedLabel, string unwantedLabel)
+        ElementVector direction, ElementVector productVector, string wantedLabel, string unwantedLabel,
+        decimal? score = null)
     {
         var hit = direction.Enumerate()
             .Where(x => x.Value > 0m && productVector[x.Element] > 0m)
             .OrderByDescending(x => x.Value * productVector[x.Element])
             .Take(2).Select(x => $"{ElementSemantics.ElementName(x.Element)} ({x.Value:+0.00;-0.00})").ToList();
-
-        if (hit.Count > 0)
-            return $"Sản phẩm cấp {string.Join(" và ", hit)} - đúng {wantedLabel}.";
-
         var miss = direction.Enumerate()
             .Where(x => x.Value < 0m && productVector[x.Element] > 0m)
             .OrderBy(x => x.Value)
             .Take(2).Select(x => $"{ElementSemantics.ElementName(x.Element)} ({x.Value:+0.00;-0.00})").ToList();
+
+        // Tổng âm ⇒ kể phần lệch trước. Không truyền score thì giữ nguyên nếp cũ (ưu tiên phần khớp).
+        if (score is < -0.005m && miss.Count > 0)
+            return $"Sản phẩm cấp {string.Join(" và ", miss)} - {unwantedLabel}"
+                 + (hit.Count > 0 ? $"; có bù {string.Join(" và ", hit)} nhưng chưa đủ." : ".");
+
+        if (hit.Count > 0)
+        {
+            var text = $"Sản phẩm cấp {string.Join(" và ", hit)} - đúng {wantedLabel}";
+            return miss.Count > 0 && score is < -0.005m
+                ? $"{text}, nhưng cũng mang {string.Join(" và ", miss)}."
+                : $"{text}.";
+        }
 
         return miss.Count > 0
             ? $"Sản phẩm cấp {string.Join(" và ", miss)} - {unwantedLabel}."

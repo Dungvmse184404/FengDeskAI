@@ -31,6 +31,16 @@ jobs:
             cd /opt/fengdeskai/backend
             git fetch origin main
             git reset --hard origin/main
-            docker compose up -d --build
+
+            # THỨ TỰ QUAN TRỌNG: build → migrate → mới swap container.
+            # Trước đây `up -d --build` chạy TRƯỚC migrate, nên có một khoảng vài phút API mới đã nhận
+            # traffic trong khi DB chưa có cột mới ⇒ mọi truy vấn chạm bảng đó trả 500 (đúng kiểu sự cố
+            # 20/09). Migrate trước thì API CŨ vẫn phục vụ bình thường trong lúc DB được nâng.
+            #
+            # Chỉ an toàn với migration CỘNG THÊM (thêm cột/bảng/index) — code cũ không biết tới cột mới
+            # nên không sao. Migration XOÁ cột/đổi kiểu phải tách hai lần deploy (expand → contract),
+            # nếu không code cũ chết ngay khi migrate xong.
+            docker compose build
             docker compose run --rm migrate
+            docker compose up -d
             docker image prune -f

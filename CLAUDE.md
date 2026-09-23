@@ -153,7 +153,7 @@ Connection string tìm theo thứ tự: biến môi trường `ConnectionStrings
 - **Ca test có tác dụng phụ lên phiên đăng nhập** (thứ làm đổi `TokenVersion`: tạo cửa hàng, khóa user, đổi role, thu hồi phiên) phải dùng `ScenarioUsers.CreateAsync` — nhắm vào user mẫu dùng chung sẽ làm token của role đó chết và kéo mọi ca chạy sau đỏ theo.
 - `TestDatabaseGuard` chặn cứng việc chạy test vào DB từ xa (Supabase/Railway). **Đừng gỡ.**
 - Thêm tích hợp ngoài mới → phải thêm fake trong `ApiTestFactory`, không thì test gọi ra dịch vụ thật.
-- CI: `.github/workflows/test.yml` chạy trên mọi PR/push; `deploy.yml` chạy test rồi deploy với `if: always()` — **test đỏ KHÔNG chặn deploy** (quyết định 2026-09-20: deploy bị skip âm thầm từng làm server chạy bản cũ trên DB đã nâng ⇒ prod 500). Test đỏ là việc phải sửa ngay sau đó, không phải cửa khoá; nhìn kết quả job `test` ngay cạnh lần deploy trên trang Actions.
+- CI: `.github/workflows/test.yml` chạy trên mọi PR/push; `deploy.yml` deploy theo thứ tự **build → migrate → swap container** (24/09/2026): migrate phải xong TRƯỚC khi API mới nhận traffic, nếu không có một khoảng code mới chạy trên DB cũ ⇒ 500 hàng loạt. Thứ tự này chỉ an toàn với migration **cộng thêm**; migration xoá cột/đổi kiểu phải tách hai lần deploy (expand → contract). Deploy chạy với `if: always()` — **test đỏ KHÔNG chặn deploy** (quyết định 2026-09-20: deploy bị skip âm thầm từng làm server chạy bản cũ trên DB đã nâng ⇒ prod 500). Test đỏ là việc phải sửa ngay sau đó, không phải cửa khoá; nhìn kết quả job `test` ngay cạnh lần deploy trên trang Actions.
 
 ## Chưa làm (đừng giả định đã có)
 

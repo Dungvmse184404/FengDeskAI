@@ -49,7 +49,7 @@ Tìm/lọc sản phẩm. Query (`ProductQueryParams` kế thừa `PageRequest`):
 ```json
 {
   "items": [{
-    "id": "guid", "gardenStoreId": "guid", "name": "...",
+    "id": "guid", "gardenStoreId": "guid", "storeName": "Vườn Phong Thủy Demo", "name": "...",
     "isActive": true, "minPrice": 120000, "primaryImageUrl": "https://...",
     "items": [{ "id": "guid", "name": "M", "price": 120000, "stock": 8, "sku": "SKU-1",
                 "weightGram": 500, "lengthCm": 10, "widthCm": 10, "heightCm": 10 }]
@@ -238,6 +238,12 @@ Không phải nhãn hiển thị: **enum này quyết định engine chấm đi�
 | **`Consumable`** | Hàng tiêu hao — nhang, nến, muối | ❌ **không vào luồng nào** | — |
 
 > `Consumable` vẫn **tìm và mua bình thường** qua `GET /api/products`, chỉ không được engine gợi ý.
+
+> **FE khai ở đâu** (23/09/2026): ô "Cách dùng" trong khối *Cách dùng, vibe & kích thước* — trang tạo sản
+> phẩm (`CreateProductPage`, dùng chung cho vendor `/manager/products/new` và admin `/admin/products/new`)
+> và tab phong thủy của modal sửa. Trước đó FE không gửi `placement` nên **mọi sản phẩm vendor tạo đều là
+> `Desk`** — vòng tay bị chấm như đồ để bàn. Khi sửa phong thủy phải gửi lại `placement`, thiếu là BE
+> ghi về `Desk`.
 
 ⚠️ **`Category` và `Placement` là hai trục khác nhau, không phản chiếu nhau.** `Category` trả lời *"vật này LÀ gì"* (taxonomy để khách duyệt); `Placement` trả lời *"dùng ở đâu → engine chấm thế nào"*. **Không** tạo category kiểu "Vật phẩm mang theo người" — vòng tay vẫn thuộc category "Trang sức phong thủy" và có `placement = Carry`.
 

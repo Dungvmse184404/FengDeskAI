@@ -33,6 +33,12 @@ public class Delivery : BaseEntity
     public DateTime? AssignedAt { get; set; }
     public DateTime? ShippedAt { get; set; }
     public DateTime? DeliveredAt { get; set; }
+
+    /// <summary>
+    /// Đã cộng tiền hàng vào số dư chủ vườn lúc nào (null = chưa). Cờ này là thứ DUY NHẤT chặn cộng hai
+    /// lần: worker quét lại mỗi chu kỳ, không có mốc này thì mỗi lượt quét lại cộng thêm một lần nữa.
+    /// </summary>
+    public DateTime? PayoutCreditedAt { get; set; }
     public DateTime? EstimatedDeliveryDate { get; set; }
 
     public Order Order { get; set; } = null!;

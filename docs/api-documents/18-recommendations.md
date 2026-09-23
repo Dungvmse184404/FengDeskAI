@@ -26,6 +26,7 @@ Có **hai luồng gợi ý** tách biệt, chọn theo `ProductPlacement` của 
 |--------|------|-------|-------|
 | POST | `/api/recommendations` | Authenticated | Tạo phiên gợi ý **cho một workspace** |
 | POST | `/api/recommendations/personal` | Authenticated | Tạo phiên gợi ý **vật phẩm mang theo người** |
+| GET | `/api/recommendations/preview` | Authenticated | Gợi ý cho một workspace **không AI, không lưu phiên** (trang hồ sơ không gian) |
 | GET | `/api/recommendations/{id}` | Authenticated | Lấy lại phiên gợi ý đã lưu (cả hai loại) |
 | GET | `/api/recommendations/fit` | Authenticated | Độ phù hợp của 1 sản phẩm × 1 workspace (trang chi tiết sản phẩm) |
 | GET | `/api/recommendations/fit/personal` | Authenticated | Độ phù hợp của 1 sản phẩm với **bản mệnh** user — không cần workspace (vật mang theo người) |
@@ -113,7 +114,7 @@ Vector mục tiêu là **thứ NGƯỜI đang cần**, không phải phòng:
 "breakdown": {
   "formulaVersion": "3.2", "target": "WorkspaceGap", "placement": "Living", "displayPercent": 90,
   "components": [
-    { "code": "GAP_SCORE",      "labelVi": "Khớp nhu cầu của phòng", "value": 0.600, "weight": 0.50, "contribution": 0.300, "reasonVi": "…" },
+    { "code": "GAP_SCORE",      "labelVi": "Hợp nhu cầu của phòng", "value": 0.600, "weight": 0.50, "contribution": 0.300, "reasonVi": "…" },
     { "code": "PERSONAL_SCORE", "labelVi": "Hợp bản mệnh của bạn",   "value": 1.000, "weight": 0.50, "contribution": 0.500, "reasonVi": "…" }
   ],
   "penalties": [                         // paramValue × factor = value (factor null = trừ nguyên mức) — FE in công thức từ 3 số này
@@ -166,6 +167,11 @@ chúng, còn `/recommendations` và `/recommendations/fit` thì không — cùng
 
 ⚠️ Chỉ hàng **đã giao**. Hàng đang giao chỉ vào `previewCurrent` (nét đứt trên radar).
 
+> **Nhãn `labelVi` đổi theo DẤU của `value`** (23/09/2026): `> 0.005` → "Hợp …", `< -0.005` → "Chưa hợp …",
+> còn lại → "Trung tính với …" (`RecommendationScorer.SignedLabel`). Nhánh Carry: `PERSONAL_NEED_SCORE` →
+> "Đáp ứng / Chưa đáp ứng hành bạn cần", `PERSONAL_AVOID_SCORE` → "Mang / Không mang hành bạn nên tránh".
+> `reasonVi` cũng đảo câu dẫn khi tổng âm. **Đừng so khớp nhãn bằng chuỗi cố định** — dùng `code`.
+
 ⚠️ `formulaVersion` của phiên mới là **`"3.6"`** (3.5 = trần phiếu tag `TAG_VOTES_CAP` trong `current`, thêm
 `tagVotesScale`; 3.6 = luồng Carry đo `Σ min(n̂,p) − Σ_{kỵ} p` thay `n̂·p`, thêm `personalAvoidElements` và dòng
 `PERSONAL_AVOID_SCORE`). Điểm của hai phiên bản công thức KHÔNG so sánh trực tiếp được với nhau.
@@ -182,7 +188,7 @@ Khi trục nghề bật, `components[]` có thêm dòng và breakdown trả thê
 
 ```json
 "components": [
-  { "code": "GAP_SCORE",        "labelVi": "Khớp nhu cầu của phòng", "value": 0.60, "weight": 0.30, "contribution": 0.18, "reasonVi": "…" },
+  { "code": "GAP_SCORE",        "labelVi": "Hợp nhu cầu của phòng", "value": 0.60, "weight": 0.30, "contribution": 0.18, "reasonVi": "…" },
   { "code": "PERSONAL_SCORE",   "labelVi": "Hợp bản mệnh của bạn",   "value": 1.00, "weight": 0.50, "contribution": 0.50, "reasonVi": "…" },
   { "code": "OCCUPATION_SCORE", "labelVi": "Hợp nghề Tài chính / Kế toán", "value": 0.75, "weight": 0.20, "contribution": 0.15,
     "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề bạn cần." }
@@ -267,6 +273,20 @@ Gợi ý vật phẩm **mang theo người** — không cần workspace.
 | Có `dateOfBirth`, **chưa có** `birthTime` | Chấm theo **Nạp Âm**, `personalTarget.note` nhắc bổ sung giờ sinh |
 
 > Phiên cá nhân **không gọi AI microservice** diễn giải → `status = "Scored"`, `summary = null`. LLM chat tự diễn giải từ `matchFacts` / `cautionFacts`.
+
+## GET `/api/recommendations/preview?workspaceProfileId={guid}&topN={int}&aspiration={enum}`
+
+Cùng engine, cùng thứ hạng với `POST /api/recommendations`, nhưng **không gọi AI diễn giải** và **không lưu phiên** — dành cho màn hình gọi mỗi lần mở (trang hồ sơ không gian hiện danh sách "sản phẩm đề xuất"). Muốn có `explanation`/`summary` của AI và một phiên tra cứu lại được thì dùng `POST`.
+
+| Query param | Ghi chú |
+|---|---|
+| `workspaceProfileId` | **Bắt buộc.** Workspace phải thuộc user hiện tại, không thì `404` |
+| `topN` | Mặc định 8, kẹp 1..20 |
+| `aspiration` | Như `POST` — bỏ trống = không lọc theo mục tiêu |
+
+**Response `data`** = `RecommendationResponse` với hai khác biệt: `id` = `00000000-0000-0000-0000-000000000000` (không có phiên nào được lưu, không `GET /{id}` lại được) và `items[].explanation` = `null`. `status` = `Scored`.
+
+Trả `422` như `POST` khi không còn ứng viên nào sau lọc.
 
 ## GET `/api/recommendations/{id}`
 

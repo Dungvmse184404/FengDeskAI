@@ -28,6 +28,10 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.Property(d => d.AssignedAt).HasColumnName("assigned_at");
         builder.Property(d => d.ShippedAt).HasColumnName("shipped_at");
         builder.Property(d => d.DeliveredAt).HasColumnName("delivered_at");
+        builder.Property(d => d.PayoutCreditedAt).HasColumnName("payout_credited_at");
+        // Worker quét "đã giao, quá hạn giữ, chưa cộng tiền" mỗi chu kỳ ⇒ index đúng bộ lọc đó.
+        builder.HasIndex(d => new { d.Status, d.PayoutCreditedAt, d.DeliveredAt })
+            .HasDatabaseName("ix_deliveries_payout_scan");
         builder.Property(d => d.EstimatedDeliveryDate).HasColumnName("estimated_delivery_date");
 
         builder.Property(d => d.CreatedAt).HasColumnName("created_at");

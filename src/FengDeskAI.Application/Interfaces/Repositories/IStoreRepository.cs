@@ -1,4 +1,6 @@
 using FengDeskAI.Application.Features.Vendor.DTOs;
+using FengDeskAI.Domain.Entities.Identity;
+using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Entities.Vendor;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
@@ -17,8 +19,18 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     /// <summary>True nếu user là garden staff với assignment Accepted của store.</summary>
     Task<bool> IsAcceptedStaffAsync(Guid storeId, Guid userId, CancellationToken ct = default);
     /// <summary>Thống kê dashboard vendor: doanh thu, đơn theo trạng thái, sản phẩm, nhân viên.</summary>
-    Task<StoreStatisticsResponse> GetStatisticsAsync(Guid storeId, CancellationToken ct = default);
+    /// <param name="range"><c>week|month|quarter|year</c> — quyết định mốc chia cột doanh thu.</param>
+    Task<StoreStatisticsResponse> GetStatisticsAsync(Guid storeId, string? range = null, CancellationToken ct = default);
     /// <summary>Các store mà user đồng sở hữu (kèm Address/Owners) — cho kênh người bán.</summary>
+    /// <summary>
+    /// Delivery đã giao, đã qua khoảng giữ (<paramref name="maturedBefore"/>) và CHƯA cộng tiền.
+    /// Trả entity có tracking để worker ghi <c>PayoutCreditedAt</c>.
+    /// </summary>
+    Task<List<Delivery>> GetDeliveriesToCreditAsync(DateTime maturedBefore, CancellationToken ct = default);
+
+    /// <summary>Chủ vườn chính (<c>is_primary</c>) — người nhận tiền ở bản payout đơn giản.</summary>
+    Task<User?> GetPrimaryOwnerAsync(Guid storeId, CancellationToken ct = default);
+
     Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default);
     /// <summary>Store mà user là owner HOẶC garden staff đã Accepted — nguồn sự thật cho /stores/mine + quyền vào seller.</summary>
     Task<List<GardenStore>> GetForUserAsync(Guid userId, CancellationToken ct = default);

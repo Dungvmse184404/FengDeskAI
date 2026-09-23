@@ -60,6 +60,8 @@ public class ProductListItemResponse
 {
     public Guid Id { get; set; }
     public Guid GardenStoreId { get; set; }
+    /// <summary>Tên nhà vườn bán sản phẩm — thẻ sản phẩm cần hiện "bán bởi ai" mà không phải gọi thêm API store.</summary>
+    public string? StoreName { get; set; }
     public string Name { get; set; } = null!;
     public bool IsActive { get; set; }
     public decimal? MinPrice { get; set; }

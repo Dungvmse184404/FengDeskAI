@@ -72,6 +72,7 @@ public class CatalogMappingProfile : Profile
 
         // Product list card
         CreateMap<Product, ProductListItemResponse>()
+            .ForMember(d => d.StoreName, o => o.MapFrom(s => s.Store != null ? s.Store.Name : null))
             .ForMember(d => d.MinPrice, o => o.MapFrom(s => s.Items.Any() ? (decimal?)s.Items.Min(i => i.Price) : null))
             .ForMember(d => d.PrimaryImageUrl, o => o.MapFrom(s => s.Images.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault()))
             // Chỉ lộ model 3D khi thật sự xem được — cùng điều kiện với filter HasModel3D ở repository.

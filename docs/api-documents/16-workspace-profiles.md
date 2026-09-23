@@ -73,6 +73,8 @@ Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / 
 | PUT | `/api/workspace/{id}/placements` | Authenticated | Đặt / chuyển sản phẩm sang phòng này (idempotent) |
 | DELETE | `/api/workspace/{id}/placements/{orderItemId}` | Authenticated | Gỡ sản phẩm khỏi phòng |
 
+> Chỉ sản phẩm `ProductPlacement` = `Desk` \| `Living` mới vào danh sách `purchasable` (cùng tập với luồng gợi ý phòng): vật mang theo người (`Carry`) chấm theo bản mệnh chứ không đổi vector phòng, hàng tiêu hao (`Consumable`) không vào luồng nào. `PUT placements` xác thực qua đúng danh sách này nên cũng từ chối hai loại đó.
+>
 > `element-analysis` tính **lúc đọc**, không lưu DB: `current`/`gap` chỉ tính hàng **đã giao**; `previewCurrent`/`previewGap` tính cả hàng **đang giao**.
 
 ---

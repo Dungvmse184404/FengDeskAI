@@ -2,6 +2,9 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FengDeskAI.ApiTests.Infrastructure;
+using FengDeskAI.Application.Features.Returns.DTOs;
+using FengDeskAI.Application.Features.Returns.Services;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -201,6 +204,81 @@ public sealed class ReturnFlowTests
         var status = ReadStatus(body);
         Assert.True(status is "Refunding" or "Completed",
             $"Mong đợi Refunding/Completed, nhận {status}");
+    }
+
+    [Fact(DisplayName = "RMA-11b [Normal] A physical return walks the whole path and lands in the store statistics")]
+    public async Task PhysicalReturn_FullPath_ShowsUpAsRefunded()
+    {
+        // Đường HÀNG VẬT LÝ, khác hẳn nhánh cây chết (PlantHealth) mà các ca khác đi: phải qua
+        // ship-back → confirm-received thì mới tới Reviewing. Đây đúng chuỗi mà người dùng thao tác tay
+        // trên giao diện, và cũng là chuỗi từng tắc ở bước khách khai mã vận đơn.
+        var order = await DeliveredOrderScenario.CreateAsync(_fixture);
+        var customer = _fixture.ClientFor(TestRole.Customer);
+        var staff = _fixture.ClientFor(TestRole.Staff);
+
+        var create = await customer.PostAsJsonAsync("/api/returns", new
+        {
+            deliveryId = order.DeliveryId,
+            type = "Refund",
+            reason = "WrongItem",
+            reasonDetail = "Giao sai mẫu, cần trả lại hàng.",
+            items = new[] { new { orderItemId = order.OrderItemId, quantity = 1 } },
+            imageUrls = new[] { EvidenceImageUrl },
+            bankAccountName = "KHACH KIEM THU",
+            bankAccountNumber = "0123456789",
+            bankName = "Ngân hàng kiểm thử",
+        });
+        Assert.True(create.IsSuccessStatusCode, await Describe(create));
+        var ticketId = (await ApiEnvelope.DataAsync(create)).GetProperty("id").GetGuid();
+
+        // Staff tiếp nhận: hàng vật lý ⇒ ticket sang ReturnInTransit, chờ khách gửi hàng về.
+        var accept = await staff.PostAsync($"/api/returns/{ticketId}/accept", null);
+        Assert.True(accept.IsSuccessStatusCode, await Describe(accept));
+        Assert.Equal("ReturnInTransit", ReadStatus(await accept.Content.ReadAsStringAsync()));
+
+        // Vendor bấm "đã nhận hàng" TRƯỚC khi khách khai mã vận đơn ⇒ 409. Giữ ca này vì đó đúng là lỗi
+        // người dùng gặp khi giao diện còn thiếu nút khai mã.
+        var tooEarly = await _fixture.ClientFor(TestRole.GardenOwner)
+            .PostAsync($"/api/returns/{ticketId}/confirm-received", null);
+        Assert.Equal(HttpStatusCode.Conflict, tooEarly.StatusCode);
+
+        var shipBack = await customer.PostAsJsonAsync($"/api/returns/{ticketId}/ship-back",
+            new { trackingCode = "GHN-TEST-0001" });
+        Assert.True(shipBack.IsSuccessStatusCode, await Describe(shipBack));
+
+        var received = await _fixture.ClientFor(TestRole.GardenOwner)
+            .PostAsync($"/api/returns/{ticketId}/confirm-received", null);
+        Assert.True(received.IsSuccessStatusCode, await Describe(received));
+        Assert.Equal("Reviewing", ReadStatus(await received.Content.ReadAsStringAsync()));
+
+        var approve = await staff.PostAsJsonAsync($"/api/returns/{ticketId}/approve-refund",
+            new { restock = true, note = "Hàng về đủ, hoàn tiền." });
+        Assert.True(approve.IsSuccessStatusCode, await Describe(approve));
+
+        // Bước cuối phải gọi thẳng service: xem ghi chú ở RefundedReturnScenario (worker bị gỡ, endpoint
+        // /api/dev chỉ mở ở Development, webhook cần chữ ký hợp lệ).
+        var refundId = (await ApiEnvelope.DataAsync(await staff.GetAsync($"/api/returns/{ticketId}")))
+            .GetProperty("refund").GetProperty("id").GetGuid();
+        await _fixture.WithScopeAsync(async sp =>
+        {
+            var manager = new RmaActor(_fixture.UserId(TestRole.Manager),
+                IsStaff: false, IsManager: true, IsAdmin: false, IsGardenOwner: false);
+            var done = await sp.GetRequiredService<IRefundService>()
+                .SimulateResultAsync(refundId, success: true, manager);
+            Assert.True(done.IsSuccess, $"Không đưa được lệnh hoàn tiền về Completed: {done.Message}");
+        });
+
+        // Terminal của ticket là `Completed` (enum không có "Refunded" — hoàn tiền xong là hoàn tất ticket).
+        var detail = await customer.GetAsync($"/api/returns/{ticketId}");
+        Assert.Equal("Completed", ReadStatus(await detail.Content.ReadAsStringAsync()));
+
+        // Và điều mà người dùng thật sự trông đợi: tiền hoàn HIỆN RA trong thống kê cửa hàng.
+        var stats = await ApiEnvelope.DataAsync(await _fixture.ClientFor(TestRole.GardenOwner)
+            .GetAsync($"/api/stores/{order.StoreId}/statistics"));
+        Assert.Contains(stats.GetProperty("itemsByStatus").EnumerateArray(),
+            r => r.GetProperty("status").GetString() == "Refunded");
+        Assert.Contains(stats.GetProperty("revenueSeries").EnumerateArray(),
+            b => b.GetProperty("refunded").GetDecimal() > 0m);
     }
 
     // ===================== Phân quyền =====================

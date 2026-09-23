@@ -291,7 +291,9 @@ public class RefundService : IRefundService
     public async Task<IServiceResult<RefundResponse>> SimulateResultAsync(
         Guid refundId, bool success, RmaActor actor, CancellationToken ct = default)
     {
-        if (!actor.IsAdmin) return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManagerOnly);
+        // Manager LẪN Admin, đồng bộ với mọi hành động refund khác (CanManageRefund). Trước đây chỗ này
+        // đòi riêng Admin nhưng vẫn trả thông điệp "ManagerOnly" ⇒ Manager bị 403 kèm câu nói ngược.
+        if (!actor.CanManageRefund) return Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManagerOnly);
         var refund = await _uow.Returns.GetRefundByIdAsync(refundId, ct);
         if (refund is null) return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.RefundNotFound);
         if (refund.Status is RefundStatus.Completed or RefundStatus.Cancelled) return Ok(refund);
