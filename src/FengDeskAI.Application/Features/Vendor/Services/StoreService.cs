@@ -532,7 +532,7 @@ public class StoreService : IStoreService
         });
     }
 
-    public async Task<IServiceResult<StoreStatisticsResponse>> GetStatisticsAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default)
+    public async Task<IServiceResult<StoreStatisticsResponse>> GetStatisticsAsync(Guid id, Guid actorUserId, bool isAdmin, string? range = null, CancellationToken ct = default)
     {
         if (!await _uow.Stores.ExistsAsync(id, ct))
             return ServiceResult<StoreStatisticsResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
@@ -540,7 +540,7 @@ public class StoreService : IStoreService
         if (!await IsOwnerOrAdminAsync(id, actorUserId, isAdmin, ct))
             return ServiceResult<StoreStatisticsResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.StatisticsForbidden);
 
-        return ServiceResult<StoreStatisticsResponse>.Success(await _uow.Stores.GetStatisticsAsync(id, ct));
+        return ServiceResult<StoreStatisticsResponse>.Success(await _uow.Stores.GetStatisticsAsync(id, range, ct));
     }
 
     private async Task<bool> IsOwnerOrAdminAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)

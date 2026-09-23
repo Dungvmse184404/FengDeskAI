@@ -8,7 +8,7 @@ namespace FengDeskAI.WebAPI.Controllers;
 
 /// <summary>[CHỈ DEVELOPMENT] Giả lập callback refund để FE test trọn luồng khi PayOS chưa có refund API thật.</summary>
 [Route("api/dev/refunds")]
-[Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+[Authorize]
 public sealed class DevRefundsController : ApiControllerBase
 {
     private readonly IRefundService _service;

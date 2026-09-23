@@ -1,4 +1,4 @@
-using FengDeskAI.Application.Features.Workspace.DTOs;
+﻿using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -67,11 +67,19 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
             Domain.Enums.Sales.DeliveryStatus.Returned,
             Domain.Enums.Sales.DeliveryStatus.DeliveryFailed,
         };
+        // Chỉ đồ ĐẶT TRONG PHÒNG mới đổi vector phòng: vật mang theo người (Carry) chấm theo bản mệnh,
+        // hàng tiêu hao (Consumable) không vào luồng nào. Cùng tập với `RecommendationService.WorkspacePlacements`.
+        var placeableInRoom = new[]
+        {
+            Domain.Enums.Catalog.ProductPlacement.Desk,
+            Domain.Enums.Catalog.ProductPlacement.Living,
+        };
 
         var items = await _context.Set<Domain.Entities.Sales.OrderItem>()
             .AsNoTracking()
             .Where(i => i.Order.CustomerId == userId
                         && okOrderStatuses.Contains(i.Order.Status)
+                        && placeableInRoom.Contains(i.ProductItem.Product.Placement)
                         && (i.Delivery == null || !excludedDelivery.Contains(i.Delivery!.Status)))
             .Select(i => new
             {

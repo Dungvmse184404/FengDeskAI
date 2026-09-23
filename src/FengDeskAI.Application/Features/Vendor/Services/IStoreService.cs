@@ -50,5 +50,5 @@ public interface IStoreService
     /// <summary>Vai trò của user hiện tại đối với store (owner/staff) — FE dùng để ẩn/hiện tab.</summary>
     Task<IServiceResult<StoreMembershipResponse>> GetMyMembershipAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default);
     /// <summary>Thống kê dashboard vendor. Chỉ owner/admin — staff bị 403.</summary>
-    Task<IServiceResult<StoreStatisticsResponse>> GetStatisticsAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
+    Task<IServiceResult<StoreStatisticsResponse>> GetStatisticsAsync(Guid id, Guid actorUserId, bool isAdmin, string? range = null, CancellationToken ct = default);
 }

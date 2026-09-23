@@ -453,6 +453,10 @@ public sealed class StoreFlowTests
         Assert.Equal(0m, data.GetProperty("totalRevenue").GetDecimal());
         Assert.Equal(0, data.GetProperty("totalDeliveries").GetInt32());
         Assert.Equal(0, data.GetProperty("productCount").GetInt32());
+        // Đối soát: chưa bán gì thì không có tiền ở bất kỳ ngăn nào, và số ngày giữ phải nói ra được.
+        Assert.Equal(0m, data.GetProperty("availableForPayoutValue").GetDecimal());
+        Assert.Equal(0m, data.GetProperty("pendingClearanceValue").GetDecimal());
+        Assert.True(data.GetProperty("payoutHoldDays").GetInt32() > 0);
     }
 
     [Fact(DisplayName = "STORE-30 [Normal] A delivered order shows up in the store statistics")]
@@ -468,6 +472,108 @@ public sealed class StoreFlowTests
         Assert.True(data.GetProperty("totalRevenue").GetDecimal() > 0m,
             "Đơn đã giao phải được tính vào doanh thu.");
         Assert.True(data.GetProperty("totalDeliveries").GetInt32() >= 1);
+    }
+
+    [Fact(DisplayName = "STORE-30b [Normal] Unfinished orders show up: unpaid online order + pending COD delivery")]
+    public async Task Statistics_UnfinishedOrders_AreCounted()
+    {
+        // Đơn PayOS chưa trả tiền: KHÔNG có delivery (chỉ sinh khi webhook báo tiền về) ⇒ trước đây store
+        // không hề thấy. Đơn COD: delivery Pending ⇒ "đang xử lý". Cả hai đều là đơn chưa hoàn thành.
+        var data = await SalesScenario.SeedAsync(_fixture, _fixture.UserId(TestRole.Customer));
+        var customer = _fixture.ClientFor(TestRole.Customer);
+        foreach (var method in new[] { "PayOS", "COD" })
+        {
+            await customer.DeleteAsync("/api/cart");
+            var add = await customer.PostAsJsonAsync("/api/cart/items",
+                new { productItemId = data.StoreA.ProductItemId, quantity = 1 });
+            Assert.True(add.IsSuccessStatusCode);
+            var checkout = await customer.PostAsJsonAsync("/api/orders",
+                new { shippingAddressId = data.ShippingAddressId, paymentMethod = method });
+            Assert.True(checkout.IsSuccessStatusCode, $"Đặt hàng {method} thất bại: {(int)checkout.StatusCode}");
+        }
+
+        var response = await _fixture.ClientFor(TestRole.GardenOwner)
+            .GetAsync($"/api/stores/{data.StoreA.StoreId}/statistics");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stats = await ApiEnvelope.DataAsync(response);
+        Assert.True(stats.GetProperty("awaitingPaymentOrders").GetInt32() >= 1,
+            "Đơn online chưa thanh toán phải được đếm là 'chờ thanh toán'.");
+        Assert.True(stats.GetProperty("awaitingPaymentValue").GetDecimal() > 0m);
+        Assert.True(stats.GetProperty("activeDeliveries").GetInt32() >= 1,
+            "Delivery COD đang Pending phải được đếm là 'đang xử lý'.");
+        Assert.True(stats.GetProperty("activeDeliveriesValue").GetDecimal() > 0m);
+
+        // Bảng "trạng thái đơn hàng" phải kê được TÊN SẢN PHẨM kèm trạng thái, không chỉ con số tổng.
+        var items = stats.GetProperty("itemsByStatus").EnumerateArray().ToList();
+        Assert.NotEmpty(items);
+        Assert.All(items, r => Assert.False(string.IsNullOrWhiteSpace(r.GetProperty("productName").GetString())));
+        // Cả đơn PayOS chưa trả lẫn đơn COD đang giao đều là "Ordered": COD thu tiền tại điểm giao nên
+        // hàng chưa tới tay khách thì chưa có đồng nào — xếp chung lớp "đã thanh toán" là nói quá.
+        Assert.Contains(items, r => r.GetProperty("status").GetString() == "Ordered"
+                                    && r.GetProperty("quantity").GetInt32() > 0);
+        Assert.DoesNotContain(items, r => r.GetProperty("status").GetString() == "Paid");
+        // Phí ship của đơn được phân bổ xuống từng dòng theo tỉ trọng tiền hàng ⇒ dòng nào cũng có cột này.
+        Assert.All(items, r => Assert.True(r.TryGetProperty("shippingFee", out _)));
+        Assert.True(stats.GetProperty("shippingFeeByStatus").TryGetProperty("Paid", out _));
+
+        // Biểu đồ: cột của mốc chứa hai đơn vừa đặt phải tách được "chưa trả tiền" khỏi "đang giao".
+        var buckets = stats.GetProperty("revenueSeries").EnumerateArray().ToList();
+        Assert.NotEmpty(buckets);
+        Assert.Contains(buckets, b => b.GetProperty("awaitingPayment").GetDecimal() > 0m
+                                      && b.GetProperty("awaitingPaymentCount").GetInt32() >= 1);
+        // COD đang giao rơi vào lớp "chưa thanh toán" của biểu đồ, nên mốc hôm nay phải cộng thêm ở đó.
+        Assert.Contains(buckets, b => b.GetProperty("awaitingPayment").GetDecimal() > 0m
+                                      && b.GetProperty("awaitingPaymentCount").GetInt32() >= 1);
+    }
+
+    [Theory(DisplayName = "STORE-30c [Normal] Revenue chart buckets follow the requested range")]
+    [InlineData("week", 7)]
+    [InlineData("year", 12)]
+    public async Task Statistics_RevenueSeries_MatchesRange(string range, int expectedBuckets)
+    {
+        var (user, storeId) = await OwnerWithStoreAsync();
+
+        var response = await ScenarioUsers.ClientFor(_fixture, user)
+            .GetAsync($"/api/stores/{storeId}/statistics?range={range}");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stats = await ApiEnvelope.DataAsync(response);
+        Assert.Equal(range, stats.GetProperty("range").GetString());
+        // Mốc rỗng vẫn phải có mặt — biểu đồ thiếu cột đọc như "ngày nào cũng có đơn".
+        Assert.Equal(expectedBuckets, stats.GetProperty("revenueSeries").GetArrayLength());
+        Assert.All(stats.GetProperty("revenueSeries").EnumerateArray(),
+            b => Assert.False(string.IsNullOrWhiteSpace(b.GetProperty("labelVi").GetString())));
+    }
+
+    [Fact(DisplayName = "STORE-30d [Abnormal] An unknown range falls back to month instead of failing")]
+    public async Task Statistics_UnknownRange_FallsBackToMonth()
+    {
+        var (user, storeId) = await OwnerWithStoreAsync();
+
+        var response = await ScenarioUsers.ClientFor(_fixture, user)
+            .GetAsync($"/api/stores/{storeId}/statistics?range=decade");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stats = await ApiEnvelope.DataAsync(response);
+        Assert.Equal("month", stats.GetProperty("range").GetString());
+    }
+
+    [Fact(DisplayName = "STORE-30e [Normal] A just-delivered order is held, not payable yet")]
+    public async Task Statistics_JustDeliveredOrder_IsPendingClearance()
+    {
+        // Giao xong hôm nay ⇒ vẫn trong khoảng giữ (PayoutPolicy.HoldDays) ⇒ nằm ở "chờ đối soát",
+        // KHÔNG được rơi vào "có thể rút" — đó là toàn bộ điểm của chính sách T+3..5.
+        var order = await DeliveredOrderScenario.CreateAsync(_fixture);
+
+        var response = await _fixture.ClientFor(TestRole.GardenOwner)
+            .GetAsync($"/api/stores/{order.StoreId}/statistics");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var stats = await ApiEnvelope.DataAsync(response);
+        Assert.True(stats.GetProperty("pendingClearanceValue").GetDecimal() > 0m,
+            "Đơn vừa giao phải nằm ở 'chờ đối soát'.");
+        Assert.Equal(0m, stats.GetProperty("availableForPayoutValue").GetDecimal());
     }
 
     [Fact(DisplayName = "STORE-31 [Abnormal] A stranger cannot read another store's statistics")]

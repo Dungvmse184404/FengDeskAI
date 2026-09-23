@@ -91,6 +91,8 @@ public static class DependencyInjection
         services.AddScoped<IReturnService, ReturnService>();
         services.AddScoped<IRefundService, RefundService>();
         services.AddScoped<IVendorLiabilityService, VendorLiabilityService>();
+        services.AddScoped<FengDeskAI.Application.Features.Vendor.Services.IPayoutCreditService,
+            FengDeskAI.Application.Features.Vendor.Services.PayoutCreditService>();
 
         // Shipping & Delivery
         services.AddScoped<IShippingService, ShippingService>();

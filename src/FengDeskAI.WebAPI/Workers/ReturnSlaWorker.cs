@@ -1,4 +1,5 @@
 using FengDeskAI.Application.Features.Returns.Services;
+using FengDeskAI.Application.Features.Vendor.Services;
 using Microsoft.Extensions.Options;
 
 namespace FengDeskAI.WebAPI.Workers;
@@ -8,6 +9,7 @@ namespace FengDeskAI.WebAPI.Workers;
 ///  1) Auto-reject ticket quá hạn bổ sung bằng chứng (NeedMoreEvidence → Rejected).
 ///  2) Auto-retry refund Failed còn lượt; hết lượt → escalate Manager (Failed → ManagerReview).
 ///  3) Auto-settle công nợ vendor quá hạn dispute (Pending → Settled).
+///  4) Cộng tiền đơn đã giao quá hạn giữ vào số dư chủ vườn (PayoutPolicy.HoldDays).
 /// Dùng IOptionsMonitor để bật/tắt qua appsettings không cần restart.
 /// </summary>
 public sealed class ReturnSlaWorker : BackgroundService
@@ -55,11 +57,14 @@ public sealed class ReturnSlaWorker : BackgroundService
                     var timedOut = await refunds.FailStaleProcessingRefundsAsync(stoppingToken);
                     var retried = await refunds.AutoProcessFailedRefundsAsync(stoppingToken);
                     var settled = await liabilities.AutoSettleOverdueAsync(stoppingToken);
+                    // Cộng tiền SAU auto-settle: công nợ chốt trước thì số dư cộng ra đã tính cả phần bồi.
+                    var payouts = scope.ServiceProvider.GetRequiredService<IPayoutCreditService>();
+                    var credited = await payouts.CreditMaturedDeliveriesAsync(stoppingToken);
 
-                    if (rejected + dispatched + timedOut + retried + settled > 0)
+                    if (rejected + dispatched + timedOut + retried + settled + credited > 0)
                         _logger.LogInformation(
-                            "ReturnSla: auto-reject={Rejected}, refund-dispatch={Dispatched}, refund-timeout={TimedOut}, refund-retry={Retried}, liability-settle={Settled}",
-                            rejected, dispatched, timedOut, retried, settled);
+                            "ReturnSla: auto-reject={Rejected}, refund-dispatch={Dispatched}, refund-timeout={TimedOut}, refund-retry={Retried}, liability-settle={Settled}, payout-credit={Credited}",
+                            rejected, dispatched, timedOut, retried, settled, credited);
                 }
                 catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
                 {

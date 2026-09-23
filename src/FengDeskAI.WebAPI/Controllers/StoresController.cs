@@ -42,10 +42,13 @@ public class StoresController : ApiControllerBase
     public async Task<IActionResult> GetMyMembership(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetMyMembershipAsync(id, CurrentUserId, IsAdmin, ct));
 
-    /// <summary>Thống kê dashboard vendor (doanh thu, đơn theo trạng thái…). Chỉ owner/admin — staff bị 403.</summary>
+    /// <summary>
+    /// Thống kê dashboard vendor (doanh thu, đơn theo trạng thái, hàng đang treo…). Chỉ owner/admin — staff bị 403.
+    /// </summary>
+    /// <param name="range">Mốc chia cột doanh thu: <c>week|month|quarter|year</c> (mặc định <c>month</c>).</param>
     [HttpGet("{id:guid}/statistics")]
-    public async Task<IActionResult> GetStatistics(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.GetStatisticsAsync(id, CurrentUserId, IsAdmin, ct));
+    public async Task<IActionResult> GetStatistics(Guid id, [FromQuery] string? range, CancellationToken ct)
+        => ToActionResult(await _service.GetStatisticsAsync(id, CurrentUserId, IsAdmin, range, ct));
 
     /// <summary>Tự mở store (self-service). Người tạo trở thành owner chính + được cấp role GardenOwner.</summary>
     [HttpPost]

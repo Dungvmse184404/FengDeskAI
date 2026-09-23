@@ -71,7 +71,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivering")]
     public async Task<IActionResult> SimulateDelivering(Guid deliveryId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Shipped, ct));
     }
 
@@ -82,7 +82,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpGet("orders/{orderId:guid}")]
     public async Task<IActionResult> GetByOrder(Guid orderId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.GetDeliveriesByOrderAsync(orderId, ct));
     }
 
@@ -102,7 +102,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("orders/{orderId:guid}/shipping/delivery-failed")]
     public async Task<IActionResult> SimulateOrderDeliveryFailed(Guid orderId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusForOrderAsync(orderId, DeliveryStatus.DeliveryFailed, ct));
     }
 
@@ -110,7 +110,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/delivered")]
     public async Task<IActionResult> ForceDelivered(Guid deliveryId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
         return await ForceOneAsync(deliveryId, ct);
     }
 
@@ -118,7 +118,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("orders/{orderId:guid}/delivered")]
     public async Task<IActionResult> ForceOrderDelivered(Guid orderId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment()) return NotFound();
+        //if (!_env.IsDevelopment()) return NotFound();
 
         var order = await _orders.GetByIdAsync(orderId, CurrentUserId, isPrivileged: true, ct);
         if (!order.IsSuccess || order.Data is null)

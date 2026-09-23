@@ -138,7 +138,23 @@ POST /api/dev/refunds/{refundId}/success
 POST /api/dev/refunds/{refundId}/failed
 ```
 
-Hai endpoint dev yêu cầu role Admin và đi qua cùng nghiệp vụ hoàn tất/thất bại với webhook.
+Hai endpoint dev yêu cầu **Manager hoặc Admin** (đồng bộ với `CanManageRefund` của mọi hành động refund
+khác) và đi qua cùng nghiệp vụ hoàn tất/thất bại với webhook.
+
+> Sửa 24/09/2026: trước đó `RefundService.SimulateResultAsync` kiểm riêng `IsAdmin` trong khi controller chỉ
+> đặt policy ở ngoài, nên Manager bị `403` kèm đúng thông điệp "ManagerOnly" — gỡ `[Authorize(AdminOnly)]` ở
+> controller không đủ, cửa chặn nằm **trong service**.
+>
+> ⚠️ Đừng "sửa" bằng cách thêm `IsGardenOwner` vào `RmaActor.CanManageRefund`: `VendorLiabilityService`
+> dùng cờ đó làm nhánh bỏ qua kiểm chủ sở hữu vườn, nên chủ vườn A sẽ đọc được công nợ của vườn B (test
+> LIAB-06 bắt đúng lỗi này).
+
+### Khách khai mã vận đơn trả hàng — bước bắt buộc
+
+`POST /api/returns/{id}/ship-back` (`{ "trackingCode": "..." }`, trạng thái `ReturnInTransit`) phải chạy
+TRƯỚC khi vendor gọi `confirm-received`; thiếu thì BE trả `409 "Khách hàng chưa khai báo mã vận đơn trả
+hàng."`. FE: nút **"Khai mã vận đơn"** trong modal chi tiết ở trang *Đơn trả hàng* của khách
+(`ProfileReturnOrder`).
 
 ## Contract FE theo trạng thái
 

@@ -68,6 +68,7 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 | [score-explainability-v3.2.md](./score-explainability-v3.2.md) | **v3.2 (ACCEPTED)** — chuẩn hoá `gapScore` về ±1.0, `PersonalConflictMode.Scaled` (L2), `ScoreBreakdown` + radar `priorityVector`, yếu tố nghề nghiệp |
 | [occupation-product-fit-v1.md](./occupation-product-fit-v1.md) | **v3.4 (IMPLEMENTED 2026-09-11)** — nghề nghiệp thành trục thứ ba N3: `d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô` (phòng) và `(1−Wo)·n̂ + Wo·ô` (Carry); hồ sơ Σ=1 seed sẵn; % theo nghề ở trang sản phẩm; gỡ N1 |
 | [personal-need-v3.6.md](./personal-need-v3.6.md) | **v3.6 (IMPLEMENTED 2026-09-20)** — luồng Carry: dụng thần có **kỵ thần** (suy từ Tứ Trụ / hành khắc mệnh), điểm = `Σ min(n̂,p) − Σ_{kỵ} p` thay tích trong ⇒ khớp hoàn hảo 100 %, gỡ trần 0.6 |
+| [vendor-payout.md](./vendor-payout.md) | **ĐANG MỞ (2026-09-23)** — giữ tiền **7 ngày** sau khi giao (`PayoutPolicy.HoldDays`, bằng cửa sổ đổi trả); qua hạn thì `PayoutCreditService` cộng thẳng vào `users.balance` của chủ vườn **primary**. Sổ cái + lệnh rút + thông tin ngân hàng **chưa có** |
 | [current-tag-votes-cap-v3.5.md](./current-tag-votes-cap-v3.5.md) | **v3.5 (IMPLEMENTED 2026-09-19)** — `TAG_VOTES_CAP = 5` chặn trần tổng phiếu tag trong `current`; `PERSONAL_WEIGHT_PRIVATE` 0.5 → 0.3, `SHARED` 0.3 → 0.2 để điểm không ngược radar |
 
 > v2 đã bị xóa (chỉ còn stub trỏ sang v3, không còn nội dung). Engine hiện tại: xem [`docs/ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md).

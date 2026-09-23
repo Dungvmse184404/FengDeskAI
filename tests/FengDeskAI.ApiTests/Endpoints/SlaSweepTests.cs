@@ -1,6 +1,8 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using FengDeskAI.ApiTests.Infrastructure;
+using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Features.Returns.DTOs;
 using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -195,6 +197,25 @@ public sealed class SlaSweepTests
         });
 
         Assert.True(response.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(response, "manager xác nhận thủ công"));
+        Assert.Equal("Completed", (await ReadRefundAsync(refundId)).GetProperty("status").GetString());
+    }
+
+    [Fact(DisplayName = "SLA-10b [Normal] A manager can drive the dev refund simulator, not just an admin")]
+    public async Task SimulateResult_AsManager_IsAllowed()
+    {
+        // Bộ giả lập refund là thứ FE dùng để chạy trọn luồng đổi/trả khi cổng chưa có API hoàn tiền thật.
+        // Nó từng đòi riêng Admin trong khi mọi hành động refund khác chỉ cần Manager ⇒ Manager bị 403
+        // kèm đúng thông điệp "ManagerOnly". Gọi thẳng service vì endpoint /api/dev chỉ mở ở Development.
+        var refundId = await PendingRefundAsync();
+        var manager = new RmaActor(
+            _fixture.UserId(TestRole.Manager), IsStaff: false, IsManager: true, IsAdmin: false, IsGardenOwner: false);
+
+        IServiceResult<RefundResponse>? result = null;
+        await _fixture.WithScopeAsync(async sp =>
+            result = await sp.GetRequiredService<IRefundService>().SimulateResultAsync(refundId, true, manager));
+
+        Assert.NotNull(result);
+        Assert.NotEqual(403, result!.StatusCode);
         Assert.Equal("Completed", (await ReadRefundAsync(refundId)).GetProperty("status").GetString());
     }
 
