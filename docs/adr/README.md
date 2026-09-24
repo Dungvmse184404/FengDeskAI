@@ -10,6 +10,7 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 |---|---|
 | [api-integration-testing.md](./api-integration-testing.md) | Bộ test API in-process + cổng chặn CI trước khi deploy VPS |
 | [authorization-hardening.md](./authorization-hardening.md) | Siết phân quyền: policy, resource-based authorization, audit log |
+| [perf-scoring-config-cache.md](./perf-scoring-config-cache.md) | Đo tốc độ site thật: ảnh 7,9MB→57KB; cache cấu hình chấm điểm (`element-analysis` 10→5 lượt hỏi DB); bật RLS cho 4 bảng anon còn **TRUNCATE** được |
 | [migration-squash-2026-09.md](./migration-squash-2026-09.md) | Gộp 43 migration đầu thành một baseline mang **id cũ** — remote chưa ở tip vẫn deploy được; quy trình lặp lại |
 
 ## Feature design (trước khi code)

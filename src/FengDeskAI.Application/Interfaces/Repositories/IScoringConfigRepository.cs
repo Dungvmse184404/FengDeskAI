@@ -42,3 +42,14 @@ public interface IScoringConfigRepository
     /// <summary>Thay toàn bộ input (màu/vật liệu/hình khối) của 1 workspace profile. Chưa commit — caller lưu qua UoW.</summary>
     Task ReplaceWorkspaceProfileInputsAsync(Guid workspaceProfileId, IEnumerable<WorkspaceProfileInput> inputs, CancellationToken ct = default);
 }
+
+/// <summary>
+/// Vứt bỏ cache cấu hình chấm điểm. Phần đọc tĩnh của <see cref="IScoringConfigRepository"/> được
+/// cache trong bộ nhớ (xem <c>CachedScoringConfigRepository</c>), nên **mọi chỗ ghi cấu hình đều
+/// phải gọi hàm này sau khi commit** — không thì màn quản trị sửa xong mà engine vẫn chấm theo số cũ
+/// cho tới khi cache hết hạn.
+/// </summary>
+public interface IScoringConfigCacheInvalidator
+{
+    void Invalidate();
+}

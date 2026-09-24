@@ -19,6 +19,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
     private readonly IGenericRepository<OccupationElementProfile> _occupationProfiles;
     private readonly IGenericRepository<User> _users;
     private readonly IUnitOfWork _uow;
+    private readonly IScoringConfigCacheInvalidator _cache;
 
     public ScoringConfigAdminService(
         IGenericRepository<ScoringParam> paramsRepo,
@@ -28,7 +29,8 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         IGenericRepository<Occupation> occupations,
         IGenericRepository<OccupationElementProfile> occupationProfiles,
         IGenericRepository<User> users,
-        IUnitOfWork uow)
+        IUnitOfWork uow,
+        IScoringConfigCacheInvalidator cache)
     {
         _params = paramsRepo;
         _inputMap = inputMap;
@@ -38,6 +40,18 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         _occupationProfiles = occupationProfiles;
         _users = users;
         _uow = uow;
+        _cache = cache;
+    }
+
+    /// <summary>
+    /// Lưu rồi VỨT cache cấu hình chấm điểm. Mọi đường ghi trong lớp này phải đi qua đây: phần đọc
+    /// tĩnh được cache trong bộ nhớ (<c>CachedScoringConfigRepository</c>), nên chỉ gọi
+    /// <c>SaveChangesAsync</c> suông là admin sửa xong mà engine vẫn chấm theo số cũ tới 10 phút.
+    /// </summary>
+    private async Task SaveAndInvalidateAsync(CancellationToken ct)
+    {
+        await _uow.SaveChangesAsync(ct);
+        _cache.Invalidate();
     }
 
     // ── scoring_params ──
@@ -68,7 +82,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
             existing.Description = request.Description;
             _params.Update(existing);
         }
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult<ScoringParamDto>.Success(
             new ScoringParamDto { Id = existing.Id, Code = existing.Code, Value = existing.Value, Description = existing.Description },
             "Lưu tham số thành công.");
@@ -126,7 +140,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         if (!string.IsNullOrWhiteSpace(request.LabelVi))
             ApplyLabelToSiblings(siblings, existing, request.LabelVi.Trim());
 
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult<ElementInputMapDto>.Success(ToDto(existing), "Lưu map ngũ hành thành công.");
     }
 
@@ -135,7 +149,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         var entity = await _inputMap.GetByIdAsync(id, ct);
         if (entity is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy map.");
         _inputMap.Remove(entity);
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult.Success("Đã xóa map.");
     }
 
@@ -233,7 +247,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
             }
         }
 
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
 
         var updated = await _inputMap.FindAsync(x => x.InputKind == kind && x.InputCode == code, ct);
         var group = updated.GroupBy(r => (r.InputKind, r.InputCode)).FirstOrDefault();
@@ -251,7 +265,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         if (rows.Count == 0) return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy tag.");
 
         foreach (var row in rows) _inputMap.Remove(row);
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
 
         // Lưu ý: workspace_profile_inputs đang trỏ tới code này sẽ không resolve ra hành nào nữa
         // → tag đó lặng lẽ mất khỏi vector hiện trạng của phòng (không lỗi). Xóa tag phổ biến cần cân nhắc.
@@ -288,7 +302,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
             existing.Delta = request.Delta;
             _modifiers.Update(existing);
         }
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult<WorkPurposeModifierDto>.Success(ToDto(existing), "Lưu modifier thành công.");
     }
 
@@ -297,7 +311,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         var entity = await _modifiers.GetByIdAsync(id, ct);
         if (entity is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy modifier.");
         _modifiers.Remove(entity);
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult.Success("Đã xóa modifier.");
     }
 
@@ -351,7 +365,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
             _occupations.Update(existing);
         }
 
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         var saved = await _uow.ScoringConfig.GetOccupationByCodeAsync(targetCode, ct);
         return ServiceResult<OccupationAdminDto>.Success(ToDto(saved!), "Lưu nghề thành công.");
     }
@@ -391,7 +405,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
                 Share = row.Share,
             }, ct);
 
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         var saved = await _uow.ScoringConfig.GetOccupationByCodeAsync(code, ct);
         return ServiceResult<OccupationAdminDto>.Success(ToDto(saved!), "Đã lưu hồ sơ ngũ hành của nghề.");
     }
@@ -415,7 +429,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         foreach (var row in profile) _occupationProfiles.Remove(row);
         _occupations.Remove(occupation);
 
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult.Success("Đã xóa nghề.");
     }
 
@@ -477,7 +491,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
             existing.Weight = request.Weight;
             _typeElements.Update(existing);
         }
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult<WorkspaceTypeElementDto>.Success(ToDto(existing), "Lưu vector loại phòng thành công.");
     }
 
@@ -486,7 +500,7 @@ public sealed class ScoringConfigAdminService : IScoringConfigAdminService
         var entity = await _typeElements.GetByIdAsync(id, ct);
         if (entity is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, "Không tìm thấy row.");
         _typeElements.Remove(entity);
-        await _uow.SaveChangesAsync(ct);
+        await SaveAndInvalidateAsync(ct);
         return ServiceResult.Success("Đã xóa row.");
     }
 

@@ -237,8 +237,14 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         // Chưa chọn loại phòng ⇒ coi như riêng tư: giả định an toàn hơn, vì đoán nhầm thành Public sẽ
         // âm thầm TẮT trục cá nhân của một phòng đáng lẽ có.
         var scope = WorkspaceScope.Private;
-        if (profile.WorkspaceTypeId is { } typeId
-            && await _uow.WorkspaceTypes.GetByIdAsync(typeId, ct) is { } workspaceType)
+        // Ưu tiên navigation đã nạp sẵn (GetByIdForUserAsync có Include) — chỉ hỏi DB khi hồ sơ tới
+        // đây từ đường khác mà chưa nạp. Giữ nhánh dự phòng để đừng ai vô tình biến "chưa nạp" thành
+        // "không có loại phòng": đoán nhầm thế là âm thầm tắt trục cá nhân của cả căn phòng.
+        var loadedType = profile.WorkspaceType;
+        if (loadedType is null && profile.WorkspaceTypeId is { } missingTypeId)
+            loadedType = await _uow.WorkspaceTypes.GetByIdAsync(missingTypeId, ct);
+
+        if (profile.WorkspaceTypeId is { } typeId && loadedType is { } workspaceType)
         {
             typeName = workspaceType.Name;
             scope = workspaceType.Scope;
