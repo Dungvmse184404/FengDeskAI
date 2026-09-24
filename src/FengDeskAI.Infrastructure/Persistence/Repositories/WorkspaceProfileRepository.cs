@@ -10,8 +10,14 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
 {
     public WorkspaceProfileRepository(AppDbContext context) : base(context) { }
 
+    /// <summary>
+    /// Nạp kèm <c>WorkspaceType</c>: gần như mọi nơi đọc hồ sơ đều cần loại phòng ngay sau đó, mà
+    /// hỏi riêng là thêm một lượt đi về DB (~300ms tới Sydney). Một LEFT JOIN vào bảng vài dòng thì
+    /// rẻ hơn hẳn. Bên gọi vẫn phải chịu được <c>WorkspaceType == null</c> — hồ sơ chưa chọn loại phòng.
+    /// </summary>
     public Task<WorkspaceProfile?> GetByIdForUserAsync(Guid id, Guid userId, CancellationToken ct = default)
-        => _set.FirstOrDefaultAsync(w => w.Id == id && w.UserId == userId, ct);
+        => _set.Include(w => w.WorkspaceType)
+               .FirstOrDefaultAsync(w => w.Id == id && w.UserId == userId, ct);
 
     public Task<List<WorkspaceProfile>> GetByUserIdAsync(Guid userId, CancellationToken ct = default)
         => _set.Where(w => w.UserId == userId)

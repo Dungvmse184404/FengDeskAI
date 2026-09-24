@@ -19,6 +19,7 @@ using FengDeskAI.Infrastructure.Persistence.Repositories;
 using FengDeskAI.Infrastructure.Persistence.Seeding;
 using FengDeskAI.Infrastructure.Security;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -174,7 +175,16 @@ public static class DependencyInjection
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
         services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
-        services.AddScoped<IScoringConfigRepository, ScoringConfigRepository>();
+        // Cấu hình chấm điểm gần như không đổi nhưng bị đọc ở mọi request chấm điểm; với DB ở Sydney
+        // (~300ms/round-trip) riêng khối đó đã hơn một giây mỗi lần. Bọc một lớp cache trong bộ nhớ.
+        services.AddSingleton<ScoringConfigCacheState>();
+        services.AddSingleton<IScoringConfigCacheInvalidator>(
+            sp => sp.GetRequiredService<ScoringConfigCacheState>());
+        services.AddScoped<ScoringConfigRepository>();
+        services.AddScoped<IScoringConfigRepository>(sp => new CachedScoringConfigRepository(
+            sp.GetRequiredService<ScoringConfigRepository>(),
+            sp.GetRequiredService<IMemoryCache>(),
+            sp.GetRequiredService<ScoringConfigCacheState>()));
         services.AddScoped<IUnitOfWork, UnitOfWork>();
 
         services.AddScoped<IPasswordService, PasswordService>();
