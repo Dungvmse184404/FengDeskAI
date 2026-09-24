@@ -149,6 +149,12 @@ Owner (chính/đồng sở hữu) hoặc Admin; staff Accepted vẫn `403`.
 |---|---|---|---|
 | `range` | `week` \| `month` \| `quarter` \| `year` | `month` | Mốc chia cột của `revenueSeries`. Giá trị lạ → `month` (không lỗi) |
 
+> **Client KHÔNG cần gọi lại khi đổi mốc** (24/09/2026). Response mang sẵn **cả bốn** mốc trong
+> `revenueSeriesByRange`; `range` + `revenueSeries` chỉ là phần tử được chọn sẵn, giữ cho client cũ.
+> Đổi mốc không đổi số liệu, chỉ đổi cách chia cột — mà mỗi lần gọi là 8 lượt đi về DB (Sydney, ~300ms/lượt),
+> nên gọi lại chỉ để chia cột khác là phí vài giây. Kiểm chứng bằng STORE-30f: bốn mốc trong bundle phải
+> trùng khít với cái `?range=` trả ra.
+
 Mốc (nhắm 7-13 cột để biểu đồ đọc được): `week` = 7 ngày gần nhất · `month` = **nửa tuần một cột** (khối
 3-4 ngày, ~9 cột — chia theo ngày thì 30 cột chen chúc, theo tuần thì chỉ 4 cột) · `quarter` = từng tuần
 (bắt đầu Thứ Hai) của quý hiện tại, ~13 cột · `year` = 12 tháng của năm nay. **Mốc rỗng vẫn được trả về**
@@ -182,8 +188,10 @@ Mốc (nhắm 7-13 cột để biểu đồ đọc được): `week` = 7 ngày g
   "productCount": 12,
   "staffCount": 1,
   "revenueByMonth": [ { "year": 2026, "month": 9, "revenue": 1250000, "deliveredCount": 4 } ],  // giữ cho client cũ
-  "range": "month",
-  "revenueSeries": [ {
+  "range": "month",                  // mốc đang được chọn sẵn
+  // Cả bốn mốc dựng từ CÙNG bộ dữ liệu — client đổi tab tại chỗ, không gọi lại API
+  "revenueSeriesByRange": { "week": [ ... ], "month": [ ... ], "quarter": [ ... ], "year": [ ... ] },
+  "revenueSeries": [ {               // = revenueSeriesByRange[range], giữ cho client cũ
     "start": "2026-09-01T00:00:00Z", "labelVi": "01/09",
     "revenue": 250000, "deliveredCount": 1,      // = completed/completedCount, giữ tên cũ cho client cũ
     "awaitingPayment": 300000, "awaitingPaymentCount": 1,  // đặt trong mốc, CHƯA trả tiền
@@ -216,6 +224,28 @@ chạy xếp vào lớp `Ordered`/`awaitingPayment` chứ không phải `Paid`; 
 `activeDeliveries` thì vẫn đếm CẢ HAI — nó trả lời "còn bao nhiêu việc phải làm", không phải "tiền ở đâu".
 Ở tầng đơn hàng, BE **chưa bao giờ** đặt `OrderStatus.Paid` cho COD: đơn COD đi thẳng `Pending` → rollup
 theo delivery → `Completed`; chỉ webhook PayOS mới đặt `Paid`.
+
+### Chi phí một lần gọi (24/09/2026)
+
+Endpoint này từng bắn **27 câu truy vấn tuần tự**; với DB ở Sydney (~300ms/round-trip) là ~8 giây chờ mạng
+thuần tuý — đó là lý do tab thống kê chậm hơn hẳn các tab khác, không phải vì dữ liệu nặng. Nay còn **8 câu**:
+
+| Câu | Lấy gì | Thay cho |
+|---|---|---|
+| 1 | 6 cột vô hướng của mọi delivery thuộc vườn | 15 câu đếm/sum riêng lẻ |
+| 2 | order item gắn delivery (đang giao + đã giao) | 3 câu cùng điều kiện join |
+| 3 | order item của đơn PayOS chưa thanh toán | 4 câu (count, sum, top sản phẩm, chuỗi) |
+| 4 | `return_items` đã hoàn xong, gộp theo sản phẩm | — |
+| 5 | `refunds` đã hoàn xong (lớp hoàn tiền của biểu đồ) | — |
+| 6 | `vendor_liabilities` chưa miễn | — |
+| 7-8 | số sản phẩm, số nhân viên | — |
+
+Nguyên tắc khi sửa tiếp: **chi phí nằm ở SỐ LƯỢT đi về DB, không ở khối lượng dữ liệu**. Kéo vài cột mỏng
+về rồi cộng trong C# rẻ hơn hẳn thêm một round-trip. Hai câu 4 và 5 cố ý tách: `refunds.amount` có thể lệch
+tổng tiền hàng bị trả (hoàn một phần, phí ship), gộp lại là sai số.
+
+Còn lại (chưa làm): **dashboard Admin** gọi endpoint này cho *từng* cửa hàng rồi cộng ở client — N cửa hàng
+là N × 8 câu. Muốn nhanh thì cần một endpoint gộp phía BE.
 
 ### Đối soát tiền hàng (2026-09-23)
 

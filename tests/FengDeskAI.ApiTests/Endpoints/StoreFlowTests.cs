@@ -546,6 +546,37 @@ public sealed class StoreFlowTests
             b => Assert.False(string.IsNullOrWhiteSpace(b.GetProperty("labelVi").GetString())));
     }
 
+    [Fact(DisplayName = "STORE-30f [Normal] One call carries every range so the client never refetches")]
+    public async Task Statistics_ReturnsEveryRangeInOneCall()
+    {
+        // Đổi mốc KHÔNG đổi số liệu, chỉ đổi cách chia cột. Gọi lại API chỉ để chia cột khác là phí toi
+        // ~8 lượt đi về DB, nên response phải mang sẵn cả bốn mốc và chúng phải trùng khít với cái mà
+        // `?range=` trả ra — nếu lệch thì client đổi tại chỗ sẽ hiện số khác với lúc tải lại trang.
+        var (user, storeId) = await OwnerWithStoreAsync();
+        var client = ScenarioUsers.ClientFor(_fixture, user);
+
+        var stats = await ApiEnvelope.DataAsync(await client.GetAsync($"/api/stores/{storeId}/statistics"));
+        var byRange = stats.GetProperty("revenueSeriesByRange");
+
+        foreach (var range in new[] { "week", "month", "quarter", "year" })
+        {
+            Assert.True(byRange.TryGetProperty(range, out var bundled), $"Thiếu mốc {range}.");
+            var direct = (await ApiEnvelope.DataAsync(
+                await client.GetAsync($"/api/stores/{storeId}/statistics?range={range}")))
+                .GetProperty("revenueSeries");
+
+            Assert.Equal(direct.GetArrayLength(), bundled.GetArrayLength());
+            Assert.Equal(
+                direct.EnumerateArray().Select(b => b.GetProperty("labelVi").GetString()).ToList(),
+                bundled.EnumerateArray().Select(b => b.GetProperty("labelVi").GetString()).ToList());
+        }
+
+        // `revenueSeries` vẫn là phần tử ứng với `range` đang áp — client cũ không vỡ.
+        Assert.Equal("month", stats.GetProperty("range").GetString());
+        Assert.Equal(byRange.GetProperty("month").GetArrayLength(),
+            stats.GetProperty("revenueSeries").GetArrayLength());
+    }
+
     [Fact(DisplayName = "STORE-30d [Abnormal] An unknown range falls back to month instead of failing")]
     public async Task Statistics_UnknownRange_FallsBackToMonth()
     {

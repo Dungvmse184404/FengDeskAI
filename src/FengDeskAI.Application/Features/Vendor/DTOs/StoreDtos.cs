@@ -181,6 +181,13 @@ public class StoreStatisticsResponse
     public List<RevenueBucket> RevenueSeries { get; set; } = new();
 
     /// <summary>
+    /// Cả bốn mốc (<c>week/month/quarter/year</c>) dựng sẵn từ CÙNG một bộ dữ liệu. Đổi mốc không đổi số
+    /// liệu, chỉ đổi cách chia cột — nên client đổi tại chỗ thay vì gọi lại API (mỗi lần gọi là ~8 lượt
+    /// đi về DB ở Sydney). <see cref="RevenueSeries"/> chính là phần tử ứng với <see cref="Range"/>.
+    /// </summary>
+    public Dictionary<string, List<RevenueBucket>> RevenueSeriesByRange { get; set; } = new();
+
+    /// <summary>
     /// Sản phẩm đang nằm trong các đơn, kèm trạng thái tiền của đơn đó (<c>Ordered|Paid|Completed|Refunded</c>).
     /// Một sản phẩm xuất hiện nhiều dòng nếu nó đang ở nhiều trạng thái khác nhau.
     /// </summary>
