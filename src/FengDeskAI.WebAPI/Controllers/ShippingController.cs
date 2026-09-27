@@ -31,7 +31,7 @@ public class ShippingController : ApiControllerBase
         _settings = settings.Value;
     }
 
-    private bool IsAdmin => User.IsInRole(Roles.Admin);
+    private bool CanOperateAsAdmin => User.CanOperateAsAdmin();
 
     [HttpPost("webhook")]
     [AllowAnonymous]
@@ -109,7 +109,7 @@ public class ShippingController : ApiControllerBase
 
     [HttpGet("deliveries/{deliveryId:guid}/progress")]
     public async Task<IActionResult> GetProgress(Guid deliveryId, CancellationToken ct)
-        => ToActionResult(await _service.GetProgressLogsAsync(deliveryId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.GetProgressLogsAsync(deliveryId, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>
     /// Yêu cầu nhà vận chuyển giao lại một đơn giao thất bại (owner/staff store hoặc admin).
@@ -117,7 +117,7 @@ public class ShippingController : ApiControllerBase
     /// </summary>
     [HttpPost("deliveries/{deliveryId:guid}/redeliver")]
     public async Task<IActionResult> Redeliver(Guid deliveryId, CancellationToken ct)
-        => ToActionResult(await _service.RedeliverAsync(deliveryId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.RedeliverAsync(deliveryId, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>
     /// Cửa hàng đã đủ thông tin để tạo vận đơn chưa. FE gọi khi mở màn hình đơn giao:
@@ -126,7 +126,7 @@ public class ShippingController : ApiControllerBase
     /// </summary>
     [HttpGet("stores/{storeId:guid}/readiness")]
     public async Task<IActionResult> GetStoreReadiness(Guid storeId, CancellationToken ct)
-        => ToActionResult(await _service.GetStoreReadinessAsync(storeId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.GetStoreReadinessAsync(storeId, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>
     /// [Nhân viên sàn] Nút "Đồng bộ mã shop" — chạy ngay một lượt cấp mã cho các cửa hàng đủ điều kiện
@@ -146,4 +146,3 @@ public class ShippingController : ApiControllerBase
     public async Task<IActionResult> SyncStoreCarrierShop(Guid storeId, CancellationToken ct)
         => ToActionResult(await _service.SyncStoreCarrierShopAsync(storeId, ct));
 }
-  

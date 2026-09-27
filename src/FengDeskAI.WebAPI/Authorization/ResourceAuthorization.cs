@@ -29,7 +29,9 @@ public sealed class ResourceAccessHandler : AuthorizationHandler<ResourceAccessR
     {
         if (!Guid.TryParse(context.User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
             return;
-        if (context.User.IsInRole(Roles.Admin))
+        // Manager có quyền vận hành trên mọi tài nguyên như Admin. Quyền quản trị
+        // tài khoản vẫn được tách riêng bằng policy AdminOnly.
+        if (context.User.CanOperateAsAdmin())
         {
             context.Succeed(requirement);
             return;

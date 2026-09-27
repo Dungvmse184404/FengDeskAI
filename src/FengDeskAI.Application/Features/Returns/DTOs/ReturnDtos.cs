@@ -14,6 +14,7 @@ public record RmaActor(Guid UserId, bool IsStaff, bool IsManager, bool IsAdmin, 
 {
     public bool CanDecide => IsStaff || IsManager || IsAdmin;
     public bool CanManageRefund => IsManager || IsAdmin;
+    public bool CanOperateAsAdmin => IsManager || IsAdmin;
 }
 
 // ---------- Requests ----------
