@@ -16,6 +16,18 @@ namespace FengDeskAI.UnitTests;
 
 public sealed class AuthorizationTests
 {
+    [Theory]
+    [InlineData(Roles.Manager, true)]
+    [InlineData(Roles.Admin, true)]
+    [InlineData(Roles.Staff, false)]
+    [InlineData(Roles.Customer, false)]
+    public void CanOperateAsAdmin_OnlyAllowsManagerAndAdmin(string role, bool expected)
+    {
+        var principal = Principal(Guid.NewGuid(), role);
+
+        Assert.Equal(expected, principal.CanOperateAsAdmin());
+    }
+
     [Fact]
     public void AccessToken_ContainsEveryRoleAndTokenVersion()
     {
@@ -63,6 +75,22 @@ public sealed class AuthorizationTests
         var context = new AuthorizationHandlerContext(
             new[] { new ResourceAccessRequirement(ResourceOperation.ManageProduct) },
             Principal(userId),
+            new ResourceReference(productId));
+        await new ResourceAccessHandler(uow.Object).HandleAsync(context);
+
+        Assert.True(context.HasSucceeded);
+    }
+
+    [Fact]
+    public async Task Manager_CanManageAnyOperationalResource()
+    {
+        var userId = Guid.NewGuid();
+        var productId = Guid.NewGuid();
+        var uow = new Mock<IUnitOfWork>();
+
+        var context = new AuthorizationHandlerContext(
+            new[] { new ResourceAccessRequirement(ResourceOperation.ManageProduct) },
+            Principal(userId, Roles.Manager),
             new ResourceReference(productId));
         await new ResourceAccessHandler(uow.Object).HandleAsync(context);
 
@@ -136,10 +164,10 @@ public sealed class AuthorizationTests
         Assert.True(context.HasSucceeded);
     }
 
-    private static ClaimsPrincipal Principal(Guid userId)
+    private static ClaimsPrincipal Principal(Guid userId, string role = Roles.Customer)
         => new(new ClaimsIdentity(new[]
         {
             new Claim(ClaimTypes.NameIdentifier, userId.ToString()),
-            new Claim(ClaimTypes.Role, Roles.Customer),
+            new Claim(ClaimTypes.Role, role),
         }, "test"));
 }

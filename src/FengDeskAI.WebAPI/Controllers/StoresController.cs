@@ -20,7 +20,7 @@ public class StoresController : ApiControllerBase
 
     public StoresController(IStoreService service) => _service = service;
 
-    private bool IsAdmin => User.IsInRole(Roles.Admin);
+    private bool CanOperateAsAdmin => User.CanOperateAsAdmin();
 
     [HttpGet]
     [AllowAnonymous]
@@ -40,7 +40,7 @@ public class StoresController : ApiControllerBase
     /// <summary>Vai trò của user hiện tại với store (owner chính / đồng sở hữu / staff) — FE ẩn/hiện tab theo đây.</summary>
     [HttpGet("{id:guid}/membership")]
     public async Task<IActionResult> GetMyMembership(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.GetMyMembershipAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.GetMyMembershipAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>
     /// Thống kê dashboard vendor (doanh thu, đơn theo trạng thái, hàng đang treo…). Chỉ owner/admin — staff bị 403.
@@ -48,7 +48,7 @@ public class StoresController : ApiControllerBase
     /// <param name="range">Mốc chia cột doanh thu: <c>week|month|quarter|year</c> (mặc định <c>month</c>).</param>
     [HttpGet("{id:guid}/statistics")]
     public async Task<IActionResult> GetStatistics(Guid id, [FromQuery] string? range, CancellationToken ct)
-        => ToActionResult(await _service.GetStatisticsAsync(id, CurrentUserId, IsAdmin, range, ct));
+        => ToActionResult(await _service.GetStatisticsAsync(id, CurrentUserId, CanOperateAsAdmin, range, ct));
 
     /// <summary>Tự mở store (self-service). Người tạo trở thành owner chính + được cấp role GardenOwner.</summary>
     [HttpPost]
@@ -57,11 +57,11 @@ public class StoresController : ApiControllerBase
 
     [HttpPut("{id:guid}")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateStoreRequest request, CancellationToken ct)
-        => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.DeleteAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>Xóa vĩnh viễn store (vật lý). Chỉ Staff hoặc Admin.</summary>
     [HttpDelete("{id:guid}/hard")]
@@ -73,15 +73,15 @@ public class StoresController : ApiControllerBase
 
     [HttpPost("{id:guid}/address")]
     public async Task<IActionResult> AddAddress(Guid id, [FromBody] CreateStoreAddressRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AddAddressAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.AddAddressAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpPut("{id:guid}/address")]
     public async Task<IActionResult> UpdateAddress(Guid id, [FromBody] UpdateStoreAddressRequest request, CancellationToken ct)
-        => ToActionResult(await _service.UpdateAddressAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.UpdateAddressAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpDelete("{id:guid}/address")]
     public async Task<IActionResult> DeleteAddress(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.DeleteAddressAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.DeleteAddressAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>Xóa vĩnh viễn địa chỉ store (vật lý). Chỉ Staff hoặc Admin.</summary>
     [HttpDelete("{id:guid}/address/hard")]
@@ -98,24 +98,24 @@ public class StoresController : ApiControllerBase
     /// <summary>Thêm đồng sở hữu (chỉ owner hiện tại hoặc Admin).</summary>
     [HttpPost("{id:guid}/owners")]
     public async Task<IActionResult> AddOwner(Guid id, [FromBody] AddOwnerRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AddOwnerAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.AddOwnerAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     /// <summary>Gỡ đồng sở hữu (chỉ owner hiện tại hoặc Admin; không gỡ owner chính).</summary>
     [HttpDelete("{id:guid}/owners/{userId:guid}")]
     public async Task<IActionResult> RemoveOwner(Guid id, Guid userId, CancellationToken ct)
-        => ToActionResult(await _service.RemoveOwnerAsync(id, userId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.RemoveOwnerAsync(id, userId, CurrentUserId, CanOperateAsAdmin, ct));
 
     [HttpGet("{id:guid}/staff")]
     public async Task<IActionResult> GetStaff(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.GetStaffAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.GetStaffAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     [HttpPost("{id:guid}/staff")]
     public async Task<IActionResult> AssignStaff(Guid id, [FromBody] AssignStaffRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AssignStaffAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.AssignStaffAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpDelete("{id:guid}/staff/{assignmentId:guid}")]
     public async Task<IActionResult> UnassignStaff(Guid id, Guid assignmentId, CancellationToken ct)
-        => ToActionResult(await _service.UnassignStaffAsync(id, assignmentId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.UnassignStaffAsync(id, assignmentId, CurrentUserId, CanOperateAsAdmin, ct));
 
     // ===== Invitation (góc nhìn người được mời) =====
 

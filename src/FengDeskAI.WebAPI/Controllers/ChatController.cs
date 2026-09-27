@@ -67,12 +67,12 @@ public class ChatController : ApiControllerBase
     /// <summary>Vendor (owner/staff store): hàng đợi phòng hỗ trợ đang mở của store mình.</summary>
     [HttpGet("support/stores/{storeId:guid}/open")]
     public async Task<IActionResult> GetOpenStoreSupport(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetOpenStoreSupportRoomsAsync(storeId, CurrentUserId, User.IsInRole(Roles.Admin), page, ct));
+        => ToActionResult(await _service.GetOpenStoreSupportRoomsAsync(storeId, CurrentUserId, User.CanOperateAsAdmin(), page, ct));
 
     /// <summary>Vendor: danh sách phòng của store mình đã nhận hỗ trợ.</summary>
     [HttpGet("support/stores/{storeId:guid}/mine")]
     public async Task<IActionResult> GetMyStoreSupport(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMyStoreChatboxesAsync(storeId, CurrentUserId, User.IsInRole(Roles.Admin), page, ct));
+        => ToActionResult(await _service.GetMyStoreChatboxesAsync(storeId, CurrentUserId, User.CanOperateAsAdmin(), page, ct));
 
     /// <summary>Tạo phòng nhóm (mình là Owner).</summary>
     [HttpPost("groups")]

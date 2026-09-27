@@ -661,7 +661,7 @@ public class ReturnService : IReturnService
         var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
         if (rr is null)
             return (null, Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound));
-        var allowed = actor.IsAdmin
+        var allowed = actor.CanOperateAsAdmin
             || await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct);
         if (!allowed)
             return (null, Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManageForbidden));

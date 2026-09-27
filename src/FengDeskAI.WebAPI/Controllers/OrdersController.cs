@@ -20,7 +20,7 @@ public class OrdersController : ApiControllerBase
 
     public OrdersController(IOrderService service) => _service = service;
 
-    private bool IsAdmin => User.IsInRole(Roles.Admin);
+    private bool CanOperateAsAdmin => User.CanOperateAsAdmin();
 
     /// <summary>Staff trở lên (Staff/Manager/Admin) — được xem chi tiết đơn của mọi customer.</summary>
     private bool IsStaffOrAbove => User.IsInRole(Roles.Staff) || User.IsInRole(Roles.Manager) || User.IsInRole(Roles.Admin);
@@ -38,9 +38,9 @@ public class OrdersController : ApiControllerBase
     public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
         => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));
 
-    /// <summary>Tất cả đơn của mọi customer (paged) — chỉ admin.</summary>
+    /// <summary>Tất cả đơn của mọi customer (paged) — Manager hoặc Admin.</summary>
     [HttpGet("all")]
-    [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
     public async Task<IActionResult> GetAll([FromQuery] PageRequest page, CancellationToken ct)
         => ToActionResult(await _service.GetAllAsync(page, ct));
 
@@ -55,28 +55,28 @@ public class OrdersController : ApiControllerBase
     /// <summary>Danh sách delivery của một store (màn vendor). Yêu cầu owner/staff store đó hoặc admin.</summary>
     [HttpGet("stores/{storeId:guid}/deliveries")]
     public async Task<IActionResult> GetStoreDeliveries(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, IsAdmin, page, ct));
+        => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, CanOperateAsAdmin, page, ct));
 
     [HttpPatch("deliveries/{deliveryId:guid}/status")]
     [ResourceAuthorize(ResourceOperation.UpdateDelivery, "deliveryId")]
     public async Task<IActionResult> UpdateDeliveryStatus(Guid deliveryId, [FromBody] UpdateDeliveryStatusRequest request, CancellationToken ct)
-        => ToActionResult(await _service.UpdateDeliveryStatusAsync(deliveryId, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.UpdateDeliveryStatusAsync(deliveryId, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpPut("deliveries/{deliveryId:guid}/assignee")]
     [ResourceAuthorize(ResourceOperation.AssignDelivery, "deliveryId")]
     public async Task<IActionResult> AssignDeliveryStaff(
         Guid deliveryId, [FromBody] AssignDeliveryStaffRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AssignDeliveryStaffAsync(deliveryId, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.AssignDeliveryStaffAsync(deliveryId, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     /// <summary>Garden owner tạo vận đơn (gọi GHN/AhaMove) cho delivery đã ở trạng thái Confirmed.</summary>
     [HttpPost("deliveries/{deliveryId:guid}/shipment")]
     [ResourceAuthorize(ResourceOperation.UpdateDelivery, "deliveryId")]
     public async Task<IActionResult> CreateShipment(Guid deliveryId, CancellationToken ct)
-        => ToActionResult(await _service.CreateDeliveryShipmentAsync(deliveryId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.CreateDeliveryShipmentAsync(deliveryId, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>Garden owner/staff: chi tiết đơn giao (sản phẩm + địa chỉ nhận) để đóng gói. Chỉ trả hàng thuộc đúng store này.</summary>
     [HttpGet("deliveries/{deliveryId:guid}/detail")]
     [ResourceAuthorize(ResourceOperation.ViewDelivery, "deliveryId")]
     public async Task<IActionResult> GetDeliveryDetail(Guid deliveryId, CancellationToken ct)
-        => ToActionResult(await _service.GetDeliveryDetailAsync(deliveryId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.GetDeliveryDetailAsync(deliveryId, CurrentUserId, CanOperateAsAdmin, ct));
 }
