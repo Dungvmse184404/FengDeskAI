@@ -204,6 +204,22 @@ public class StoreStatisticsResponse
     public decimal PendingClearanceValue { get; set; }
     /// <summary>Công nợ chưa được miễn (Pending/Disputed/Settled) sẽ trừ vào kỳ chi kế tiếp.</summary>
     public decimal OutstandingLiabilityValue { get; set; }
+
+    // ===================== Sổ cái (docs/adr/platform-fee-ledger.md) =====================
+
+    /// <summary>Tỉ lệ phí sàn đang áp cho đơn MỚI (<c>PlatformFeePolicy.CommissionRate</c>). Đơn cũ giữ tỉ lệ đã chốt.</summary>
+    public decimal CommissionRate { get; set; }
+    /// <summary>Σ phí sàn đã thu trên hàng đã giao, sau khi trả lại phần của hàng bị hoàn.</summary>
+    public decimal PlatformCommission { get; set; }
+    /// <summary>
+    /// Số dư sổ nhà vườn: tiền sàn đang nợ vườn = tiền hàng đã giao − phí sàn − công nợ hoàn hàng. Đây là
+    /// "thực nhận" — khác <see cref="TotalRevenue"/> (doanh thu gộp).
+    /// </summary>
+    public decimal LedgerBalance { get; set; }
+    /// <summary>Phần số dư đã qua khoảng giữ <see cref="PayoutHoldDays"/> — có thể chi.</summary>
+    public decimal LedgerAvailable { get; set; }
+    /// <summary>Phần số dư còn trong khoảng giữ.</summary>
+    public decimal LedgerPending { get; set; }
 }
 
 /// <summary>
@@ -272,4 +288,18 @@ public class MonthlyRevenuePoint
     public int Month { get; set; }
     public decimal Revenue { get; set; }
     public int DeliveredCount { get; set; }
+}
+
+/// <summary>
+/// Chính sách phí sàn công khai — FE dùng để người bán xem trước "giá thực nhận" khi nhập giá sản phẩm.
+/// Làm tròn phí sàn: tới đồng, nửa đồng làm tròn lên (<c>PlatformFeePolicy.ComputeCommission</c>).
+/// </summary>
+public class PlatformFeePolicyResponse
+{
+    /// <summary>Tỉ lệ phí sàn trên tiền hàng, vd 0.08.</summary>
+    public decimal CommissionRate { get; set; }
+    /// <summary>Trần giảm giá sàn tài trợ trên mỗi delivery (tỉ lệ trên tiền hàng) — bằng phí sàn.</summary>
+    public decimal MaxPlatformFundedDiscountRate { get; set; }
+    /// <summary>Số ngày giữ tiền sau khi giao trước khi nhà vườn được chi.</summary>
+    public int PayoutHoldDays { get; set; }
 }

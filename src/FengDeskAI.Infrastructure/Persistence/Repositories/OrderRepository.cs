@@ -15,6 +15,9 @@ public class OrderRepository : GenericRepository<Order>, IOrderRepository
     public Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> ids, CancellationToken ct = default)
         => _context.Set<ProductItem>().Where(pi => ids.Contains(pi.Id)).ToListAsync(ct);
 
+    public Task<List<OrderStoreCharge>> GetStoreChargesAsync(Guid orderId, CancellationToken ct = default)
+        => _context.Set<OrderStoreCharge>().AsNoTracking().Where(c => c.OrderId == orderId).ToListAsync(ct);
+
     public Task AddDeliveriesAsync(IEnumerable<Delivery> deliveries, CancellationToken ct = default)
         => _context.Set<Delivery>().AddRangeAsync(deliveries, ct);
 

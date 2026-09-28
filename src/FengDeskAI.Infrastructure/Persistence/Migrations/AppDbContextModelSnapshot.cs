@@ -1969,6 +1969,109 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.ToTable("users", (string)null);
                 });
 
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.LedgerEntry", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Account")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("account");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(14, 2)
+                        .HasColumnType("numeric(14,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTime>("AvailableAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("available_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid?>("DeliveryId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("delivery_id");
+
+                    b.Property<Guid?>("GardenStoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("garden_store_id");
+
+                    b.Property<string>("IdempotencyKey")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("idempotency_key");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid?>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<Guid?>("RefundId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("refund_id");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid?>("VendorLiabilityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vendor_liability_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeliveryId");
+
+                    b.HasIndex("GardenStoreId");
+
+                    b.HasIndex("IdempotencyKey")
+                        .IsUnique()
+                        .HasDatabaseName("ux_ledger_entries_idempotency_key");
+
+                    b.HasIndex("RefundId");
+
+                    b.HasIndex("VendorLiabilityId");
+
+                    b.HasIndex("Account", "GardenStoreId", "AvailableAt")
+                        .HasDatabaseName("ix_ledger_entries_balance");
+
+                    b.ToTable("ledger_entries", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_ledger_entries_garden_account", "(account = 'GardenStore' AND garden_store_id IS NOT NULL) OR (account = 'Platform' AND garden_store_id IS NULL)");
+                        });
+                });
+
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.Refund", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2252,6 +2355,187 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("Status");
 
                     b.ToTable("vendor_liabilities", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Promotion.Voucher", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("code");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("description");
+
+                    b.Property<DateTime?>("EndsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ends_at");
+
+                    b.Property<string>("FundedBy")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("funded_by");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<bool>("IsAutoApply")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_auto_apply");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<decimal?>("MaxDiscountAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("max_discount_amount");
+
+                    b.Property<decimal>("MinOrderSubtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("min_order_subtotal");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<Guid?>("ProvinceId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("province_id");
+
+                    b.Property<DateTime?>("StartsAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("starts_at");
+
+                    b.Property<string>("Type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)")
+                        .HasColumnName("type");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<int?>("UsageLimit")
+                        .HasColumnType("integer")
+                        .HasColumnName("usage_limit");
+
+                    b.Property<int?>("UsageLimitPerUser")
+                        .HasColumnType("integer")
+                        .HasColumnName("usage_limit_per_user");
+
+                    b.Property<int>("UsedCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("used_count");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("ProvinceId");
+
+                    b.ToTable("vouchers", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_vouchers_min_subtotal", "min_order_subtotal >= 0");
+
+                            t.HasCheckConstraint("ck_vouchers_used_count", "used_count >= 0");
+                        });
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Promotion.VoucherRedemption", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customer_id");
+
+                    b.Property<decimal>("DiscountAmount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("discount_amount");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("VoucherId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("voucher_id");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("OrderId")
+                        .IsUnique();
+
+                    b.HasIndex("VoucherId", "CustomerId", "Status");
+
+                    b.ToTable("voucher_redemptions", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.ElementInputMap", b =>
@@ -2831,6 +3115,18 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("assigned_staff_id");
 
+                    b.Property<decimal?>("CarrierShippingFee")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("carrier_shipping_fee");
+
+                    b.Property<decimal>("CommissionRate")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("commission_rate");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -2867,6 +3163,10 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
+                    b.Property<DateTime?>("PayoutCreditedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("payout_credited_at");
+
                     b.Property<string>("ProviderOrderId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -2876,9 +3176,12 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("shipped_at");
 
-                    b.Property<DateTime?>("PayoutCreditedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("payout_credited_at");
+                    b.Property<decimal>("ShippingDiscount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("shipping_discount");
 
                     b.Property<decimal>("ShippingFee")
                         .HasPrecision(12, 2)
@@ -2973,6 +3276,13 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("shipping_address_id");
 
+                    b.Property<decimal>("ShippingDiscount")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("shipping_discount");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -3001,6 +3311,11 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid?>("UpdatedBy")
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
+
+                    b.Property<string>("VoucherCode")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("voucher_code");
 
                     b.HasKey("Id");
 
@@ -3137,6 +3452,67 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasIndex("OrderId");
 
                     b.ToTable("order_status_log", (string)null);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Sales.OrderStoreCharge", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<Guid>("GardenStoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("garden_store_id");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<Guid>("OrderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_id");
+
+                    b.Property<decimal>("ShippingDiscount")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("shipping_discount");
+
+                    b.Property<decimal>("ShippingFee")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("shipping_fee");
+
+                    b.Property<decimal>("Subtotal")
+                        .HasPrecision(12, 2)
+                        .HasColumnType("numeric(12,2)")
+                        .HasColumnName("subtotal");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("GardenStoreId");
+
+                    b.HasIndex("OrderId", "GardenStoreId")
+                        .IsUnique();
+
+                    b.ToTable("order_store_charges", (string)null);
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Sales.ReturnItem", b =>
@@ -4515,6 +4891,29 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Occupation");
                 });
 
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.LedgerEntry", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Sales.Delivery", null)
+                        .WithMany()
+                        .HasForeignKey("DeliveryId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Vendor.GardenStore", null)
+                        .WithMany()
+                        .HasForeignKey("GardenStoreId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Payment.Refund", null)
+                        .WithMany()
+                        .HasForeignKey("RefundId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Payment.VendorLiability", null)
+                        .WithMany()
+                        .HasForeignKey("VendorLiabilityId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.Refund", b =>
                 {
                     b.HasOne("FengDeskAI.Domain.Entities.Sales.Order", "Order")
@@ -4574,6 +4973,31 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Refund");
 
                     b.Navigation("ReturnRequest");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Promotion.Voucher", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Geography.Province", null)
+                        .WithMany()
+                        .HasForeignKey("ProvinceId")
+                        .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Promotion.VoucherRedemption", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Sales.Order", null)
+                        .WithMany()
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Promotion.Voucher", "Voucher")
+                        .WithMany()
+                        .HasForeignKey("VoucherId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Voucher");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Recommendation.OccupationElementProfile", b =>
@@ -4720,6 +5144,21 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .IsRequired();
 
                     b.Navigation("Order");
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Sales.OrderStoreCharge", b =>
+                {
+                    b.HasOne("FengDeskAI.Domain.Entities.Vendor.GardenStore", null)
+                        .WithMany()
+                        .HasForeignKey("GardenStoreId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FengDeskAI.Domain.Entities.Sales.Order", null)
+                        .WithMany("StoreCharges")
+                        .HasForeignKey("OrderId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Sales.ReturnItem", b =>
@@ -4995,6 +5434,8 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Navigation("Items");
 
                     b.Navigation("StatusLogs");
+
+                    b.Navigation("StoreCharges");
                 });
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.Sales.ReturnRequest", b =>

@@ -540,7 +540,18 @@ public class StoreService : IStoreService
         if (!await IsOwnerOrAdminAsync(id, actorUserId, isAdmin, ct))
             return ServiceResult<StoreStatisticsResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.StatisticsForbidden);
 
-        return ServiceResult<StoreStatisticsResponse>.Success(await _uow.Stores.GetStatisticsAsync(id, range, ct));
+        var stats = await _uow.Stores.GetStatisticsAsync(id, range, ct);
+
+        // Số "thực nhận" đọc thẳng từ sổ cái — thêm MỘT lượt đi về DB (câu gộp sẵn theo nhóm), không tính lại
+        // từ deliveries: sổ đã trừ phí sàn theo tỉ lệ chốt từng đơn và công nợ hoàn hàng.
+        var ledger = await _uow.Ledger.GetGardenSummaryAsync(id, DateTime.UtcNow, ct);
+        stats.CommissionRate = PlatformFeePolicy.CommissionRate;
+        stats.PlatformCommission = ledger.CommissionCharged;
+        stats.LedgerBalance = ledger.Balance;
+        stats.LedgerAvailable = ledger.Available;
+        stats.LedgerPending = ledger.Pending;
+
+        return ServiceResult<StoreStatisticsResponse>.Success(stats);
     }
 
     private async Task<bool> IsOwnerOrAdminAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)

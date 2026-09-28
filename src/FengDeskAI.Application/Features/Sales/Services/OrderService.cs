@@ -8,6 +8,10 @@ using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Application.Features.Vendor.Services;
+using FengDeskAI.Application.Features.Payment.Services;
+using FengDeskAI.Application.Features.Promotion.DTOs;
+using FengDeskAI.Application.Features.Promotion.Services;
 using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Geography;
 using FengDeskAI.Domain.Entities.Sales;
@@ -33,9 +37,12 @@ public class OrderService : IOrderService
     private readonly IStoreShopProvisioner _shopProvisioner;
     private readonly IReturnService _returns;
 
+    private readonly ILedgerService _ledger;
+    private readonly IVoucherService _vouchers;
+
     public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation,
         IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator, IStoreShopProvisioner shopProvisioner,
-        IReturnService returns)
+        IReturnService returns, ILedgerService ledger, IVoucherService vouchers)
     {
         _uow = uow;
         _mapper = mapper;
@@ -44,6 +51,8 @@ public class OrderService : IOrderService
         _feeEstimator = feeEstimator;
         _shopProvisioner = shopProvisioner;
         _returns = returns;
+        _ledger = ledger;
+        _vouchers = vouchers;
     }
 
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
@@ -70,16 +79,26 @@ public class OrderService : IOrderService
         var storeFees = await ComputeStoreFeesAsync(lines, shipTo, stores, ct);
         var feeByStore = storeFees.ToDictionary(s => s.StoreId, s => s.ShippingFee);
 
+        // Voucher: khách nhập mã mà mã không dùng được ⇒ từ chối hẳn, KHÔNG âm thầm đặt với giá khác số khách đã thấy.
+        var voucher = await _vouchers.SelectAsync(userId, request.VoucherCode, ToChargeInputs(storeFees),
+            shipTo?.Ward?.District?.ProvinceId, ct);
+        if (voucher.Error is not null)
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.UnprocessableEntity, voucher.Error);
+
+        var order = new Order
+        {
+            CustomerId = userId,
+            ShippingAddressId = address.Id,
+            Status = OrderStatus.Pending,
+            PaymentMethod = request.PaymentMethod,
+            Note = request.Note,
+        };
+
         var orderId = await _uow.ExecuteInTransactionAsync(async _ =>
         {
-            var order = new Order
-            {
-                CustomerId = userId,
-                ShippingAddressId = address.Id,
-                Status = OrderStatus.Pending,
-                PaymentMethod = request.PaymentMethod,
-                Note = request.Note,
-            };
+            // Giữ lượt voucher TRƯỚC mọi thay đổi khác: hết lượt (người khác vừa lấy lượt cuối) thì thoát ngay,
+            // chưa có gì để rollback.
+            if (!await _vouchers.TryRedeemAsync(voucher, order, ct)) return Guid.Empty;
 
             foreach (var (pi, qty) in lines)
             {
@@ -100,13 +119,29 @@ public class OrderService : IOrderService
             {
                 OrderWorkflow.GroupItemsIntoDeliveries(order);
                 foreach (var delivery in order.Deliveries)
+                {
                     delivery.ShippingFee = feeByStore.GetValueOrDefault(delivery.GardenStoreId);
+                    delivery.ShippingDiscount = voucher.DiscountFor(delivery.GardenStoreId);
+                }
             }
+
+            // Chốt tiền theo từng vườn — đơn online sinh delivery lúc webhook sẽ đọc lại đúng số này.
+            foreach (var fee in storeFees)
+                order.StoreCharges.Add(new OrderStoreCharge
+                {
+                    OrderId = order.Id,
+                    GardenStoreId = fee.StoreId,
+                    Subtotal = fee.Subtotal,
+                    ShippingFee = fee.ShippingFee,
+                    ShippingDiscount = voucher.DiscountFor(fee.StoreId),
+                });
 
             order.Subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
             // Tổng phí ship lấy từ ước tính theo store (đúng cho cả COD lẫn online — online chưa tạo delivery).
             order.TotalShippingFee = feeByStore.Values.Sum();
-            order.TotalAmount = order.Subtotal + order.TotalShippingFee;
+            order.ShippingDiscount = voucher.TotalDiscount;
+            order.VoucherCode = voucher.TotalDiscount > 0 ? voucher.Voucher?.Code : null;
+            order.TotalAmount = order.Subtotal + order.TotalShippingFee - order.ShippingDiscount;
             order.StatusLogs.Add(new OrderStatusLog
             {
                 ToStatus = OrderStatus.Pending.ToString(),
@@ -140,6 +175,9 @@ public class OrderService : IOrderService
 
             return order.Id;
         }, ct);
+
+        if (orderId == Guid.Empty)
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.Conflict, "Mã giảm giá vừa hết lượt sử dụng — vui lòng đặt lại.");
 
         return await GetByIdAsync(orderId, userId, isPrivileged: false, ct);
     }
@@ -196,6 +234,7 @@ public class OrderService : IOrderService
                     GardenStoreId = storeId,
                     Status = DeliveryStatus.Pending,
                     ShippingFee = 0m,
+                    CommissionRate = PlatformFeePolicy.CommissionRate,
                 };
             await _uow.Orders.AddDeliveriesAsync(byStore.Values, ct);
             await _uow.SaveChangesAsync(ct);
@@ -206,6 +245,7 @@ public class OrderService : IOrderService
                 item.DeliveryId = delivery.Id;
                 delivery.Subtotal += item.UnitPrice * item.Quantity;
             }
+            OrderWorkflow.ApplyStoreCharges(order, await _uow.Orders.GetStoreChargesAsync(order.Id, ct));
             await _uow.SaveChangesAsync(ct);
             return byStore.Count;
         }, ct);
@@ -259,21 +299,69 @@ public class OrderService : IOrderService
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
+            await ApplyDeliveryTransitionAsync(delivery, request.Status, userId, DeliverySource.Manual, request.Note,
+                request.TrackingCode, request.ShippingProvider, ct);
+            return null;
+        }, ct);
+
+        return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
+    }
+
+    public async Task<IServiceResult<OrderDetailResponse>> ConfirmReceivedAsync(Guid orderId, Guid userId, CancellationToken ct = default)
+    {
+        // Lọc theo chủ đơn ngay ở truy vấn: đơn của người khác trả 404 như không tồn tại.
+        var order = await _uow.Orders.GetDetailAsync(orderId, userId, ct);
+        if (order is null)
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
+
+        // Chỉ hàng ĐANG TRÊN ĐƯỜNG (Shipped). Cho xác nhận hàng chưa gửi (Pending/Confirmed) là để khách tự
+        // mở cửa sổ hoàn tiền cho món chưa hề rời vườn — đúng lỗ hổng của endpoint dev cũ.
+        var shippedIds = order.Deliveries.Where(d => d.Status == DeliveryStatus.Shipped).Select(d => d.Id).ToList();
+        if (shippedIds.Count == 0)
+            return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.Conflict,
+                "Chưa có kiện hàng nào đang giao để xác nhận đã nhận.");
+
+        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+        {
+            foreach (var id in shippedIds)
+            {
+                var delivery = await _uow.Orders.GetDeliveryWithOrderAsync(id, ct);
+                if (delivery is null || delivery.Status != DeliveryStatus.Shipped) continue;
+                await ApplyDeliveryTransitionAsync(delivery, DeliveryStatus.Delivered, userId, DeliverySource.Customer,
+                    "Khách xác nhận đã nhận hàng", trackingCode: null, shippingProvider: null, ct);
+            }
+            return null;
+        }, ct);
+
+        return await GetByIdAsync(orderId, userId, isPrivileged: false, ct);
+    }
+
+    /// <summary>
+    /// Lõi chuyển trạng thái một delivery — dùng chung cho vendor cập nhật tay và khách xác nhận đã nhận. Gọi
+    /// TRONG transaction; caller đã kiểm quyền và tính hợp lệ của bước chuyển. Giao xong ⇒ ghi sổ cái; hủy ⇒ hoàn kho.
+    /// </summary>
+    private async Task ApplyDeliveryTransitionAsync(Delivery delivery, DeliveryStatus to, Guid actorId,
+        DeliverySource source, string? note, string? trackingCode, string? shippingProvider, CancellationToken ct)
+    {
             var fromStatus = delivery.Status;
-            delivery.Status = request.Status;
-            if (request.TrackingCode is not null) delivery.TrackingCode = request.TrackingCode;
-            if (request.ShippingProvider is not null) delivery.ShippingProvider = request.ShippingProvider;
+            delivery.Status = to;
+            if (trackingCode is not null) delivery.TrackingCode = trackingCode;
+            if (shippingProvider is not null) delivery.ShippingProvider = shippingProvider;
 
             var now = DateTime.UtcNow;
-            switch (request.Status)
+            switch (to)
             {
                 case DeliveryStatus.Confirmed: delivery.AssignedAt = now; break;
                 case DeliveryStatus.Shipped: delivery.ShippedAt = now; break;
                 case DeliveryStatus.Delivered: delivery.DeliveredAt = now; break;
             }
 
-            if (delivery.IsExchange && request.Status == DeliveryStatus.Delivered)
-                await _returns.CompleteExchangeDeliveryAsync(delivery.Id, userId, ct);
+            if (delivery.IsExchange && to == DeliveryStatus.Delivered)
+                await _returns.CompleteExchangeDeliveryAsync(delivery.Id, actorId, ct);
+
+            // Giao xong = tiền hàng thuộc về vườn (sau khoảng giữ) và phí sàn được ghi — cùng transaction với trạng thái.
+            if (to == DeliveryStatus.Delivered)
+                await _ledger.PostDeliveryCompletedAsync(delivery, ct);
 
             // Hủy delivery phải hoàn kho, giống hủy cả đơn (OrderCancellationService). Thiếu bước
             // này thì hàng của delivery bị hủy nằm luôn ngoài sổ: đã trừ lúc đặt, không ai cộng lại.
@@ -281,7 +369,7 @@ public class OrderService : IOrderService
             //
             // Chỉ làm với Cancelled. KHÔNG làm với Returned: hàng trả về đi theo luồng RMA và
             // ReturnService.RestockAsync đã cộng kho ở đó rồi, cộng thêm ở đây là cộng đúp.
-            if (request.Status == DeliveryStatus.Cancelled)
+            if (to == DeliveryStatus.Cancelled)
                 await RestockDeliveryAsync(delivery, ct);
 
             // Add tường minh qua repo (Added → INSERT). Add qua navigation vào delivery đã-tracked
@@ -289,17 +377,17 @@ public class OrderService : IOrderService
             await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
             {
                 DeliveryId = delivery.Id,
-                SourceType = DeliverySource.Manual,
+                SourceType = source,
                 FromStatus = fromStatus.ToString(),
-                ToStatus = request.Status.ToString(),
-                Note = request.Note,
+                ToStatus = to.ToString(),
+                Note = note,
                 LoggedAt = now,
             }, ct);
 
             var preRollupStatus = delivery.Order.Status;
-            RecomputeOrderStatus(delivery.Order, userId);
+            RecomputeOrderStatus(delivery.Order, actorId);
 
-            var (nType, nTitle, nMsg) = MapDeliveryNotification(request.Status);
+            var (nType, nTitle, nMsg) = MapDeliveryNotification(to);
             await _uow.Notifications.AddAsync(new Notification
             {
                 UserId = delivery.Order.CustomerId,
@@ -335,11 +423,6 @@ public class OrderService : IOrderService
                     IsRead = false,
                 }, ct);
 
-            await Task.CompletedTask;
-            return null;
-        }, ct);
-
-        return ServiceResult<DeliveryResponse>.Success(_mapper.Map<DeliveryResponse>(delivery), ApiStatusMessages.Order.DeliveryStatusUpdated);
     }
 
     /// <summary>
@@ -443,6 +526,9 @@ public class OrderService : IOrderService
 
     private sealed record StoreShippingFee(Guid StoreId, string StoreName, decimal Subtotal, decimal ShippingFee);
 
+    private static List<StoreChargeInput> ToChargeInputs(IEnumerable<StoreShippingFee> fees)
+        => fees.Select(f => new StoreChargeInput(f.StoreId, f.Subtotal, f.ShippingFee)).ToList();
+
     private sealed record CheckoutContext(
         UserAddress Address, List<(ProductItem Pi, int Quantity)> Lines, Cart? Cart);
 
@@ -538,17 +624,28 @@ public class OrderService : IOrderService
         var subtotal = storeFees.Sum(s => s.Subtotal);
         var shipping = storeFees.Sum(s => s.ShippingFee);
 
+        // Cùng hàm chọn voucher với checkout ⇒ số xem trước = số sẽ bị tính. Mã sai không làm hỏng preview.
+        var voucher = await _vouchers.SelectAsync(userId, request.VoucherCode, ToChargeInputs(storeFees),
+            shipTo?.Ward?.District?.ProvinceId, ct);
+        var discount = voucher.TotalDiscount;
+
         return ServiceResult<ShippingFeePreviewResponse>.Success(new ShippingFeePreviewResponse
         {
             Subtotal = subtotal,
             TotalShippingFee = shipping,
-            TotalAmount = subtotal + shipping,
+            ShippingDiscount = discount,
+            TotalAmount = subtotal + shipping - discount,
+            AppliedVoucher = discount > 0 && voucher.Voucher is { } v
+                ? new AppliedVoucherResponse { Code = v.Code, Name = v.Name, ShippingDiscount = discount }
+                : null,
+            VoucherMessage = voucher.Error,
             Stores = storeFees.Select(s => new StoreShippingFeeResponse
             {
                 StoreId = s.StoreId,
                 StoreName = s.StoreName,
                 Subtotal = s.Subtotal,
                 ShippingFee = s.ShippingFee,
+                ShippingDiscount = voucher.DiscountFor(s.StoreId),
             }).ToList(),
         });
     }
@@ -570,7 +667,7 @@ public class OrderService : IOrderService
 
         // COD: thu tiền tại điểm giao; nếu đơn đã thu online thì CodAmount = 0.
         var cod = delivery.Order.PaymentMethod == PaymentMethod.COD
-            ? delivery.Subtotal + delivery.ShippingFee
+            ? delivery.Subtotal + delivery.ShippingFee - delivery.ShippingDiscount
             : 0m;
 
         var request = ShipmentRequestBuilder.Build(
@@ -582,8 +679,10 @@ public class OrderService : IOrderService
         delivery.TrackingCode = shipment.TrackingCode;
         delivery.TrackingUrl = shipment.TrackingUrl;
         delivery.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
-        // Phí ship thực tế nhà vận chuyển trả về (order.TotalShippingFee đã thu lúc checkout theo ước tính).
-        if (shipment.ShippingFee is { } actualFee) delivery.ShippingFee = actualFee;
+        // Phí nhà vận chuyển THỰC tính — cột riêng. KHÔNG ghi đè ShippingFee: đó là số khách đã trả lúc checkout
+        // (cộng vào Order.TotalShippingFee và số COD thu hộ). Ghi đè làm Σ phí ship các delivery lệch tổng đơn,
+        // còn sàn thì mất dấu mình lãi/lỗ bao nhiêu trên phí ship.
+        if (shipment.ShippingFee is { } actualFee) delivery.CarrierShippingFee = actualFee;
     }
 
     /// <summary>

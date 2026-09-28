@@ -171,7 +171,8 @@ Mốc (nhắm 7-13 cột để biểu đồ đọc được): `week` = 7 ngày g
   "awaitingPaymentOrders": 1,       // đơn PayOS khách đã đặt nhưng CHƯA trả tiền có hàng của store
   "awaitingPaymentValue": 430000,   // tiền chưa thu: đơn PayOS chưa trả + đơn COD đang trên đường
 
-  // Sản phẩm trong đơn, gộp theo (SẢN PHẨM × TRẠNG THÁI), top 10 mỗi trạng thái theo giá trị
+  // Sản phẩm trong đơn, gộp theo (SẢN PHẨM × TRẠNG THÁI), top 10 mỗi trạng thái theo giá trị — MỖI cặp đúng một
+  // dòng: lớp "Ordered" gộp CHUNG đơn PayOS chưa trả + đơn COD đang giao (28/09/2026; trước đó ra hai dòng trùng)
   "itemsByStatus": [
     { "productId": "guid", "productName": "Vòng tay thạch anh", "status": "Ordered", "quantity": 1, "value": 300000, "orderCount": 1, "shippingFee": 0 },
     { "productId": "guid", "productName": "Tượng Tỳ Hưu đồng",  "status": "Paid",    "quantity": 2, "value": 640000, "orderCount": 2, "shippingFee": 30000 }
@@ -184,6 +185,13 @@ Mốc (nhắm 7-13 cột để biểu đồ đọc được): `week` = 7 ngày g
   "availableForPayoutValue": 900000,    // đã giao và qua hết khoảng giữ
   "pendingClearanceValue": 250000,      // đã giao nhưng chưa đủ ngày
   "outstandingLiabilityValue": 0,       // công nợ chưa miễn, trừ vào kỳ chi kế tiếp
+
+  // Sổ cái (28/09/2026 — docs/adr/platform-fee-ledger.md)
+  "commissionRate": 0.08,               // phí sàn áp cho đơn MỚI
+  "platformCommission": 72000,          // Σ phí sàn đã thu, sau khi trả lại phần của hàng bị hoàn
+  "ledgerBalance": 828000,              // THỰC NHẬN = tiền hàng đã giao − phí sàn − công nợ (+ phí trả lại)
+  "ledgerAvailable": 690000,            // phần đã qua khoảng giữ
+  "ledgerPending": 138000,              // phần còn trong khoảng giữ
 
   "productCount": 12,
   "staffCount": 1,

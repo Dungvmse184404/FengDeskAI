@@ -5,6 +5,7 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.DTOs;
+using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Returns.Services;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Sales;
@@ -23,15 +24,17 @@ public class ShippingService : IShippingService
     private readonly Interfaces.External.IShippingProvider _shipping;
     private readonly IStoreShopProvisioner _shopProvisioner;
     private readonly IReturnService _returns;
+    private readonly ILedgerService _ledger;
 
     public ShippingService(IUnitOfWork uow, IMapper mapper, Interfaces.External.IShippingProvider shipping,
-        IStoreShopProvisioner shopProvisioner, IReturnService returns)
+        IStoreShopProvisioner shopProvisioner, IReturnService returns, ILedgerService ledger)
     {
         _uow = uow;
         _mapper = mapper;
         _shipping = shipping;
         _shopProvisioner = shopProvisioner;
         _returns = returns;
+        _ledger = ledger;
     }
 
     public async Task<IServiceResult> ProcessWebhookAsync(ShippingWebhookRequest request, CancellationToken ct = default)
@@ -80,6 +83,10 @@ public class ShippingService : IShippingService
 
             if (delivery.IsExchange && request.NewStatus == DeliveryStatus.Delivered)
                 await _returns.CompleteExchangeDeliveryAsync(delivery.Id, actorId: null, ct);
+
+            // Cùng quy tắc với cập nhật tay (OrderService): giao xong là ghi sổ, trong cùng transaction.
+            if (request.NewStatus == DeliveryStatus.Delivered)
+                await _ledger.PostDeliveryCompletedAsync(delivery, ct);
 
             await _uow.Shipping.AddProgressLogAsync(BuildLog(delivery, from, request, payloadJson, request.EventType), ct);
 

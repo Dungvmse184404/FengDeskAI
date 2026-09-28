@@ -33,6 +33,11 @@ public interface IUnitOfWork
 
     // Payment
     ITransactionRepository Transactions { get; }
+    /// <summary>Sổ cái tiền nhà vườn + sàn — chỉ ghi qua <c>ILedgerService</c>.</summary>
+    ILedgerRepository Ledger { get; }
+
+    // Promotion
+    IVoucherRepository Vouchers { get; }
 
     // Notification
     INotificationRepository Notifications { get; }

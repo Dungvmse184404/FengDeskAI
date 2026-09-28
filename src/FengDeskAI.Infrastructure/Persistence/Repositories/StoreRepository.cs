@@ -171,11 +171,13 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
                 i.ProductId, i.Name, i.OrderId, i.Value, i.Quantity, i.DeliveryFee, i.DeliverySubtotal)))
             .ToList();
 
-        // COD đang giao = tiền CHƯA thu ⇒ cùng lớp với đơn online chưa trả, không phải lớp "đã thanh toán".
-        var codRows = GroupItemsByProduct(deliveryItemFacts
+        // COD đang giao = tiền CHƯA thu ⇒ cùng lớp "Ordered" với đơn online chưa trả; gộp chung với nhóm đó ở
+        // dưới (một lần GroupBy) — gộp riêng rồi nối lại sẽ ra HAI dòng cho cùng (sản phẩm × Ordered).
+        var codFacts = deliveryItemFacts
             .Where(x => x.DeliveryStatus != Domain.Enums.Sales.DeliveryStatus.Delivered
                         && x.PaymentMethod == Domain.Enums.Payment.PaymentMethod.COD)
-            .Select(x => x.Fact), "Ordered");
+            .Select(x => x.Fact)
+            .ToList();
         var activeRows = GroupItemsByProduct(deliveryItemFacts
             .Where(x => x.DeliveryStatus != Domain.Enums.Sales.DeliveryStatus.Delivered
                         && x.PaymentMethod == Domain.Enums.Payment.PaymentMethod.PayOS)
@@ -206,8 +208,9 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
         var awaitingOrders = awaitingItems.Select(i => i.OrderId).Distinct().Count();
         var awaitingValue = awaitingItems.Sum(i => i.Value) + activeCod.Sum(d => d.Subtotal);
         // Chưa có delivery ⇒ chưa có phí ship để phân bổ, truyền 0.
-        var awaitingRows = GroupItemsByProduct(awaitingItems
-            .Select(i => new ItemFact(i.ProductId, i.Name, i.OrderId, i.Value, i.Quantity, 0m, 0m)), "Ordered");
+        var orderedRows = GroupItemsByProduct(awaitingItems
+            .Select(i => new ItemFact(i.ProductId, i.Name, i.OrderId, i.Value, i.Quantity, 0m, 0m))
+            .Concat(codFacts), "Ordered");
 
         // [4/8] Hoàn tiền: đi qua ReturnItem (có sản phẩm + số lượng thật sự bị trả), chỉ tính ticket đã hoàn xong.
         var refundedRows = await _context.Set<Domain.Entities.Sales.ReturnItem>()
@@ -301,7 +304,7 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             ActiveDeliveriesValue = activeValue,
             AwaitingPaymentOrders = awaitingOrders,
             AwaitingPaymentValue = awaitingValue,
-            ItemsByStatus = awaitingRows.Concat(codRows).Concat(activeRows)
+            ItemsByStatus = orderedRows.Concat(activeRows)
                 .Concat(completedRows).Concat(refundedRows).ToList(),
             ShippingFeeByStatus = shippingByStatus,
             PayoutHoldDays = PayoutPolicy.HoldDays,

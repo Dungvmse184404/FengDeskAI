@@ -32,6 +32,8 @@ public class UnitOfWork : IUnitOfWork
         IReturnRepository returns,
         IShippingRepository shipping,
         ITransactionRepository transactions,
+        ILedgerRepository ledger,
+        IVoucherRepository vouchers,
         INotificationRepository notifications,
         IChatboxRepository chatboxes,
         IChatMessageRepository chatMessages,
@@ -60,6 +62,8 @@ public class UnitOfWork : IUnitOfWork
         Returns = returns;
         Shipping = shipping;
         Transactions = transactions;
+        Ledger = ledger;
+        Vouchers = vouchers;
         Notifications = notifications;
         Chatboxes = chatboxes;
         ChatMessages = chatMessages;
@@ -87,6 +91,8 @@ public class UnitOfWork : IUnitOfWork
     public IReturnRepository Returns { get; }
     public IShippingRepository Shipping { get; }
     public ITransactionRepository Transactions { get; }
+    public ILedgerRepository Ledger { get; }
+    public IVoucherRepository Vouchers { get; }
     public INotificationRepository Notifications { get; }
     public IChatboxRepository Chatboxes { get; }
     public IChatMessageRepository ChatMessages { get; }

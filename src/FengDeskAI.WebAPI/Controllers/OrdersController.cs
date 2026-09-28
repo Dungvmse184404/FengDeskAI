@@ -52,6 +52,11 @@ public class OrdersController : ApiControllerBase
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
         => ToActionResult(await _service.CancelAsync(id, CurrentUserId, ct));
 
+    /// <summary>Khách xác nhận đã nhận các kiện đang giao (Shipped) của đơn mình → Delivered.</summary>
+    [HttpPost("{id:guid}/confirm-received")]
+    public async Task<IActionResult> ConfirmReceived(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.ConfirmReceivedAsync(id, CurrentUserId, ct));
+
     /// <summary>Danh sách delivery của một store (màn vendor). Yêu cầu owner/staff store đó hoặc admin.</summary>
     [HttpGet("stores/{storeId:guid}/deliveries")]
     public async Task<IActionResult> GetStoreDeliveries(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)

@@ -11,6 +11,9 @@ public interface IOrderRepository : IGenericRepository<Order>
     /// <summary>Thêm deliveries tường minh vào context (đảm bảo trạng thái Added → INSERT).</summary>
     Task AddDeliveriesAsync(IEnumerable<Delivery> deliveries, CancellationToken ct = default);
 
+    /// <summary>Tiền theo từng vườn đã chốt lúc checkout (rỗng với đơn tạo trước khi có bảng này).</summary>
+    Task<List<OrderStoreCharge>> GetStoreChargesAsync(Guid orderId, CancellationToken ct = default);
+
     /// <summary>Thêm order items tường minh vào context (Added → INSERT) — dùng cho delivery hàng đổi.</summary>
     Task AddOrderItemsAsync(IEnumerable<OrderItem> items, CancellationToken ct = default);
 

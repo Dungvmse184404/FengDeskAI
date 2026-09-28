@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Features.Vendor.Services;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Enums.Sales;
 
@@ -21,6 +22,7 @@ public static class OrderWorkflow
                 Status = DeliveryStatus.Pending,
                 ShippingFee = 0m,
                 Subtotal = group.Sum(i => i.UnitPrice * i.Quantity),
+                CommissionRate = PlatformFeePolicy.CommissionRate,
             };
             foreach (var item in group)
             {
@@ -28,6 +30,54 @@ public static class OrderWorkflow
                 delivery.Items.Add(item);
             }
             order.Deliveries.Add(delivery);
+        }
+    }
+
+    /// <summary>
+    /// Đặt phí ship + khoản giảm cho các delivery vừa sinh của đơn online, theo đúng số đã chốt từng vườn lúc
+    /// checkout (<see cref="OrderStoreCharge"/>). Đơn tạo trước khi có bảng đó (không có dòng nào) thì chia tỉ lệ.
+    /// </summary>
+    public static void ApplyStoreCharges(Order order, IReadOnlyCollection<OrderStoreCharge> charges)
+    {
+        if (charges.Count == 0)
+        {
+            AllocateOrderShippingFee(order);
+            return;
+        }
+
+        var byStore = charges.ToDictionary(c => c.GardenStoreId);
+        foreach (var delivery in order.Deliveries.Where(d => !d.IsExchange))
+        {
+            if (!byStore.TryGetValue(delivery.GardenStoreId, out var charge)) continue;
+            delivery.ShippingFee = charge.ShippingFee;
+            delivery.ShippingDiscount = charge.ShippingDiscount;
+        }
+    }
+
+    /// <summary>
+    /// Chia <c>Order.TotalShippingFee</c> (khách ĐÃ trả lúc checkout) về từng delivery theo tỉ trọng tiền hàng;
+    /// phần lẻ do làm tròn dồn vào delivery cuối để tổng luôn khớp từng đồng.
+    ///
+    /// Dùng cho đơn PayOS: delivery chỉ sinh khi webhook báo đã trả, lúc đó phí theo từng vườn tính ở checkout
+    /// đã mất (không lưu) — trước đây delivery nhận 0đ phí ship, nên tiền ship khách trả "biến mất" khỏi mọi
+    /// báo cáo theo delivery. Đơn COD không cần: delivery tạo ngay lúc checkout với phí đúng của từng vườn.
+    /// </summary>
+    public static void AllocateOrderShippingFee(Order order)
+    {
+        var deliveries = order.Deliveries.Where(d => !d.IsExchange).OrderBy(d => d.Subtotal).ToList();
+        if (deliveries.Count == 0) return;
+
+        var totalSubtotal = deliveries.Sum(d => d.Subtotal);
+        var remaining = order.TotalShippingFee;
+        for (var i = 0; i < deliveries.Count; i++)
+        {
+            var isLast = i == deliveries.Count - 1;
+            decimal share;
+            if (isLast) share = remaining;
+            else if (totalSubtotal == 0) share = 0m;
+            else share = Math.Round(order.TotalShippingFee * deliveries[i].Subtotal / totalSubtotal, 0, MidpointRounding.AwayFromZero);
+            deliveries[i].ShippingFee = share;
+            remaining -= share;
         }
     }
 

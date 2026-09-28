@@ -19,6 +19,12 @@ public interface IOrderService
     Task<IServiceResult<OrderDetailResponse>> CancelAsync(Guid id, Guid userId, CancellationToken ct = default);
 
     Task<IServiceResult<PagedResult<StoreDeliveryResponse>>> GetStoreDeliveriesAsync(Guid storeId, Guid userId, bool isAdmin, PageRequest page, CancellationToken ct = default);
+    /// <summary>
+    /// Khách xác nhận đã nhận hàng: mọi delivery <c>Shipped</c> của đơn (của chính khách) sang <c>Delivered</c>,
+    /// đi đúng đường cập nhật tay (log, rollup, thông báo, sổ cái). Không có kiện đang giao ⇒ 409.
+    /// </summary>
+    Task<IServiceResult<OrderDetailResponse>> ConfirmReceivedAsync(Guid orderId, Guid userId, CancellationToken ct = default);
+
     Task<IServiceResult<DeliveryResponse>> UpdateDeliveryStatusAsync(Guid deliveryId, Guid userId, bool isAdmin, UpdateDeliveryStatusRequest request, CancellationToken ct = default);
     Task<IServiceResult<DeliveryResponse>> AssignDeliveryStaffAsync(
         Guid deliveryId, Guid userId, bool isAdmin, AssignDeliveryStaffRequest request, CancellationToken ct = default);

@@ -24,6 +24,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
             .HasDefaultValue(PaymentMethod.PayOS);
         builder.Property(o => o.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2);
         builder.Property(o => o.TotalShippingFee).HasColumnName("total_shipping_fee").HasPrecision(12, 2);
+        builder.Property(o => o.ShippingDiscount).HasColumnName("shipping_discount").HasPrecision(12, 2).HasDefaultValue(0m);
+        builder.Property(o => o.VoucherCode).HasColumnName("voucher_code").HasMaxLength(50);
         builder.Property(o => o.TotalAmount).HasColumnName("total_amount").HasPrecision(12, 2);
         builder.Property(o => o.Note).HasColumnName("note");
 
@@ -53,6 +55,11 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.HasMany(o => o.Deliveries)
             .WithOne(d => d.Order)
             .HasForeignKey(d => d.OrderId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        builder.HasMany(o => o.StoreCharges)
+            .WithOne()
+            .HasForeignKey(c => c.OrderId)
             .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasMany(o => o.StatusLogs)

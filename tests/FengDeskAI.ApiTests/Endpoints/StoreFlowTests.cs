@@ -550,8 +550,13 @@ public sealed class StoreFlowTests
     public async Task Statistics_ReturnsEveryRangeInOneCall()
     {
         // Đổi mốc KHÔNG đổi số liệu, chỉ đổi cách chia cột. Gọi lại API chỉ để chia cột khác là phí toi
-        // ~8 lượt đi về DB, nên response phải mang sẵn cả bốn mốc và chúng phải trùng khít với cái mà
-        // `?range=` trả ra — nếu lệch thì client đổi tại chỗ sẽ hiện số khác với lúc tải lại trang.
+        // ~8 lượt đi về DB, nên response phải mang sẵn cả bốn mốc, và `revenueSeries` phải đúng là
+        // phần tử ứng với `range` — lệch thì client đổi tại chỗ sẽ hiện khác lúc tải lại trang.
+        //
+        // ⚠ Mọi so sánh ở đây nằm TRONG MỘT response. Bản đầu còn gọi thêm `?range=` cho từng mốc rồi
+        // so nhãn hai bên: mỗi lời gọi tự lấy `DateTime.UtcNow` riêng, nên hai lời gọi nằm hai bên
+        // nửa đêm UTC sẽ ra nhãn lệch một ngày và test đỏ ngẫu nhiên trên CI. Ràng buộc thật sự cần
+        // giữ là tính NHẤT QUÁN BÊN TRONG một response — cái đó không phụ thuộc đồng hồ.
         var (user, storeId) = await OwnerWithStoreAsync();
         var client = ScenarioUsers.ClientFor(_fixture, user);
 
@@ -561,20 +566,24 @@ public sealed class StoreFlowTests
         foreach (var range in new[] { "week", "month", "quarter", "year" })
         {
             Assert.True(byRange.TryGetProperty(range, out var bundled), $"Thiếu mốc {range}.");
-            var direct = (await ApiEnvelope.DataAsync(
-                await client.GetAsync($"/api/stores/{storeId}/statistics?range={range}")))
-                .GetProperty("revenueSeries");
-
-            Assert.Equal(direct.GetArrayLength(), bundled.GetArrayLength());
-            Assert.Equal(
-                direct.EnumerateArray().Select(b => b.GetProperty("labelVi").GetString()).ToList(),
-                bundled.EnumerateArray().Select(b => b.GetProperty("labelVi").GetString()).ToList());
+            Assert.True(bundled.GetArrayLength() > 0, $"Mốc {range} rỗng.");
+            Assert.All(bundled.EnumerateArray(),
+                b => Assert.False(string.IsNullOrWhiteSpace(b.GetProperty("labelVi").GetString())));
         }
 
-        // `revenueSeries` vẫn là phần tử ứng với `range` đang áp — client cũ không vỡ.
+        // Số cột của từng mốc là hằng số: tuần = 7 ngày, năm = 12 tháng. (`month`/`quarter` đổi theo
+        // tháng/quý đang chạy nên không chốt số ở đây — STORE-30c đã canh phần đó.)
+        Assert.Equal(7, byRange.GetProperty("week").GetArrayLength());
+        Assert.Equal(12, byRange.GetProperty("year").GetArrayLength());
+
+        // `revenueSeries` vẫn là phần tử ứng với `range` đang áp — client cũ không vỡ. So khớp từng
+        // nhãn, và vì cùng một response nên không có chuyện lệch đồng hồ.
         Assert.Equal("month", stats.GetProperty("range").GetString());
-        Assert.Equal(byRange.GetProperty("month").GetArrayLength(),
-            stats.GetProperty("revenueSeries").GetArrayLength());
+        Assert.Equal(
+            byRange.GetProperty("month").EnumerateArray()
+                .Select(b => b.GetProperty("labelVi").GetString()).ToList(),
+            stats.GetProperty("revenueSeries").EnumerateArray()
+                .Select(b => b.GetProperty("labelVi").GetString()).ToList());
     }
 
     [Fact(DisplayName = "STORE-30d [Abnormal] An unknown range falls back to month instead of failing")]

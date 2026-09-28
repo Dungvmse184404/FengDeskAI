@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Features.Promotion.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Sales;
@@ -16,9 +17,12 @@ public class OrderCancellationService : IOrderCancellationService
     private readonly IUnitOfWork _uow;
     private readonly IPaymentGateway _gateway;
     private readonly ILogger<OrderCancellationService> _logger;
+    private readonly IVoucherService _vouchers;
 
-    public OrderCancellationService(IUnitOfWork uow, IPaymentGateway gateway, ILogger<OrderCancellationService> logger)
+    public OrderCancellationService(IUnitOfWork uow, IPaymentGateway gateway, ILogger<OrderCancellationService> logger,
+        IVoucherService vouchers)
     {
+        _vouchers = vouchers;
         _uow = uow;
         _gateway = gateway;
         _logger = logger;
@@ -77,6 +81,9 @@ public class OrderCancellationService : IOrderCancellationService
                     pi.Stock += item.Quantity;
 
             order.StatusChangeNote = note;
+
+            // Đơn không thành ⇒ trả lượt voucher cho người khác dùng.
+            await _vouchers.ReleaseForOrderAsync(order.Id, ct);
 
             await _uow.Notifications.AddAsync(new Notification
             {

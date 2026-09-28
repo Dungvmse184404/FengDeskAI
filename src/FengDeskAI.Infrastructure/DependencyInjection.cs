@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using FengDeskAI.Application.Features.CustomerCare;
 using FengDeskAI.Application.Features.Workspace;
@@ -170,6 +170,8 @@ public static class DependencyInjection
         services.AddScoped<IReturnRepository, ReturnRepository>();
         services.AddScoped<IShippingRepository, ShippingRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
+        services.AddScoped<ILedgerRepository, LedgerRepository>();
+        services.AddScoped<IVoucherRepository, VoucherRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
@@ -316,6 +318,8 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, ProductElementInputDemoSeeder>();
         services.AddScoped<IDataSeeder, PlacementProductDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductAspirationDemoSeeder>();
+        services.AddScoped<IDataSeeder, VoucherSeeder>();
+        services.AddScoped<IDataSeeder, LedgerBackfillSeeder>();
 
         return services;
     }

@@ -37,6 +37,8 @@ Tài liệu API đầy đủ cho hệ thống **FengDeskAI** (BackEnd `.NET 8`).
 | 24 | [Dev Tools](./24-dev-tools.md) | `DevToolsController` | 2 | Test AI tool (Dev) |
 | 25 | [Scoring Config](./25-scoring-config.md) | `ScoringConfigController` | 11 | Admin cấu hình engine gợi ý (v3 + vibe mềm + Carry + trục cá nhân) |
 | 26 | [Model3D Requests (staff sàn)](./26-model3d-requests.md) | `Model3DRequestsController` | 6 | Hàng chờ Regenerate model 3D — xử lý thủ công |
+| 27 | [Platform](./27-platform.md) | `PlatformController` | 1 | Chính sách phí sàn công khai (người bán xem giá thực nhận) |
+| 28 | [Vouchers](./28-vouchers.md) | `VouchersController` | 4 | Mã giảm giá (FREESHIP500), Manager tạo/bật/tắt |
 | A | [Phụ lục — Enums & Models](./99-appendix-models.md) | — | — | Toàn bộ enum, envelope, error codes |
 
 ---

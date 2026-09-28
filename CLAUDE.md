@@ -1,4 +1,4 @@
-﻿# CLAUDE.md
+# CLAUDE.md
 
 Hướng dẫn cho Claude khi làm việc trong repo backend **FengDeskAI**.
 
@@ -88,6 +88,15 @@ trỏ tới **ba** đại lượng khác nhau (`current` / `d` / `T`) — đọc
 
 > `Tools/CancelOrderTool.cs` là **file rỗng**, chưa implement và không đăng ký DI — đừng tính vào danh sách tool khả dụng.
 
+### Tiền: phí sàn & sổ cái
+📖 [`docs/adr/platform-fee-ledger.md`](docs/adr/platform-fee-ledger.md). Mọi tiền đi qua sàn; **phí sàn 8%**
+(`PlatformFeePolicy`) chốt vào `deliveries.commission_rate` lúc tạo delivery. **Chỉ `ILedgerService` được ghi
+`ledger_entries`**, luôn trong cùng transaction với đổi trạng thái; mỗi bút toán có `idempotency_key` UNIQUE.
+`deliveries.shipping_fee` = phí KHÁCH trả (đừng ghi đè bằng phí GHN — phí thật ở `carrier_shipping_fee`).
+Voucher ([`docs/adr/voucher-freeship.md`](docs/adr/voucher-freeship.md)): sàn tài trợ, giảm mỗi delivery ≤ min(phí
+ship, phí sàn); preview và checkout PHẢI đi qua cùng `VoucherService.SelectAsync`; tổng đơn =
+`subtotal + total_shipping_fee − shipping_discount` (cũng là số COD).
+
 ### Background workers
 `WebAPI/Workers/`: `AiBotWorker` (+ `AiBotQueue`), `Model3DPollingWorker` (poll Meshy), `OrderExpirationWorker` (hết hạn đơn online chưa thanh toán).
 
@@ -148,8 +157,8 @@ dotnet test FengDeskAI.slnx
 
 Connection string tìm theo thứ tự: biến môi trường `ConnectionStrings__DefaultConnection` (CI dùng, luôn ưu tiên) → `appsettings.Testing.json` (gitignore, mỗi máy một file) → không có thì dừng kèm hướng dẫn. **Không có giá trị mặc định trong code.**
 
-- `tests/FengDeskAI.UnitTests` — unit test thuần (xunit + Moq). **113 test.**
-- `tests/FengDeskAI.ApiTests` — integration test in-process qua `WebApplicationFactory`. **356 test.** Tầng 1 phủ **toàn bộ** endpoint ở mức smoke + ma trận phân quyền, tự sinh từ routing table nên endpoint mới được phủ ngay; tầng 2 phủ nghiệp vụ theo bounded context (Identity, Sales, Returns/RMA + SLA + công nợ, Catalog + model 3D, Vendor, quản trị + tham số chấm điểm, Workspace, gợi ý, đánh giá, giao hàng, địa chỉ, bảng tra cứu). Xem [`tests/FengDeskAI.ApiTests/README.md`](tests/FengDeskAI.ApiTests/README.md) và [`docs/adr/api-integration-testing.md`](docs/adr/api-integration-testing.md).
+- `tests/FengDeskAI.UnitTests` — unit test thuần (xunit + Moq). **424 test.**
+- `tests/FengDeskAI.ApiTests` — integration test in-process qua `WebApplicationFactory`. **423 test.** Tầng 1 phủ **toàn bộ** endpoint ở mức smoke + ma trận phân quyền, tự sinh từ routing table nên endpoint mới được phủ ngay; tầng 2 phủ nghiệp vụ theo bounded context (Identity, Sales, Returns/RMA + SLA + công nợ, Catalog + model 3D, Vendor, quản trị + tham số chấm điểm, Workspace, gợi ý, đánh giá, giao hàng, địa chỉ, bảng tra cứu). Xem [`tests/FengDeskAI.ApiTests/README.md`](tests/FengDeskAI.ApiTests/README.md) và [`docs/adr/api-integration-testing.md`](docs/adr/api-integration-testing.md).
 - **Ca test có tác dụng phụ lên phiên đăng nhập** (thứ làm đổi `TokenVersion`: tạo cửa hàng, khóa user, đổi role, thu hồi phiên) phải dùng `ScenarioUsers.CreateAsync` — nhắm vào user mẫu dùng chung sẽ làm token của role đó chết và kéo mọi ca chạy sau đỏ theo.
 - `TestDatabaseGuard` chặn cứng việc chạy test vào DB từ xa (Supabase/Railway). **Đừng gỡ.**
 - Thêm tích hợp ngoài mới → phải thêm fake trong `ApiTestFactory`, không thì test gọi ra dịch vụ thật.

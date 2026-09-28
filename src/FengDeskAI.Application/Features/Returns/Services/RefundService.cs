@@ -1,5 +1,6 @@
 using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Formatting;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
@@ -403,7 +404,7 @@ public class RefundService : IRefundService
             UserId = ticket.CustomerId,
             Type = NotificationType.RefundCompleted,
             Title = "Đã hoàn tiền",
-            Message = $"Khoản hoàn tiền {refund.Amount:#,##0} đ cho yêu cầu của bạn đã được xử lý.",
+            Message = $"Khoản hoàn tiền {Vnd.Of(refund.Amount)} cho yêu cầu của bạn đã được xử lý.",
             ReferenceId = ticket.Id,
             ReferenceType = ReferenceType.Refund,
             IsRead = false,
