@@ -121,6 +121,17 @@ public class InvariantTests
         Assert.True(refundAmount <= lineTotal);
     }
 
+    [Theory]
+    [InlineData(DeliveryStatus.Delivered, null, true)]
+    [InlineData(DeliveryStatus.Delivered, RefundStatus.Completed, true)]
+    [InlineData(DeliveryStatus.Delivered, RefundStatus.ManagerReview, false)]
+    [InlineData(DeliveryStatus.Shipped, RefundStatus.Completed, false)]
+    public void Exchange_CompletesOnlyAfterDeliveryAndDifferenceRefund(
+        DeliveryStatus deliveryStatus, RefundStatus? refundStatus, bool expected)
+    {
+        Assert.Equal(expected, ReturnWorkflow.CanCompleteExchange(deliveryStatus, refundStatus));
+    }
+
     // ----- helpers dựng refund ở trạng thái mong muốn -----
 
     private static Refund NewRefund() => new()
