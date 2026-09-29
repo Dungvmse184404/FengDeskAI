@@ -30,8 +30,8 @@ public class RefundsController : ApiControllerBase
     /// <summary>Danh sách refund cần Manager để mắt (Failed / ManagerReview).</summary>
     [HttpGet]
     [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
-    public async Task<IActionResult> GetForManager([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetForManagerAsync(page, ct));
+    public async Task<IActionResult> GetForManager([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetForManagerAsync(paging, ct));
 
     [HttpGet("{id:guid}")]
     [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]

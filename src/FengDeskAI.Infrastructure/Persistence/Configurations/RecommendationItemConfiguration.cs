@@ -37,7 +37,8 @@ public class RecommendationItemConfiguration : IEntityTypeConfiguration<Recommen
         builder.HasOne(i => i.Product)
             .WithMany()
             .HasForeignKey(i => i.ProductId)
-            .OnDelete(DeleteBehavior.Restrict);
+            // Log gợi ý của sản phẩm đã xoá cứng không còn ý nghĩa.
+            .OnDelete(DeleteBehavior.Cascade);
         // Quan hệ tới Recommendation cấu hình ở RecommendationConfiguration.
 
         builder.HasQueryFilter(i => !i.IsDeleted);

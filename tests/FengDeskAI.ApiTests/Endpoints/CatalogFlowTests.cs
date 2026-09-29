@@ -3,6 +3,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FengDeskAI.ApiTests.Infrastructure;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Infrastructure.Persistence.Contexts;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using Xunit.Abstractions;
 
@@ -169,6 +172,127 @@ public sealed class CatalogFlowTests
         Assert.Equal(HttpStatusCode.NotFound, reread.StatusCode);
     }
 
+    [Fact(DisplayName = "CAT-09b [Boundary] A product still inside an open order (return window) cannot be deleted, soft or hard")]
+    public async Task DeleteProduct_OpenOrder_IsRejected()
+    {
+        var order = await DeliveredOrderScenario.CreateAsync(_fixture); // vừa giao ⇒ còn trong 7 ngày đổi trả
+        var (productId, itemId) = await ProductOfOrderItemAsync(order.OrderItemId);
+
+        var soft = await Owner().DeleteAsync($"/api/products/{productId}");
+        var softItem = await Owner().DeleteAsync($"/api/products/{productId}/items/{itemId}");
+        var hard = await _fixture.ClientFor(TestRole.Manager).DeleteAsync($"/api/products/{productId}/permanent");
+
+        Assert.Equal(HttpStatusCode.Conflict, soft.StatusCode);
+        Assert.Contains("Ngừng bán", await ApiEnvelope.MessageAsync(soft));
+        Assert.Equal(HttpStatusCode.Conflict, softItem.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, hard.StatusCode);
+    }
+
+    [Fact(DisplayName = "CAT-09d [Normal] After the return window a closed order survives soft then hard delete intact; the review is kept")]
+    public async Task DeleteProduct_ClosedOrder_SoftThenHard_OrderAndReviewIntact()
+    {
+        var order = await DeliveredOrderScenario.CreateAsync(_fixture);
+        var (productId, itemId) = await ProductOfOrderItemAsync(order.OrderItemId);
+        var customer = _fixture.ClientFor(TestRole.Customer);
+        var review = await customer.PostAsJsonAsync("/api/review", new { productId, rating = 5, content = "Cây đẹp" });
+        Assert.True(review.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(review, "đánh giá"));
+        var before = await OrderLineAsync(customer, order.OrderId);
+        await CloseReturnWindowAsync(order.DeliveryId);
+
+        // Người bán xoá = xoá mềm; một khách khác đang để biến thể trong giỏ.
+        var shopper = ScenarioUsers.ClientFor(_fixture, await ScenarioUsers.CreateAsync(_fixture));
+        Assert.True((await shopper.PostAsJsonAsync("/api/cart/items", new { productItemId = itemId, quantity = 1 })).IsSuccessStatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await Owner().DeleteAsync($"/api/products/{productId}")).StatusCode);
+
+        var afterSoft = await OrderLineAsync(customer, order.OrderId);
+        AssertSameLine(before, afterSoft);
+        Assert.False(afterSoft.GetProperty("productAvailable").GetBoolean());
+        Assert.Empty((await ApiEnvelope.DataAsync(await shopper.GetAsync("/api/cart"))).GetProperty("items").EnumerateArray());
+
+        // Manager xoá vĩnh viễn — kể cả sản phẩm đã bị xoá mềm.
+        var hard = await _fixture.ClientFor(TestRole.Manager).DeleteAsync($"/api/products/{productId}/permanent");
+        Assert.Equal(HttpStatusCode.OK, hard.StatusCode);
+
+        var afterHard = await OrderLineAsync(customer, order.OrderId);
+        AssertSameLine(before, afterHard);
+        Assert.Equal(JsonValueKind.Null, afterHard.GetProperty("productItemId").ValueKind);
+        bool productRowGone = false;
+        string? reviewName = null;
+        await _fixture.WithScopeAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            productRowGone = !await db.Set<Domain.Entities.Catalog.Product>().IgnoreQueryFilters().AnyAsync(p => p.Id == productId);
+            reviewName = await db.Reviews.Where(r => r.UserId == _fixture.UserId(TestRole.Customer) && r.ProductId == null
+                                                    && r.ProductName != null && r.Content == "Cây đẹp")
+                .Select(r => r.ProductName).FirstOrDefaultAsync();
+        });
+        Assert.True(productRowGone, "xoá cứng phải xoá hẳn dòng sản phẩm");
+        Assert.NotNull(reviewName);
+    }
+
+    [Fact(DisplayName = "CAT-09e [Security] Only managers can permanently delete a product")]
+    public async Task HardDelete_AsGardenOwner_IsForbidden()
+    {
+        var productId = await CreateProductAsync();
+
+        var response = await Owner().DeleteAsync($"/api/products/{productId}/permanent");
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact(DisplayName = "CAT-09c [Normal] Deleting a never-ordered product also drops its variants from shoppers' carts")]
+    public async Task DeleteProduct_NoOrders_RemovesFromCarts()
+    {
+        var productId = await CreateProductAsync();
+        var itemId = await FirstItemIdAsync(productId);
+        var shopper = ScenarioUsers.ClientFor(_fixture, await ScenarioUsers.CreateAsync(_fixture));
+        var add = await shopper.PostAsJsonAsync("/api/cart/items", new { productItemId = itemId, quantity = 1 });
+        Assert.True(add.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(add, "thêm vào giỏ"));
+
+        var delete = await Owner().DeleteAsync($"/api/products/{productId}");
+
+        Assert.Equal(HttpStatusCode.OK, delete.StatusCode);
+        bool inCart = true, itemAlive = true;
+        await _fixture.WithScopeAsync(async sp =>
+        {
+            var db = sp.GetRequiredService<AppDbContext>();
+            inCart = await db.CartItems.AnyAsync(c => c.ProductItemId == itemId);
+            itemAlive = await db.Set<Domain.Entities.Catalog.ProductItem>().AnyAsync(i => i.Id == itemId);
+        });
+        Assert.False(inCart, "biến thể của sản phẩm đã xoá phải rời khỏi giỏ");
+        Assert.False(itemAlive, "biến thể phải bị xoá mềm theo sản phẩm");
+    }
+
+    private async Task<(Guid ProductId, Guid ItemId)> ProductOfOrderItemAsync(Guid orderItemId)
+    {
+        (Guid, Guid) result = default;
+        await _fixture.WithScopeAsync(async sp => result = await sp.GetRequiredService<AppDbContext>().OrderItems
+            .Where(i => i.Id == orderItemId)
+            .Select(i => new ValueTuple<Guid, Guid>(i.ProductId!.Value, i.ProductItemId!.Value))
+            .SingleAsync());
+        return result;
+    }
+
+    /// <summary>Đẩy mốc giao về quá khoảng đổi trả ⇒ đơn coi như đã đóng.</summary>
+    private async Task CloseReturnWindowAsync(Guid deliveryId)
+        => await _fixture.WithScopeAsync(async sp => await sp.GetRequiredService<AppDbContext>().Deliveries
+            .Where(d => d.Id == deliveryId)
+            .ExecuteUpdateAsync(u => u.SetProperty(d => d.DeliveredAt, DateTime.UtcNow.AddDays(-30))));
+
+    private static async Task<JsonElement> OrderLineAsync(HttpClient customer, Guid orderId)
+    {
+        var detail = await ApiEnvelope.DataAsync(await customer.GetAsync($"/api/orders/{orderId}"));
+        Assert.Equal(1, detail.GetProperty("items").GetArrayLength());
+        return detail.GetProperty("items")[0].Clone();
+    }
+
+    /// <summary>Món trong đơn phải y nguyên: tên, biến thể, ảnh, giá, số lượng.</summary>
+    private static void AssertSameLine(JsonElement expected, JsonElement actual)
+    {
+        foreach (var field in new[] { "productName", "variantName", "imageUrl", "unitPrice", "quantity", "productId" })
+            Assert.Equal(expected.GetProperty(field).ToString(), actual.GetProperty(field).ToString());
+    }
+
     // ===================== Biến thể =====================
 
     [Fact(DisplayName = "CAT-10 [Normal] The owner adds a variant to an existing product")]
@@ -221,6 +345,21 @@ public sealed class CatalogFlowTests
 
         Assert.Equal(HttpStatusCode.BadRequest, second.StatusCode);
         Assert.Contains("SKU", await ApiEnvelope.MessageAsync(second), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(DisplayName = "CAT-12b [Normal] SKU suggestion is a platform code that can be saved as-is")]
+    public async Task SuggestSku_ReturnsUnusedPlatformCode_Accepted()
+    {
+        var productId = await CreateProductAsync();
+
+        var suggestion = await ApiEnvelope.DataAsync(await Owner().GetAsync("/api/products/sku-suggestion"));
+        var sku = suggestion.GetString()!;
+        Assert.Matches("^FD-[0-9A-HJKMNP-TV-Z]{8}$", sku);
+
+        var saved = await Owner().PostAsJsonAsync($"/api/products/{productId}/items",
+            new { name = "Bản gợi ý", price = 100_000m, stock = 1, sku });
+        Assert.Equal(HttpStatusCode.Created, saved.StatusCode);
+        Assert.Equal(sku, (await ApiEnvelope.DataAsync(saved)).GetProperty("sku").GetString());
     }
 
     [Fact(DisplayName = "CAT-13 [Normal] Updating a variant changes its price and stock")]

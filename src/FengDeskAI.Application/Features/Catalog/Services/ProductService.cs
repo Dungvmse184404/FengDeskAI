@@ -1,4 +1,5 @@
 using AutoMapper;
+using FengDeskAI.Application.Features.Vendor.Services;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
@@ -138,8 +139,21 @@ public class ProductService : IProductService
         if (product is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
         if (!await CanManageStoreAsync(product.GardenStoreId, userId, isAdmin, ct))
             return ServiceResult.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Product.DeleteForbidden);
-        _uow.Products.Remove(product);
-        await _uow.SaveChangesAsync(ct);
+        // Người bán xoá = XOÁ MỀM (IsDeleted) sản phẩm + biến thể, gỡ khỏi giỏ. Đơn cũ hiển thị từ cột chụp lúc đặt
+        // nên không mất gì; chỉ chặn khi còn đơn chưa đóng (hoàn kho / trả hàng / đổi hàng còn cần biến thể).
+        if (await HasOpenOrdersAsync(id, null, ct))
+            return ServiceResult.Failure(ApiStatusCodes.Conflict,
+                string.Format(ApiStatusMessages.Product.DeleteHasOpenOrdersFormat, PayoutPolicy.HoldDays));
+
+        await _uow.ExecuteInTransactionAsync(async _ =>
+        {
+            // Xoá theo cả biến thể và dòng giỏ — không thì biến thể "mồ côi" vẫn nằm trong giỏ khách.
+            var items = await _uow.Products.GetItemsForUpdateAsync(id, ct);
+            foreach (var item in items) _uow.Products.RemoveItem(item);
+            await _uow.Products.RemoveFromCartsAsync(items.Select(i => i.Id).ToList(), ct);
+            _uow.Products.Remove(product);
+            return true;
+        }, ct);
         return ServiceResult.Success(ApiStatusMessages.Product.Deleted);
     }
 
@@ -193,8 +207,15 @@ public class ProductService : IProductService
         if (guard.Error is not null) return guard.Error;
         var item = await _uow.Products.GetItemAsync(productId, itemId, ct);
         if (item is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.ItemNotFound);
-        _uow.Products.RemoveItem(item);
-        await _uow.SaveChangesAsync(ct);
+        if (await HasOpenOrdersAsync(productId, itemId, ct))
+            return ServiceResult.Failure(ApiStatusCodes.Conflict, ApiStatusMessages.Product.ItemDeleteHasOpenOrders);
+
+        await _uow.ExecuteInTransactionAsync(async _ =>
+        {
+            await _uow.Products.RemoveFromCartsAsync([item.Id], ct);
+            _uow.Products.RemoveItem(item);
+            return true;
+        }, ct);
         return ServiceResult.Success(ApiStatusMessages.Product.ItemDeleted);
     }
 
@@ -341,6 +362,26 @@ public class ProductService : IProductService
         var existing = (await repo.GetAllAsync(ct)).Select(x => x.Code).ToHashSet(StringComparer.OrdinalIgnoreCase);
         return wanted.All(existing.Contains);
     }
+
+    public async Task<IServiceResult<string>> SuggestSkuAsync(CancellationToken ct = default)
+        => ServiceResult<string>.Success(await _skuGenerator.GenerateAsync(ct));
+
+    public async Task<IServiceResult> HardDeleteAsync(Guid id, CancellationToken ct = default)
+    {
+        // Tìm cả sản phẩm người bán đã xoá mềm — Manager dọn hẳn.
+        var product = await _uow.Products.GetByIdIncludingDeletedAsync(id, ct);
+        if (product is null) return ServiceResult.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Product.NotFound);
+        if (await HasOpenOrdersAsync(id, null, ct))
+            return ServiceResult.Failure(ApiStatusCodes.Conflict,
+                string.Format(ApiStatusMessages.Product.DeleteHasOpenOrdersFormat, PayoutPolicy.HoldDays));
+
+        await _uow.Products.HardDeleteAsync(id, ct);
+        return ServiceResult.Success(ApiStatusMessages.Product.HardDeleted);
+    }
+
+    /// <summary>Còn đơn chưa đóng: khoảng đổi trả = khoảng giữ tiền (<see cref="PayoutPolicy.HoldDays"/>).</summary>
+    private Task<bool> HasOpenOrdersAsync(Guid productId, Guid? itemId, CancellationToken ct)
+        => _uow.Products.HasOpenOrdersAsync(productId, itemId, DateTime.UtcNow.AddDays(-PayoutPolicy.HoldDays), ct);
 
     // ---- helpers ----
 

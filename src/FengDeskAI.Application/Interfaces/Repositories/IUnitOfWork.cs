@@ -35,6 +35,8 @@ public interface IUnitOfWork
     ITransactionRepository Transactions { get; }
     /// <summary>Sổ cái tiền nhà vườn + sàn — chỉ ghi qua <c>ILedgerService</c>.</summary>
     ILedgerRepository Ledger { get; }
+    /// <summary>Lịch sử phí sàn — chỉ ghi qua <c>IPlatformFeeService</c>.</summary>
+    IPlatformFeeRateRepository PlatformFeeRates { get; }
 
     // Promotion
     IVoucherRepository Vouchers { get; }

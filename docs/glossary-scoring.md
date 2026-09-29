@@ -239,12 +239,17 @@ waterfall. Endpoint `GET /api/products/{id}/occupation-fit`. Luật theo `Produc
 Đọc từ trên xuống: mỗi dòng dưới là một số hạng của dòng trên. Cột **FE** là chỗ con số đó *thật sự*
 được vẽ; cột **code** là nơi nó được tính (BE) — sửa công thức thì sửa ở đó, không sửa ở FE.
 
-### 7.1 Công thức tổng (luồng phòng, `Desk`/`Living`, `ScoringFormulaVersions.Current = 3.5`)
+### 7.1 Công thức tổng (luồng phòng, `Desk`/`Living`, `ScoringFormulaVersions.Current = 3.7`)
 
 ```
 score = round( clamp( blended − P_user − P_dir − P_vibe , −1, +1 ), 3 )          RecommendationScorer.ScoreOne
-blended = (1 − Wp − Wo)·(ĝ·p)  +  Wp·(r·p)  +  Wo·(ô·p)                          ── 3 số hạng CỘNG
-          └── GAP_SCORE ──┘      └ PERSONAL_SCORE ┘  └ OCCUPATION_SCORE ┘        ScoreComponentCodes
+blended = (1 − Wp − Wo)·gapScore  +  Wp·(r·p)  +  Wo·occupationScore              ── 3 số hạng CỘNG
+          └── GAP_SCORE ───┘        └ PERSONAL_SCORE ┘  └─ OCCUPATION_SCORE ─┘  ScoreComponentCodes
+
+gapScore        = Σ min(ĝ⁺, p) − Σ min(ĝ⁻, p)      (v3.7)                    RecommendationScorer.ScoreOne
+occupationScore = Σ min(ô⁺, p) − Σ min(ô⁻, p)      (v3.7)                    ↑ cùng hàm NeedCover/Overfill
+                  └─ "phủ được bao nhiêu phần nhu cầu" ─┘ └─ "đổ vào hành đã dư" ─┘
+r·p vẫn là tích trong: `r` là điểm quan hệ từng hành, không phải ngân sách Σ=1 ⇒ không có trần để gỡ.
 
 ĝ  = gap / (|gap|₁ / 2)            gap = adjustedIdeal − current                  ElementDirection.ForWorkspaceGap
 r  = ruleScore(mệnh, e)            bảng feng_shui_rules                           ScoringContext.RuleScoreOf
@@ -260,6 +265,16 @@ adjustedIdeal = normalize( ideal + Σ delta_mụcĐích )                       
 
 Carry (v3.6): `blended = (1 − Wo)·(Σ min(n̂,p) − Σ_{kỵ} p) + Wo·(ô·p)` (`PERSONAL_NEED_SCORE` + `PERSONAL_AVOID_SCORE` + `OCCUPATION_SCORE`), không `P_dir`,
 không phòng — `ElementDirection.ForPersonalNeed`.
+
+> **v3.7 — vì sao số hạng phòng không còn là `ĝ·p`.** `Σ ĝ⁺ = 1` và `Σ p = 1` ⇒ `ĝ·p` LÀ một phép
+> **trung bình có trọng số**, mà trung bình không vượt được phần tử lớn nhất ⇒ trần của mỗi sản phẩm
+> bằng chính `max p[e]` của nó, trên **mọi** căn phòng. Sản phẩm khai đủ hành vì thế luôn thua sản phẩm
+> khai thuần một hành. `min` cho mỗi hành một "cốc" riêng dung tích `ĝ⁺[e]` thay vì bắt chúng chia nhau
+> một phép trung bình. Sản phẩm thuần một hành ra điểm **y hệt** công thức cũ.
+> **Trục nghề đi theo** vì `ô` được dựng cố ý giống hệt `ĝ` (chuẩn hoá nửa-L1, `Σô⁺ = 1`) — cùng cấu trúc
+> thì cùng lỗi. Đổi cả mặt A (chip "Hợp nghề X%" ở `OccupationService`), nếu không chip và waterfall
+> nói hai số khác nhau cho cùng một việc.
+> Chi tiết + số đo ảnh hưởng: [`docs/adr/workspace-gap-cover-v3.7.md`](adr/workspace-gap-cover-v3.7.md).
 
 ### 7.2 Từng số hạng — nguồn, tham số, hiện ở đâu
 
@@ -317,9 +332,9 @@ Cái lệch không nằm ở ngũ hành mà ở chỗ **điểm và đồ thị 
 | Đồ thị / con số | Đo cái gì | Có mệnh không | Có nghề không |
 |---|---|---|---|
 | Radar "Mức lý tưởng" vs "Hiện tại", `compatibilityPercent`, nhãn "Bù tốt / Thêm thừa" | **phòng** so với mức lý tưởng của loại phòng + mục đích | mệnh chủ nhân nằm ở phía `current` (một nguồn phiếu), **không** ở phía mục tiêu | không |
-| `score` / `ScoreBadge` / `displayPercent` | `d·p` với `d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô` — **phòng + mệnh + nghề** trộn theo trọng số | có, `Wp` | có, `Wo` |
+| `score` / `ScoreBadge` / `displayPercent` | **phòng + mệnh + nghề** trộn theo trọng số. Từ v3.7 số hạng phòng là `Σmin(ĝ⁺,p) − Σmin(ĝ⁻,p)` chứ **không** phải `ĝ·p`, nên `d·p` không còn dựng lại được `blended` — đọc `components[]`, đừng nhân lại radar | có, `Wp` | có, `Wo` |
 | Radar lớp "Ưu tiên của bạn" (`priorityVector`) | phần dương của chính `d` | có | có |
-| Chip "Hợp với nghề" (trang sản phẩm) | `ô·p` **thô** — chỉ nghề | không | chỉ nghề |
+| Chip "Hợp với nghề" (trang sản phẩm) | `Σmin(ô⁺,p) − Σmin(ô⁻,p)` trên `ô` **thô** (chưa clamp mệnh) — chỉ nghề. Cùng phép đo với dòng `OCCUPATION_SCORE` | không | chỉ nghề |
 
 Ba ca lệch có thật, đo trên phòng "Bàn học gỗ" (chủ nhân Kim, Private, `Wp = 0.5` — **trước** v3.5):
 
@@ -329,11 +344,14 @@ Ba ca lệch có thật, đo trên phòng "Bàn học gỗ" (chủ nhân Kim, Pr
    nhân), không phải bug — nhưng cùng màn hình, nhãn "Thêm thừa" (phòng) và lớp "Ưu tiên của bạn" (có
    Kim vì `d[Kim] = +0.21 > 0`) nói ngược nhau. **Đã sửa ở v3.5**: `PERSONAL_WEIGHT_PRIVATE` 0.5 → **0.3** cho
    cùng sản phẩm ra `−0.10` = 45% "Trung tính", khớp radar; Thổ 78 → 74, Thủy 61 → 69 vẫn "Phù hợp".
-2. **Điểm là HƯỚNG, không phải LƯỢNG.** `ĝ·p` chỉ hỏi "sản phẩm nghiêng về hành phòng thiếu không", không
-   hỏi "thêm vào thì phòng gần lý tưởng hơn bao nhiêu". Sản phẩm 1 phiếu thì hai câu gần trùng; tăng phiếu
-   sản phẩm (hoặc cap phiếu tag) thì ca *bù quá tay* xuất hiện: Thủy 2 phiếu vẫn 59% nhưng `compat`
-   88.8 → 88.9 (đã vượt mức lý tưởng 15%). Muốn triệt để thì đổi `gapScore` sang
-   `(|gap|₁ − |previewGap|₁)` chuẩn hoá — chưa làm, ghi để không ai tưởng là bug hiển thị.
+2. **Điểm là HƯỚNG, không phải LƯỢNG** — *(v3.7 đã thu hẹp phần lớn khoảng cách này)*. Bản cũ `ĝ·p`
+   chỉ hỏi "sản phẩm nghiêng về hành phòng thiếu không", không hỏi "thêm vào thì phòng gần lý tưởng hơn bao
+   nhiêu"; tăng phiếu sản phẩm (hoặc cap phiếu tag) thì ca *bù quá tay* xuất hiện: Thủy 2 phiếu vẫn 59%
+   nhưng `compat` 88.8 → 88.9 (đã vượt mức lý tưởng 15%). **v3.7** đổi sang `Σmin(ĝ⁺,p) − Σmin(ĝ⁻,p)`:
+   `min` ở vế cộng chặn đúng "bù quá tay" (không cộng thêm khi cấp vượt nhu cầu), `min` ở vế trừ chặn
+   đúng "đổ vào hành đã thừa" — đó chính là đại lượng total-variation mà `compatibilityPercent` đang dùng.
+   Còn lại một khoảng: điểm vẫn chấm trên `p` (tỉ lệngũ hành của riêng vật) chứ chưa chấm trên `previewGap`
+   (phòng SAU khi thêm vật), nên số phiếu của vật vẫn không vào điểm — ghi để không ai tưởng là bug hiển thị.
 3. **Chip "Hợp nghề 88%" nhưng waterfall không có dòng nghề.** *(đã hết từ 19/09 — `OCCUPATION_WEIGHT = 0.20`; còn xảy ra khi user chưa khai nghề)* `OCCUPATION_WEIGHT = 0`
    ⇒ trục nghề tắt hoàn toàn trong `score`, trong khi chip trang sản phẩm là mặt A không phụ thuộc `Wo`.
    Hai con số **cố ý** không cùng thang (chip có footnote "không thay cho hợp bản mệnh"), nhưng chừng

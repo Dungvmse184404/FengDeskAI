@@ -16,8 +16,8 @@ namespace FengDeskAI.ApiTests.Endpoints;
 /// Nghĩa là phần đang kiểm ở đây là **engine deterministic**, không phải chất lượng câu chữ của AI —
 /// đúng ranh giới đã chốt trong kiến trúc: AI chỉ giải thích, không xếp hạng.
 ///
-/// Về đánh giá: "đã mua" tính theo trạng thái ĐƠN (Paid/Processing/Shipping/Completed), không phụ
-/// thuộc đã giao hay chưa.
+/// Về đánh giá: gắn với DÒNG ĐƠN — chỉ đánh giá khi phần hàng đã giao (delivery Delivered) và dòng đó chưa
+/// hoàn tiền; mỗi dòng đơn một đánh giá, nên mua lại thì đánh giá lần nữa.
 /// </summary>
 [Collection(ApiTestCollection.Name)]
 public sealed class CustomerCareFlowTests
@@ -316,6 +316,142 @@ public sealed class CustomerCareFlowTests
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
     }
 
+    [Fact(DisplayName = "REV-13 [Normal] Listing by product returns only that product's reviews, with the author's name")]
+    public async Task ListReviews_ByProduct_FiltersAndShowsAuthor()
+    {
+        var reviewId = await ReviewIdAsync();
+        var otherReviewId = await ReviewIdAsync();
+        var productId = await ProductOfReviewAsync(reviewId);
+
+        var response = await _fixture.ClientFor(TestRole.Anonymous)
+            .GetAsync($"/api/Review?productId={productId}&pageSize=50");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var data = await ApiEnvelope.DataAsync(response);
+        var items = data.GetProperty("items").EnumerateArray().ToList();
+        Assert.All(items, r => Assert.Equal(productId, r.GetProperty("productId").GetGuid()));
+        Assert.DoesNotContain(items, r => r.GetProperty("id").GetGuid() == otherReviewId);
+
+        var own = Assert.Single(items, r => r.GetProperty("id").GetGuid() == reviewId);
+        var author = own.GetProperty("user");
+        Assert.False(string.IsNullOrWhiteSpace(author.GetProperty("fullName").GetString()));
+        Assert.False(author.TryGetProperty("passwordHash", out _));
+    }
+
+    [Fact(DisplayName = "REV-14 [Abnormal] An order that has not been delivered cannot be reviewed yet")]
+    public async Task CreateReview_BeforeDelivery_IsForbidden()
+    {
+        var data = await SalesScenario.SeedAsync(_fixture, _fixture.UserId(TestRole.Customer), storeCount: 1);
+        var order = await DeliveredOrderScenario.PlaceAsync(_fixture, data, data.StoreA.ProductItemId, deliver: false);
+
+        var response = await Customer().PostAsJsonAsync("/api/Review",
+            new { orderItemId = order.OrderItemId, content = "Chưa nhận đã đánh giá.", rating = 5 });
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("nhận hàng", await ApiEnvelope.MessageAsync(response), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact(DisplayName = "REV-15 [Abnormal] A refunded order line cannot be reviewed and is flagged as returned")]
+    public async Task CreateReview_AfterRefund_IsForbiddenAndFlaggedReturned()
+    {
+        var refunded = await RefundedReturnScenario.CreateAsync(_fixture);
+
+        var response = await Customer().PostAsJsonAsync("/api/Review",
+            new { orderItemId = refunded.OrderItemId, content = "Đã hoàn tiền.", rating = 1 });
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Contains("hoàn hàng", await ApiEnvelope.MessageAsync(response), StringComparison.OrdinalIgnoreCase);
+
+        var items = await Customer().GetAsync($"/api/Review/orders/{refunded.OrderId}/items");
+        Assert.Equal(HttpStatusCode.OK, items.StatusCode);
+        var line = Assert.Single((await ApiEnvelope.DataAsync(items)).EnumerateArray(),
+            i => i.GetProperty("orderItemId").GetGuid() == refunded.OrderItemId);
+        Assert.Equal("Returned", line.GetProperty("status").GetString());
+    }
+
+    [Fact(DisplayName = "REV-16 [Normal] Buying the same product again allows a second review")]
+    public async Task CreateReview_RepeatPurchase_AllowsSecondReview()
+    {
+        var data = await SalesScenario.SeedAsync(_fixture, _fixture.UserId(TestRole.Customer), storeCount: 1);
+        var first = await DeliveredOrderScenario.PlaceAsync(_fixture, data, data.StoreA.ProductItemId, deliver: true);
+        var second = await DeliveredOrderScenario.PlaceAsync(_fixture, data, data.StoreA.ProductItemId, deliver: true);
+
+        var review1 = await Customer().PostAsJsonAsync("/api/Review",
+            new { orderItemId = first.OrderItemId, content = "Lần mua đầu.", rating = 4 });
+        var review2 = await Customer().PostAsJsonAsync("/api/Review",
+            new { orderItemId = second.OrderItemId, content = "Mua lại, vẫn tốt.", rating = 5 });
+        var again = await Customer().PostAsJsonAsync("/api/Review",
+            new { orderItemId = second.OrderItemId, content = "Lần ba cho cùng dòng.", rating = 5 });
+
+        Assert.Equal(HttpStatusCode.Created, review1.StatusCode);
+        Assert.Equal(HttpStatusCode.Created, review2.StatusCode);
+        Assert.Equal(HttpStatusCode.Conflict, again.StatusCode);
+    }
+
+    [Fact(DisplayName = "REV-17 [Normal] Product and store summaries reflect the reviews, and the store detail carries its rating")]
+    public async Task RatingSummary_ProductAndStore_ReflectReviews()
+    {
+        var data = await SalesScenario.SeedAsync(_fixture, _fixture.UserId(TestRole.Customer), storeCount: 1);
+        var first = await DeliveredOrderScenario.PlaceAsync(_fixture, data, data.StoreA.ProductItemId, deliver: true);
+        var second = await DeliveredOrderScenario.PlaceAsync(_fixture, data, data.StoreA.ProductItemId, deliver: true);
+        await Customer().PostAsJsonAsync("/api/Review", new { orderItemId = first.OrderItemId, content = "Tạm.", rating = 3 });
+        await Customer().PostAsJsonAsync("/api/Review", new { orderItemId = second.OrderItemId, content = "Tốt.", rating = 4 });
+
+        var anonymous = _fixture.ClientFor(TestRole.Anonymous);
+        var product = await ApiEnvelope.DataAsync(
+            await anonymous.GetAsync($"/api/Review/summary?productId={data.StoreA.ProductId}"));
+        Assert.Equal(2, product.GetProperty("count").GetInt32());
+        Assert.Equal(3.5, product.GetProperty("average").GetDouble());
+        var distribution = product.GetProperty("distribution").EnumerateArray().Select(x => x.GetInt32()).ToArray();
+        Assert.Equal(new[] { 0, 0, 1, 1, 0 }, distribution);
+
+        var store = await ApiEnvelope.DataAsync(
+            await anonymous.GetAsync($"/api/Review/summary?storeId={data.StoreA.StoreId}"));
+        Assert.Equal(2, store.GetProperty("count").GetInt32());
+
+        var storeDetail = await ApiEnvelope.DataAsync(await anonymous.GetAsync($"/api/stores/{data.StoreA.StoreId}"));
+        Assert.Equal(3.5, storeDetail.GetProperty("rating").GetProperty("average").GetDouble());
+        Assert.Equal(2, storeDetail.GetProperty("rating").GetProperty("count").GetInt32());
+    }
+
+    [Fact(DisplayName = "REV-18 [Abnormal] A summary needs exactly one of product or store")]
+    public async Task RatingSummary_WithoutSingleTarget_IsRejected()
+    {
+        var anonymous = _fixture.ClientFor(TestRole.Anonymous);
+
+        var none = await anonymous.GetAsync("/api/Review/summary");
+        var both = await anonymous.GetAsync($"/api/Review/summary?productId={Guid.NewGuid()}&storeId={Guid.NewGuid()}");
+
+        Assert.Equal(HttpStatusCode.BadRequest, none.StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, both.StatusCode);
+    }
+
+    [Fact(DisplayName = "REV-19 [Normal] Eligibility tells the product page whether the customer can review")]
+    public async Task Eligibility_DeliveredThenReviewed_Flips()
+    {
+        var productId = await PurchasedProductIdAsync();
+
+        var before = await ApiEnvelope.DataAsync(await Customer().GetAsync($"/api/Review/eligibility?productId={productId}"));
+        Assert.True(before.GetProperty("canReview").GetBoolean());
+
+        await Customer().PostAsJsonAsync("/api/Review", new { productId, content = "Đánh giá.", rating = 5 });
+
+        var after = await ApiEnvelope.DataAsync(await Customer().GetAsync($"/api/Review/eligibility?productId={productId}"));
+        Assert.False(after.GetProperty("canReview").GetBoolean());
+        Assert.Equal("Reviewed", after.GetProperty("status").GetString());
+    }
+
+    [Fact(DisplayName = "REV-20 [Abnormal] A customer cannot review a line from someone else's order")]
+    public async Task CreateReview_OtherCustomersOrderItem_ReturnsNotFound()
+    {
+        var order = await DeliveredOrderScenario.CreateAsync(_fixture);
+        var stranger = await ScenarioUsers.CreateAsync(_fixture);
+
+        var response = await ScenarioUsers.ClientFor(_fixture, stranger).PostAsJsonAsync("/api/Review",
+            new { orderItemId = order.OrderItemId, content = "Không phải đơn của tôi.", rating = 1 });
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
     // ===================== Helper =====================
 
     // ===================== Hợp nghề — mặt A (N3) =====================
@@ -420,6 +556,13 @@ public sealed class CustomerCareFlowTests
     {
         var scenario = await SalesScenario.SeedAsync(_fixture, _fixture.UserId(TestRole.Customer), storeCount: 1);
         return scenario.Stores[0].ProductId;
+    }
+
+    private async Task<Guid> ProductOfReviewAsync(Guid reviewId)
+    {
+        var mine = await ApiEnvelope.DataAsync(await Customer().GetAsync("/api/Review/my"));
+        return mine.EnumerateArray().Single(r => r.GetProperty("id").GetGuid() == reviewId)
+            .GetProperty("productId").GetGuid();
     }
 
     private async Task<Guid> ReviewIdAsync()

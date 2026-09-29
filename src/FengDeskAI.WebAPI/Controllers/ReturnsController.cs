@@ -34,8 +34,8 @@ public class ReturnsController : ApiControllerBase
         => ToActionResult(await _service.CreateAsync(CurrentUserId, request, ct));
 
     [HttpGet("mine")]
-    public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));
+    public async Task<IActionResult> GetMine([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetMineAsync(CurrentUserId, paging, ct));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -68,8 +68,8 @@ public class ReturnsController : ApiControllerBase
 
     /// <summary>Ticket của một store (màn vendor). Owner/staff store đó hoặc Staff nền tảng.</summary>
     [HttpGet("stores/{storeId:guid}")]
-    public async Task<IActionResult> GetForStore(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetForStoreAsync(storeId, RmaActor, page, ct));
+    public async Task<IActionResult> GetForStore(Guid storeId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetForStoreAsync(storeId, RmaActor, paging, ct));
 
     /// <summary>Vendor ghi nhận/đồng ý ticket (không chặn quyết định của Staff).</summary>
     [HttpPost("{id:guid}/vendor-acknowledge")]
@@ -91,14 +91,14 @@ public class ReturnsController : ApiControllerBase
     /// <summary>Hàng đợi ticket cần Staff xử lý.</summary>
     [HttpGet("pending")]
     [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
-    public async Task<IActionResult> GetPending([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetPendingForStaffAsync(page, ct));
+    public async Task<IActionResult> GetPending([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetPendingForStaffAsync(paging, ct));
 
     /// <summary>Tất cả ticket (giám sát).</summary>
     [HttpGet("all")]
     [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
-    public async Task<IActionResult> GetAll([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetAllAsync(page, ct));
+    public async Task<IActionResult> GetAll([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetAllAsync(paging, ct));
 
     /// <summary>Staff tiếp nhận ticket → thông báo vendor (SLA) + rẽ nhánh theo lý do.</summary>
     [HttpPost("{id:guid}/accept")]

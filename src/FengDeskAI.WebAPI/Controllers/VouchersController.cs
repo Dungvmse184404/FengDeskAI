@@ -27,8 +27,8 @@ public class VouchersController : ApiControllerBase
         => ToActionResult(await _service.GetAvailableAsync(ct));
 
     [HttpGet]
-    public async Task<IActionResult> GetPaged([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetPagedAsync(page, ct));
+    public async Task<IActionResult> GetPaged([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetPagedAsync(paging, ct));
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateVoucherRequest request, CancellationToken ct)

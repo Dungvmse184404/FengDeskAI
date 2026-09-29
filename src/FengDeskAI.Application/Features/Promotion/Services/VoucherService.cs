@@ -26,8 +26,9 @@ public interface IVoucherService
     /// Chọn voucher cho đơn: khách nhập mã thì xét đúng mã đó (không dùng được ⇒ <c>Error</c>); không nhập thì
     /// lấy voucher tự áp giảm nhiều nhất mà đơn đủ điều kiện.
     /// </summary>
+    /// <param name="commissionRate">Tỉ lệ phí sàn sẽ chốt vào đơn — trần giảm của voucher sàn tài trợ.</param>
     Task<VoucherSelection> SelectAsync(Guid customerId, string? code, IReadOnlyList<StoreChargeInput> stores,
-        Guid? destinationProvinceId, CancellationToken ct = default);
+        Guid? destinationProvinceId, decimal commissionRate, CancellationToken ct = default);
 
     /// <summary>Giữ một lượt cho đơn (gọi TRONG transaction checkout). false = vừa hết lượt.</summary>
     Task<bool> TryRedeemAsync(VoucherSelection selection, Order order, CancellationToken ct = default);
@@ -58,11 +59,11 @@ public partial class VoucherService : IVoucherService
     public static string NormalizeCode(string code) => code.Trim().ToUpperInvariant();
 
     public async Task<VoucherSelection> SelectAsync(Guid customerId, string? code, IReadOnlyList<StoreChargeInput> stores,
-        Guid? destinationProvinceId, CancellationToken ct = default)
+        Guid? destinationProvinceId, decimal commissionRate, CancellationToken ct = default)
     {
         var now = DateTime.UtcNow;
-        // Đơn mới sẽ chốt đúng tỉ lệ này vào delivery ⇒ trần giảm tính theo nó.
-        var rate = PlatformFeePolicy.CommissionRate;
+        // Đơn mới chốt đúng tỉ lệ này (orders.commission_rate) ⇒ trần giảm tính theo nó.
+        var rate = commissionRate;
 
         if (!string.IsNullOrWhiteSpace(code))
         {

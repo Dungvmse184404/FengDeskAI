@@ -29,8 +29,17 @@ public class StoreResponse
     public bool IsOwner { get; set; }
     public StoreAddressResponse? Address { get; set; }
     public List<StoreOwnerResponse> Owners { get; set; } = new();
+    /// <summary>Điểm đánh giá cửa hàng (từ đánh giá sản phẩm). Chỉ set ở GET /stores/{id}; null ở các danh sách.</summary>
+    public StoreRatingResponse? Rating { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>Trung bình sao (làm tròn 1 chữ số) + số lượt đánh giá của cửa hàng.</summary>
+public class StoreRatingResponse
+{
+    public double Average { get; set; }
+    public int Count { get; set; }
 }
 
 public class StoreOwnerResponse
@@ -146,6 +155,28 @@ public class StoreMembershipResponse
 }
 
 /// <summary>Thống kê cửa hàng cho dashboard vendor (chỉ owner/admin).</summary>
+/// <summary>
+/// Số dư sổ cái các cửa hàng user SỞ HỮU (nhân viên không thấy) — menu tài khoản. <c>Available</c> = đã qua khoảng
+/// giữ, <c>Pending</c> = còn trong khoảng giữ; cả hai đã trừ phí sàn và công nợ hoàn hàng.
+/// </summary>
+public class MyStoreBalanceResponse
+{
+    public decimal Available { get; set; }
+    public decimal Pending { get; set; }
+    public decimal Balance { get; set; }
+    public int PayoutHoldDays { get; set; }
+    public List<StoreBalanceResponse> Stores { get; set; } = [];
+}
+
+public class StoreBalanceResponse
+{
+    public Guid StoreId { get; set; }
+    public string StoreName { get; set; } = string.Empty;
+    public decimal Available { get; set; }
+    public decimal Pending { get; set; }
+    public decimal Balance { get; set; }
+}
+
 public class StoreStatisticsResponse
 {
     /// <summary>Tổng doanh thu hàng (Subtotal) của các delivery đã Delivered.</summary>
@@ -207,7 +238,7 @@ public class StoreStatisticsResponse
 
     // ===================== Sổ cái (docs/adr/platform-fee-ledger.md) =====================
 
-    /// <summary>Tỉ lệ phí sàn đang áp cho đơn MỚI (<c>PlatformFeePolicy.CommissionRate</c>). Đơn cũ giữ tỉ lệ đã chốt.</summary>
+    /// <summary>Tỉ lệ phí sàn đang áp cho đơn MỚI (Manager đặt, <c>platform_fee_rates</c>). Đơn cũ giữ tỉ lệ đã chốt.</summary>
     public decimal CommissionRate { get; set; }
     /// <summary>Σ phí sàn đã thu trên hàng đã giao, sau khi trả lại phần của hàng bị hoàn.</summary>
     public decimal PlatformCommission { get; set; }
@@ -302,4 +333,26 @@ public class PlatformFeePolicyResponse
     public decimal MaxPlatformFundedDiscountRate { get; set; }
     /// <summary>Số ngày giữ tiền sau khi giao trước khi nhà vườn được chi.</summary>
     public int PayoutHoldDays { get; set; }
+    /// <summary>Tỉ lệ hiện tại áp từ lúc nào; null = mặc định hệ thống (chưa ai đặt).</summary>
+    public DateTime? EffectiveFrom { get; set; }
+}
+
+/// <summary>Manager đổi phí sàn. Chỉ áp cho đơn đặt SAU thời điểm lưu — đơn cũ giữ tỉ lệ đã chốt.</summary>
+public class UpdatePlatformFeeRequest
+{
+    /// <summary>
+    /// Tỉ lệ trên tiền hàng, 0 – 0.3, tối đa 4 chữ số thập phân (0.0825 = 8,25%). Nullable để body thiếu trường
+    /// bị từ chối thay vì âm thầm thành 0% (0 là mức hợp lệ).
+    /// </summary>
+    public decimal? CommissionRate { get; set; }
+    public string? Note { get; set; }
+}
+
+public class PlatformFeeRateHistoryResponse
+{
+    public Guid Id { get; set; }
+    public decimal CommissionRate { get; set; }
+    public DateTime EffectiveFrom { get; set; }
+    public string? Note { get; set; }
+    public string? ChangedByName { get; set; }
 }

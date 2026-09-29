@@ -18,4 +18,8 @@ public interface ILedgerRepository : IGenericRepository<LedgerEntry>
     Task<LedgerEntry?> GetByKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
     Task<GardenLedgerSummary> GetGardenSummaryAsync(Guid gardenStoreId, DateTime nowUtc, CancellationToken ct = default);
+
+    /// <summary>Như <see cref="GetGardenSummaryAsync"/> cho nhiều vườn trong MỘT truy vấn. Vườn chưa có bút toán ⇒ số 0.</summary>
+    Task<Dictionary<Guid, GardenLedgerSummary>> GetGardenSummariesAsync(
+        IReadOnlyCollection<Guid> gardenStoreIds, DateTime nowUtc, CancellationToken ct = default);
 }

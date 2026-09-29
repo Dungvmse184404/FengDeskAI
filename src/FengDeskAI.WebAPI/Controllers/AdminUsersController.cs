@@ -16,8 +16,8 @@ public sealed class AdminUsersController : ApiControllerBase
     public AdminUsersController(IAdminUserService service) => _service = service;
 
     [HttpGet]
-    public async Task<IActionResult> Get([FromQuery] AdminUserQuery query, CancellationToken ct)
-        => ToActionResult(await _service.GetAsync(query, ct));
+    public async Task<IActionResult> Get([FromQuery] AdminUserQuery filter, CancellationToken ct)
+        => ToActionResult(await _service.GetAsync(filter, ct));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -40,8 +40,8 @@ public sealed class AdminUsersController : ApiControllerBase
             id, CurrentUserId, ClientIp, request ?? new RevokeUserSessionsRequest(), ct));
 
     [HttpGet("{id:guid}/audit-logs")]
-    public async Task<IActionResult> GetAuditLogs(Guid id, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetAuditLogsAsync(id, page, ct));
+    public async Task<IActionResult> GetAuditLogs(Guid id, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetAuditLogsAsync(id, paging, ct));
 
     private string? ClientIp => HttpContext.Connection.RemoteIpAddress?.ToString();
 }

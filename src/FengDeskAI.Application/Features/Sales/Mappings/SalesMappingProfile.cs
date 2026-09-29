@@ -19,10 +19,13 @@ public class SalesMappingProfile : Profile
             .ForMember(d => d.Stock, o => o.MapFrom(s => s.ProductItem.Stock))
             .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.ProductItem.Price * s.Quantity));
 
+        // Đọc cột chụp lúc đặt trước — sản phẩm có thể đã bị xoá; đơn cũ chưa có cột (đã điền bù) mới đọc qua sản phẩm.
         CreateMap<OrderItem, OrderItemResponse>()
-            .ForMember(d => d.ProductId, o => o.MapFrom(s => s.ProductItem != null ? s.ProductItem.ProductId : Guid.Empty))
-            .ForMember(d => d.VariantName, o => o.MapFrom(s => s.ProductItem != null ? s.ProductItem.Name : null))
-            .ForMember(d => d.ImageUrl, o => o.MapFrom(s => PrimaryImageUrl(s.ProductItem)))
+            .ForMember(d => d.ProductId, o => o.MapFrom(s => s.ProductId ?? (s.ProductItem != null ? s.ProductItem.ProductId : (Guid?)null)))
+            .ForMember(d => d.VariantName, o => o.MapFrom(s => s.VariantName ?? (s.ProductItem != null ? s.ProductItem.Name : null)))
+            .ForMember(d => d.ImageUrl, o => o.MapFrom(s => s.ImageUrl ?? PrimaryImageUrl(s.ProductItem)))
+            // Biến thể/sản phẩm đã xoá mềm bị bộ lọc ẩn ⇒ navigation null ⇒ không còn bán.
+            .ForMember(d => d.ProductAvailable, o => o.MapFrom(s => s.ProductItem != null && s.ProductItem.Product != null))
             .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.UnitPrice * s.Quantity));
 
         CreateMap<Delivery, DeliveryResponse>()
@@ -58,8 +61,8 @@ public class SalesMappingProfile : Profile
         var stores = order.Deliveries.Count > 0
             ? order.Deliveries.Select(d => (Id: d.GardenStoreId, Name: d.Store?.Name))
             : order.Items
-                .Where(i => i.ProductItem?.Product is not null)
-                .Select(i => (Id: i.ProductItem.Product.GardenStoreId, Name: i.ProductItem.Product.Store?.Name));
+                .Where(i => i.GardenStoreId is not null || i.ProductItem?.Product is not null)
+                .Select(i => (Id: i.GardenStoreId ?? i.ProductItem!.Product.GardenStoreId, Name: i.ProductItem?.Product?.Store?.Name));
 
         return stores
             .GroupBy(s => s.Id)

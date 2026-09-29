@@ -1,8 +1,10 @@
-﻿using FengDeskAI.Application.Interfaces.Repositories;
+using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Enums.Catalog;
 using FengDeskAI.Domain.Enums.Workspace;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
+using FengDeskAI.Domain.Enums.Sales;
+using FengDeskAI.Domain.Entities.Sales;
 using Microsoft.EntityFrameworkCore;
 
 namespace FengDeskAI.Infrastructure.Persistence.Repositories;
@@ -156,6 +158,50 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
         => _context.Set<ProductItem>()
             .AsNoTracking()
             .AnyAsync(i => i.Sku == sku && (excludeItemId == null || i.Id != excludeItemId), ct);
+
+    private static readonly OrderStatus[] OpenOrderStatuses =
+        [OrderStatus.Pending, OrderStatus.Paid, OrderStatus.Processing, OrderStatus.Shipping];
+
+    private static readonly ReturnRequestStatus[] ClosedReturnStatuses =
+        [ReturnRequestStatus.Completed, ReturnRequestStatus.Cancelled, ReturnRequestStatus.Rejected];
+
+    public async Task<bool> HasOpenOrdersAsync(Guid productId, Guid? itemId, DateTime deliveredAfter, CancellationToken ct = default)
+    {
+        var items = _context.Set<ProductItem>().IgnoreQueryFilters()
+            .Where(pi => pi.ProductId == productId && (itemId == null || pi.Id == itemId))
+            .Select(pi => (Guid?)pi.Id);
+
+        var inOpenOrder = await _context.OrderItems.AsNoTracking()
+            .Where(oi => items.Contains(oi.ProductItemId))
+            .AnyAsync(oi => OpenOrderStatuses.Contains(oi.Order.Status)
+                            || (oi.Delivery != null && oi.Delivery.DeliveredAt > deliveredAfter)
+                            || _context.ReturnRequests.Any(r => r.DeliveryId == oi.DeliveryId
+                                                                && !ClosedReturnStatuses.Contains(r.Status)), ct);
+        if (inOpenOrder) return true;
+
+        // Biến thể đang được chọn làm hàng ĐỔI cho một ticket chưa xong.
+        return await _context.Set<ReturnItem>().AsNoTracking()
+            .AnyAsync(ri => items.Contains(ri.ExchangeProductItemId)
+                            && !ClosedReturnStatuses.Contains(ri.ReturnRequest.Status), ct);
+    }
+
+    public Task<Product?> GetByIdIncludingDeletedAsync(Guid productId, CancellationToken ct = default)
+        => _set.IgnoreQueryFilters().FirstOrDefaultAsync(p => p.Id == productId, ct);
+
+    public Task HardDeleteAsync(Guid productId, CancellationToken ct = default)
+        => _set.IgnoreQueryFilters().Where(p => p.Id == productId).ExecuteDeleteAsync(ct);
+
+    public Task<List<ProductItem>> GetItemsForUpdateAsync(Guid productId, CancellationToken ct = default)
+        => _context.Set<ProductItem>().Where(i => i.ProductId == productId).ToListAsync(ct);
+
+    public Task RemoveFromCartsAsync(IReadOnlyCollection<Guid> itemIds, CancellationToken ct = default)
+        => itemIds.Count == 0
+            ? Task.CompletedTask
+            : _context.CartItems
+                .Where(c => itemIds.Contains(c.ProductItemId))
+                .ExecuteUpdateAsync(u => u
+                    .SetProperty(c => c.IsDeleted, true)
+                    .SetProperty(c => c.UpdatedAt, DateTime.UtcNow), ct);
 
     public Task<ProductItem?> GetItemAsync(Guid productId, Guid itemId, CancellationToken ct = default)
         => _context.Set<ProductItem>().FirstOrDefaultAsync(i => i.Id == itemId && i.ProductId == productId, ct);

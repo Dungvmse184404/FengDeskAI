@@ -1424,15 +1424,28 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("created_by");
 
+                    b.Property<Guid?>("GardenStoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("garden_store_id");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<Guid>("ProductId")
+                    b.Property<Guid?>("OrderItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("order_item_id");
+
+                    b.Property<Guid?>("ProductId")
                         .HasColumnType("uuid")
                         .HasColumnName("product_id");
+
+                    b.Property<string>("ProductName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("product_name");
 
                     b.Property<int>("Rating")
                         .HasColumnType("integer")
@@ -1452,12 +1465,17 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("GardenStoreId");
+
+                    b.HasIndex("OrderItemId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_reviews_order_item")
+                        .HasFilter("is_deleted = FALSE AND order_item_id IS NOT NULL");
+
                     b.HasIndex("ProductId");
 
                     b.HasIndex("UserId", "ProductId")
-                        .IsUnique()
-                        .HasDatabaseName("UX_reviews_user_product")
-                        .HasFilter("is_deleted = FALSE");
+                        .HasDatabaseName("IX_reviews_user_product");
 
                     b.ToTable("reviews", (string)null);
                 });
@@ -2069,6 +2087,59 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.ToTable("ledger_entries", null, t =>
                         {
                             t.HasCheckConstraint("ck_ledger_entries_garden_account", "(account = 'GardenStore' AND garden_store_id IS NOT NULL) OR (account = 'Platform' AND garden_store_id IS NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("FengDeskAI.Domain.Entities.Payment.PlatformFeeRate", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<decimal>("CommissionRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("commission_rate");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<DateTime>("EffectiveFrom")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("effective_from");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("note");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("EffectiveFrom")
+                        .HasDatabaseName("ix_platform_fee_rates_effective_from");
+
+                    b.ToTable("platform_fee_rates", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_platform_fee_rates_range", "commission_rate >= 0 AND commission_rate <= 0.3");
                         });
                 });
 
@@ -3242,6 +3313,11 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<decimal>("CommissionRate")
+                        .HasPrecision(5, 4)
+                        .HasColumnType("numeric(5,4)")
+                        .HasColumnName("commission_rate");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("created_at");
@@ -3344,6 +3420,15 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("delivery_id");
 
+                    b.Property<Guid?>("GardenStoreId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("garden_store_id");
+
+                    b.Property<string>("ImageUrl")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("image_url");
+
                     b.Property<bool>("IsDeleted")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -3354,7 +3439,11 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
 
-                    b.Property<Guid>("ProductItemId")
+                    b.Property<Guid?>("ProductId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("product_id");
+
+                    b.Property<Guid?>("ProductItemId")
                         .HasColumnType("uuid")
                         .HasColumnName("product_item_id");
 
@@ -3367,6 +3456,11 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("integer")
                         .HasColumnName("quantity");
+
+                    b.Property<string>("Sku")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("sku");
 
                     b.Property<decimal>("UnitPrice")
                         .HasPrecision(12, 2)
@@ -3381,9 +3475,16 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("updated_by");
 
+                    b.Property<string>("VariantName")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("variant_name");
+
                     b.HasKey("Id");
 
                     b.HasIndex("DeliveryId");
+
+                    b.HasIndex("GardenStoreId");
 
                     b.HasIndex("OrderId");
 
@@ -4787,7 +4888,7 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("FengDeskAI.Domain.Entities.CustomerCare.Recommendation", "Recommendation")
@@ -4814,17 +4915,23 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("FengDeskAI.Domain.Entities.CustomerCare.Review", b =>
                 {
+                    b.HasOne("FengDeskAI.Domain.Entities.Sales.OrderItem", "OrderItem")
+                        .WithMany()
+                        .HasForeignKey("OrderItemId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.Product", "Product")
                         .WithMany()
                         .HasForeignKey("ProductId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("FengDeskAI.Domain.Entities.Identity.User", "User")
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("OrderItem");
 
                     b.Navigation("Product");
 
@@ -5058,7 +5165,7 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.ProductItem", "ProductItem")
                         .WithMany()
                         .HasForeignKey("ProductItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Cart");
@@ -5125,8 +5232,7 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.ProductItem", "ProductItem")
                         .WithMany()
                         .HasForeignKey("ProductItemId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("Delivery");
 
@@ -5166,7 +5272,7 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.HasOne("FengDeskAI.Domain.Entities.Catalog.ProductItem", "ExchangeProductItem")
                         .WithMany()
                         .HasForeignKey("ExchangeProductItemId")
-                        .OnDelete(DeleteBehavior.Restrict);
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("FengDeskAI.Domain.Entities.Sales.OrderItem", "OrderItem")
                         .WithMany()

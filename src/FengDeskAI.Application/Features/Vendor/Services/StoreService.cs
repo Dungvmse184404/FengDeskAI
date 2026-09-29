@@ -22,10 +22,12 @@ public class StoreService : IStoreService
     private readonly IMapper _mapper;
     private readonly INotificationService _notifications;
     private readonly IStoreShopProvisioner _shopProvisioner;
+    private readonly IPlatformFeeService _platformFee;
 
     public StoreService(IUnitOfWork uow, IMapper mapper, INotificationService notifications,
-        IStoreShopProvisioner shopProvisioner)
+        IStoreShopProvisioner shopProvisioner, IPlatformFeeService platformFee)
     {
+        _platformFee = platformFee;
         _uow = uow;
         _mapper = mapper;
         _notifications = notifications;
@@ -41,7 +43,11 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetDetailAsync(id, ct);
         if (store is null)
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        return ServiceResult<StoreResponse>.Success(_mapper.Map<StoreResponse>(store));
+
+        var response = _mapper.Map<StoreResponse>(store);
+        var (average, count) = await _uow.Reviews.GetStoreRatingSummaryAsync(id, ct);
+        response.Rating = new StoreRatingResponse { Average = Math.Round(average, 1), Count = count };
+        return ServiceResult<StoreResponse>.Success(response);
     }
 
     public async Task<IServiceResult<StoreResponse>> CreateAsync(Guid actorUserId, CreateStoreRequest request, CancellationToken ct = default)
@@ -445,6 +451,34 @@ public class StoreService : IStoreService
         return ServiceResult<List<StoreResponse>>.Success(stores);
     }
 
+    public async Task<IServiceResult<MyStoreBalanceResponse>> GetMyBalanceAsync(Guid userId, CancellationToken ct = default)
+    {
+        var stores = await _uow.Stores.GetOwnedStoreRowsAsync(userId, ct);
+        var summaries = await _uow.Ledger.GetGardenSummariesAsync(stores.Select(s => s.Id).ToList(), DateTime.UtcNow, ct);
+
+        var rows = stores.Select(s =>
+        {
+            var sum = summaries.GetValueOrDefault(s.Id) ?? new GardenLedgerSummary(0m, 0m, 0m, 0m);
+            return new StoreBalanceResponse
+            {
+                StoreId = s.Id,
+                StoreName = s.Name,
+                Available = sum.Available,
+                Pending = sum.Pending,
+                Balance = sum.Balance,
+            };
+        }).ToList();
+
+        return ServiceResult<MyStoreBalanceResponse>.Success(new MyStoreBalanceResponse
+        {
+            Available = rows.Sum(r => r.Available),
+            Pending = rows.Sum(r => r.Pending),
+            Balance = rows.Sum(r => r.Balance),
+            PayoutHoldDays = PayoutPolicy.HoldDays,
+            Stores = rows,
+        });
+    }
+
     // ===== Owner (đồng sở hữu — marketplace) =====
 
     public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default)
@@ -545,7 +579,7 @@ public class StoreService : IStoreService
         // Số "thực nhận" đọc thẳng từ sổ cái — thêm MỘT lượt đi về DB (câu gộp sẵn theo nhóm), không tính lại
         // từ deliveries: sổ đã trừ phí sàn theo tỉ lệ chốt từng đơn và công nợ hoàn hàng.
         var ledger = await _uow.Ledger.GetGardenSummaryAsync(id, DateTime.UtcNow, ct);
-        stats.CommissionRate = PlatformFeePolicy.CommissionRate;
+        stats.CommissionRate = await _platformFee.GetCurrentRateAsync(ct);
         stats.PlatformCommission = ledger.CommissionCharged;
         stats.LedgerBalance = ledger.Balance;
         stats.LedgerAvailable = ledger.Available;

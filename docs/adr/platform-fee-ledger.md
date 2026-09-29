@@ -1,4 +1,4 @@
-# ADR — Phí sàn 8% & sổ cái tiền (giai đoạn 1)
+# ADR — Phí sàn & sổ cái tiền (giai đoạn 1)
 
 **Trạng thái:** ĐÃ LÀM (28/09/2026) · **Liên quan:** [`vendor-payout.md`](./vendor-payout.md) (bước 2), voucher (giai đoạn 2, chưa làm)
 
@@ -18,12 +18,12 @@ sổ cái, và việc cộng tiền vào số dư đang tắt vì 3 lỗi ([`ven
 
 | # | Quy tắc | Ở đâu trong code |
 |---|---|---|
-| 1 | **Phí sàn 8% trên tiền hàng** của delivery đã giao thành công | `PlatformFeePolicy.CommissionRate` |
-| 2 | Tỉ lệ **chốt vào từng delivery lúc tạo** (`deliveries.commission_rate`) — đổi chính sách không ảnh hưởng đơn đã đặt. Delivery có trước chính sách mang **0%** (không thu hồi tố) | `OrderWorkflow.GroupItemsIntoDeliveries`, `PaymentService`, `OrderService.EnsureDeliveriesAsync` |
+| 1 | **Phí sàn trên tiền hàng** của delivery đã giao thành công. Mức khởi tạo 8%; **Manager đổi được** (xem §2a) | `IPlatformFeeService`, bảng `platform_fee_rates` |
+| 2 | Tỉ lệ **chốt vào đơn lúc checkout** (`orders.commission_rate`) rồi vào từng delivery (`deliveries.commission_rate`) — kể cả delivery sinh muộn lúc webhook PayOS. Đổi phí không ảnh hưởng đơn đã đặt. Delivery có trước chính sách mang **0%** (không thu hồi tố) | `OrderService.CheckoutAsync`, `OrderWorkflow.GroupItemsIntoDeliveries`, `PaymentService`, `OrderService.EnsureDeliveriesAsync` |
 | 3 | Làm tròn phí tới đồng, **nửa đồng làm tròn lên** (không phải banker's rounding mặc định của .NET) — FE dùng đúng quy tắc này | `PlatformFeePolicy.ComputeCommission`, FE `utils/platform-fee.ts` |
 | 4 | **Phí ship thuộc về sàn** (sàn trả nhà vận chuyển); chênh lệch phí khách trả − phí GHN thực tính là lãi/lỗ của sàn | `LedgerEntryType.ShippingCollected` / `CarrierShippingCost` |
 | 5 | Hoàn tiền: vườn chịu phần tiền hàng bị hoàn (`VendorLiability`), **sàn trả lại phần phí sàn tương ứng**. Manager miễn công nợ ⇒ đảo cả hai | `LedgerService.PostLiabilityRaisedAsync` / `PostLiabilityWaivedAsync` |
-| 6 | **Voucher do sàn tài trợ trừ vào chính 8% đó**: giảm giá sàn gánh cho một delivery ≤ phí sàn của delivery đó. Sàn không bù lỗ quá phần mình thu; vườn luôn nhận đủ `tiền hàng − phí sàn` | `ShippingVoucherCalculator` (áp theo từng delivery) |
+| 6 | **Voucher do sàn tài trợ trừ vào chính phí sàn đó**: giảm giá sàn gánh cho một delivery ≤ phí sàn của delivery đó. Sàn không bù lỗ quá phần mình thu; vườn luôn nhận đủ `tiền hàng − phí sàn` | `ShippingVoucherCalculator` (áp theo từng delivery) |
 | 7 | Tiền của vườn khả dụng sau **7 ngày** kể từ khi giao (= cửa sổ đổi trả) | `PayoutPolicy.HoldDays` |
 
 **Ví dụ một món 150 000đ, phí ship 15 000đ, GHN tính thật 17 500đ:**
@@ -36,6 +36,19 @@ sổ cái, và việc cộng tiền vào số dư đang tắt vì 3 lỗi ([`ven
 | Phí ship khách trả | | +15 000 | |
 | GHN | | −17 500 | −17 500 |
 | **Cộng** | **138 000** | **9 500** | 147 500 = 165 000 − 17 500 ✔ |
+
+### 2a. Phí sàn cấu hình được (28/09/2026)
+
+- `platform_fee_rates` **chỉ thêm**: mỗi lần đổi là một dòng (`commission_rate`, `effective_from`, `note`,
+  `created_by`); tỉ lệ đang áp = dòng `effective_from` mới nhất ≤ now. CHECK 0 ≤ rate ≤ 0.3. Migration
+  `AddConfigurablePlatformFee` chèn dòng khởi tạo 0.08.
+- Checkout đọc tỉ lệ **một lần** và dùng cho cả trần voucher lẫn `orders.commission_rate` ⇒ hai số luôn cùng tỉ lệ
+  dù Manager đổi phí giữa chừng. Xem trước phí ship cũng đọc cùng nguồn.
+- `orders.commission_rate` có default DB **0.08** (đơn cũ + đơn container cũ tạo trong khoảng migrate → swap), nhưng
+  model EF **không** khai default: nếu khai, EF bỏ qua giá trị 0 và đơn 0% sẽ bị DB điền thành 8%.
+- Cache 1 phút (`IMemoryCache`), xoá khi đổi. `PlatformFeePolicy.DefaultCommissionRate` chỉ dùng khi bảng trống.
+- API: `PUT /api/platform/fee-policy`, `GET /api/platform/fee-policy/history` (ManagerOrAbove) — [`27-platform`](../api-documents/27-platform.md).
+  FE: `/manager/platform-fee` (mức hiện tại, đổi mức có ví dụ trước/sau + xác nhận, lịch sử).
 
 ## 3. Sổ cái — bảng `ledger_entries`
 
@@ -99,13 +112,16 @@ xong, công nợ đã sinh/đã miễn **trước** migration `AddLedgerAndPlatf
 - `GET /api/platform/fee-policy` (công khai) → `{ commissionRate, maxPlatformFundedDiscountRate, payoutHoldDays }`.
 - `GET /api/stores/{id}/statistics` thêm `commissionRate`, `platformCommission`, `ledgerBalance`,
   `ledgerAvailable`, `ledgerPending` — đọc từ sổ (thêm **một** lượt đi về DB).
-- FE: ô "Giá bán" (tạo sản phẩm, thêm/sửa phân loại) hiện **Khách trả / Phí sàn / Bạn nhận được**; thẻ doanh thu
-  ở tab Thống kê hiện thêm "Thực nhận sau phí sàn".
+- FE: ô "Giá bán" (tạo sản phẩm, thêm/sửa phân loại) chia đôi **Đơn giá** (người bán nhận) ⇄ **Giá niêm yết**
+  (khách trả) — nhập bên nào bên kia tự tính, cùng quy tắc làm tròn; ngăn kéo bên dưới giải thích bên đang chọn +
+  phí sàn. Thẻ doanh thu ở tab Thống kê hiện thêm "Thực nhận sau phí sàn".
 
 ## 6. Chưa làm (đừng giả định đã có)
 
 - **Lệnh chi (payout)**: yêu cầu rút, duyệt, thông tin ngân hàng vendor, bút toán `PayoutDebit`. Thẻ "Có thể rút"
-  vẫn ẩn; `PayoutCreditService` (cộng `users.balance`) **vẫn tắt** và sẽ được thay bằng lệnh chi đọc từ sổ.
+  đã BẬT LẠI (28/09/2026) = `ledgerAvailable`, nhưng số này **chỉ tăng**: chưa có bút toán chi, nên sàn chuyển tiền
+  cho vườn ngoài hệ thống thì số dư không giảm theo. Phải làm lệnh chi trước khi chi tiền thật. `PayoutCreditService`
+  (cộng `users.balance`) **vẫn tắt** và sẽ được thay bằng lệnh chi đọc từ sổ.
 - ~~Voucher (giai đoạn 2)~~ — ĐÃ LÀM 28/09/2026, xem [`voucher-freeship.md`](./voucher-freeship.md).
 - Phí cổng PayOS chưa ghi sổ (sàn chịu, coi như nằm trong phí sàn).
 - Delivery giao thất bại/hoàn về kho: phí GHN của chiều đi chưa ghi sổ (chỉ ghi khi Delivered).

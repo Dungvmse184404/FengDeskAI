@@ -3,8 +3,8 @@ using FengDeskAI.Application.Features.Vendor.DTOs;
 namespace FengDeskAI.Application.Features.Vendor.Services;
 
 /// <summary>
-/// Chính sách phí sàn — MỘT nguồn sự thật cho BE (chốt vào từng delivery, ghi sổ cái) lẫn FE (người bán xem
-/// trước "giá thực nhận" qua <c>GET /api/platform/fee-policy</c>). FE không được tự viết cứng tỉ lệ.
+/// Quy tắc tính phí sàn (thuần, không DB). Tỉ lệ ĐANG ÁP do Manager đặt ở <c>platform_fee_rates</c> và đọc qua
+/// <see cref="IPlatformFeeService"/>; FE lấy qua <c>GET /api/platform/fee-policy</c>, không tự viết cứng tỉ lệ.
 ///
 /// <para>
 /// Tiền của mọi đơn đi qua sàn (PayOS vào tài khoản sàn; COD do nhà vận chuyển thu hộ theo token GHN của sàn),
@@ -14,7 +14,7 @@ namespace FengDeskAI.Application.Features.Vendor.Services;
 ///
 /// <para>
 /// Voucher do SÀN tài trợ (giai đoạn 2) được trừ vào chính phần phí sàn: tổng giảm giá sàn gánh cho một
-/// delivery không vượt <see cref="MaxPlatformFundedDiscountRate"/> × tiền hàng — tức sàn không bao giờ bù lỗ
+/// delivery không vượt phí sàn của delivery đó — tức sàn không bao giờ bù lỗ
 /// quá phần mình thu, và nhà vườn luôn nhận đủ <c>tiền hàng − phí sàn</c> bất kể khách dùng voucher gì.
 /// </para>
 ///
@@ -22,11 +22,14 @@ namespace FengDeskAI.Application.Features.Vendor.Services;
 /// </summary>
 public static class PlatformFeePolicy
 {
-    /// <summary>Phí sàn trên tiền hàng của delivery đã giao thành công. Chốt vào <c>deliveries.commission_rate</c> lúc tạo.</summary>
-    public const decimal CommissionRate = 0.08m;
+    /// <summary>
+    /// Tỉ lệ khi bảng <c>platform_fee_rates</c> chưa có dòng nào (DB mới trước khi có ai đặt).
+    /// Có cấu hình rồi thì không dùng tới.
+    /// </summary>
+    public const decimal DefaultCommissionRate = 0.08m;
 
-    /// <summary>Trần giảm giá do sàn tài trợ trên mỗi delivery — bằng đúng phí sàn (giai đoạn 2: voucher).</summary>
-    public const decimal MaxPlatformFundedDiscountRate = CommissionRate;
+    /// <summary>Trần tỉ lệ Manager được đặt — khớp CHECK ở DB.</summary>
+    public const decimal MaxCommissionRate = 0.30m;
 
     /// <summary>
     /// Phí sàn của một khoản tiền hàng. Làm tròn tới đồng, nửa đồng làm tròn LÊN — FE dùng đúng quy tắc này
@@ -39,10 +42,12 @@ public static class PlatformFeePolicy
     public static decimal VendorNet(decimal subtotal, decimal rate) => subtotal - ComputeCommission(subtotal, rate);
 
     /// <summary>Bản công khai cho FE — <c>GET /api/platform/fee-policy</c>.</summary>
-    public static PlatformFeePolicyResponse Describe() => new()
+    public static PlatformFeePolicyResponse Describe(decimal commissionRate, DateTime? effectiveFrom = null) => new()
     {
-        CommissionRate = CommissionRate,
-        MaxPlatformFundedDiscountRate = MaxPlatformFundedDiscountRate,
+        CommissionRate = commissionRate,
+        // Voucher sàn tài trợ trừ vào chính phí sàn ⇒ trần giảm luôn bằng tỉ lệ phí.
+        MaxPlatformFundedDiscountRate = commissionRate,
         PayoutHoldDays = PayoutPolicy.HoldDays,
+        EffectiveFrom = effectiveFrom,
     };
 }

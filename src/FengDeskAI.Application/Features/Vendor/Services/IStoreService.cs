@@ -26,6 +26,8 @@ public interface IStoreService
 
     /// <summary>Các store user hiện tại đồng sở hữu (kênh người bán).</summary>
     Task<IServiceResult<List<StoreResponse>>> GetMineAsync(Guid userId, CancellationToken ct = default);
+    /// <summary>Số dư sổ cái các cửa hàng user sở hữu — hai truy vấn bất kể số cửa hàng.</summary>
+    Task<IServiceResult<MyStoreBalanceResponse>> GetMyBalanceAsync(Guid userId, CancellationToken ct = default);
 
     // ===== Owner (đồng sở hữu — marketplace) =====
     Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default);

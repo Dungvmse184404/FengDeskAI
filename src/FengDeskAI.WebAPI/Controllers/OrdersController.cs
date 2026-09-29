@@ -35,14 +35,14 @@ public class OrdersController : ApiControllerBase
         => ToActionResult(await _service.PreviewShippingFeeAsync(CurrentUserId, request, ct));
 
     [HttpGet]
-    public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));
+    public async Task<IActionResult> GetMine([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetMineAsync(CurrentUserId, paging, ct));
 
     /// <summary>Tất cả đơn của mọi customer (paged) — chỉ admin.</summary>
     [HttpGet("all")]
     [Authorize(Policy = AuthorizationPolicies.AdminOnly)]
-    public async Task<IActionResult> GetAll([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetAllAsync(page, ct));
+    public async Task<IActionResult> GetAll([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetAllAsync(paging, ct));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -59,8 +59,8 @@ public class OrdersController : ApiControllerBase
 
     /// <summary>Danh sách delivery của một store (màn vendor). Yêu cầu owner/staff store đó hoặc admin.</summary>
     [HttpGet("stores/{storeId:guid}/deliveries")]
-    public async Task<IActionResult> GetStoreDeliveries(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, IsAdmin, page, ct));
+    public async Task<IActionResult> GetStoreDeliveries(Guid storeId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, IsAdmin, paging, ct));
 
     [HttpPatch("deliveries/{deliveryId:guid}/status")]
     [ResourceAuthorize(ResourceOperation.UpdateDelivery, "deliveryId")]

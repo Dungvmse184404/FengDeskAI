@@ -39,10 +39,11 @@ public class OrderService : IOrderService
 
     private readonly ILedgerService _ledger;
     private readonly IVoucherService _vouchers;
+    private readonly IPlatformFeeService _platformFee;
 
     public OrderService(IUnitOfWork uow, IMapper mapper, IOrderCancellationService cancellation,
         IShippingProvider shipping, IDeliveryFeeEstimator feeEstimator, IStoreShopProvisioner shopProvisioner,
-        IReturnService returns, ILedgerService ledger, IVoucherService vouchers)
+        IReturnService returns, ILedgerService ledger, IVoucherService vouchers, IPlatformFeeService platformFee)
     {
         _uow = uow;
         _mapper = mapper;
@@ -53,6 +54,7 @@ public class OrderService : IOrderService
         _returns = returns;
         _ledger = ledger;
         _vouchers = vouchers;
+        _platformFee = platformFee;
     }
 
     public async Task<IServiceResult<OrderDetailResponse>> CheckoutAsync(Guid userId, CheckoutRequest request, CancellationToken ct = default)
@@ -79,9 +81,12 @@ public class OrderService : IOrderService
         var storeFees = await ComputeStoreFeesAsync(lines, shipTo, stores, ct);
         var feeByStore = storeFees.ToDictionary(s => s.StoreId, s => s.ShippingFee);
 
+        // Đọc tỉ lệ phí sàn MỘT lần: vừa là trần voucher, vừa chốt vào đơn ⇒ hai số luôn cùng một tỉ lệ.
+        var commissionRate = await _platformFee.GetCurrentRateAsync(ct);
+
         // Voucher: khách nhập mã mà mã không dùng được ⇒ từ chối hẳn, KHÔNG âm thầm đặt với giá khác số khách đã thấy.
         var voucher = await _vouchers.SelectAsync(userId, request.VoucherCode, ToChargeInputs(storeFees),
-            shipTo?.Ward?.District?.ProvinceId, ct);
+            shipTo?.Ward?.District?.ProvinceId, commissionRate, ct);
         if (voucher.Error is not null)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.UnprocessableEntity, voucher.Error);
 
@@ -91,6 +96,7 @@ public class OrderService : IOrderService
             ShippingAddressId = address.Id,
             Status = OrderStatus.Pending,
             PaymentMethod = request.PaymentMethod,
+            CommissionRate = commissionRate,
             Note = request.Note,
         };
 
@@ -102,14 +108,7 @@ public class OrderService : IOrderService
 
             foreach (var (pi, qty) in lines)
             {
-                order.Items.Add(new OrderItem
-                {
-                    ProductItemId = pi.Id,
-                    ProductItem = pi,
-                    ProductName = pi.Name is null ? pi.Product.Name : $"{pi.Product.Name} - {pi.Name}",
-                    UnitPrice = pi.Price,
-                    Quantity = qty,
-                });
+                order.Items.Add(OrderWorkflow.SnapshotLine(pi, qty));
 
                 pi.Stock -= qty; // trừ kho (entity đang tracked)
             }
@@ -227,21 +226,21 @@ public class OrderService : IOrderService
             // Gom theo store → delivery Pending. Add tường minh + LƯU NGAY để INSERT deliveries
             // trước khi order_items tham chiếu (tránh vi phạm FK + EF phát nhầm UPDATE 0 rows).
             var byStore = new Dictionary<Guid, Delivery>();
-            foreach (var storeId in order.Items.Select(i => i.ProductItem.Product.GardenStoreId).Distinct())
+            foreach (var storeId in order.Items.Select(OrderWorkflow.StoreOf).Distinct())
                 byStore[storeId] = new Delivery
                 {
                     OrderId = order.Id,
                     GardenStoreId = storeId,
                     Status = DeliveryStatus.Pending,
                     ShippingFee = 0m,
-                    CommissionRate = PlatformFeePolicy.CommissionRate,
+                    CommissionRate = order.CommissionRate,
                 };
             await _uow.Orders.AddDeliveriesAsync(byStore.Values, ct);
             await _uow.SaveChangesAsync(ct);
 
             foreach (var item in order.Items)
             {
-                var delivery = byStore[item.ProductItem.Product.GardenStoreId];
+                var delivery = byStore[OrderWorkflow.StoreOf(item)];
                 item.DeliveryId = delivery.Id;
                 delivery.Subtotal += item.UnitPrice * item.Quantity;
             }
@@ -435,11 +434,11 @@ public class OrderService : IOrderService
         if (lines.Count == 0) return;
 
         var productItems = await _uow.Orders.GetProductItemsAsync(
-            lines.Select(i => i.ProductItemId).Distinct(), ct);
+            lines.Where(i => i.ProductItemId.HasValue).Select(i => i.ProductItemId!.Value).Distinct(), ct);
         var byId = productItems.ToDictionary(p => p.Id);
 
         foreach (var line in lines)
-            if (byId.TryGetValue(line.ProductItemId, out var productItem))
+            if (line.ProductItemId is { } id && byId.TryGetValue(id, out var productItem))
                 productItem.Stock += line.Quantity;
     }
 
@@ -626,7 +625,7 @@ public class OrderService : IOrderService
 
         // Cùng hàm chọn voucher với checkout ⇒ số xem trước = số sẽ bị tính. Mã sai không làm hỏng preview.
         var voucher = await _vouchers.SelectAsync(userId, request.VoucherCode, ToChargeInputs(storeFees),
-            shipTo?.Ward?.District?.ProvinceId, ct);
+            shipTo?.Ward?.District?.ProvinceId, await _platformFee.GetCurrentRateAsync(ct), ct);
         var discount = voucher.TotalDiscount;
 
         return ServiceResult<ShippingFeePreviewResponse>.Success(new ShippingFeePreviewResponse
@@ -787,7 +786,10 @@ public class OrderService : IOrderService
             {
                 Id = i.Id,
                 ProductItemId = i.ProductItemId,
-                ProductId = i.ProductItem?.ProductId ?? Guid.Empty,
+                ProductId = i.ProductId ?? i.ProductItem?.ProductId,
+                ProductAvailable = i.ProductItem?.Product is not null,
+                VariantName = i.VariantName,
+                ImageUrl = i.ImageUrl,
                 DeliveryId = i.DeliveryId,
                 ProductName = i.ProductName,
                 UnitPrice = i.UnitPrice,

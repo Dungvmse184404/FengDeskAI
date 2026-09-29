@@ -42,6 +42,20 @@ public class ProductsController : ApiControllerBase
     public async Task<IActionResult> Search([FromQuery] ProductQueryParams query, CancellationToken ct)
         => ToActionResult(await _service.SearchAsync(query, ct));
 
+    /// <summary>Mã SKU của sàn (<c>FD-XXXXXXXX</c>) chưa dùng — điền sẵn ở form tạo sản phẩm/biến thể.</summary>
+    [HttpGet("sku-suggestion")]
+    public async Task<IActionResult> SuggestSku(CancellationToken ct)
+        => ToActionResult(await _service.SuggestSkuAsync(ct));
+
+    /// <summary>
+    /// Manager xoá vĩnh viễn — kể cả sản phẩm người bán đã xoá mềm. Biến thể/ảnh/giỏ đi theo; món trong đơn và đánh
+    /// giá giữ nguyên nội dung (chỉ mất liên kết). 409 khi còn đơn chưa đóng.
+    /// </summary>
+    [HttpDelete("{id:guid}/permanent")]
+    [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
+    public async Task<IActionResult> HardDelete(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.HardDeleteAsync(id, ct));
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)

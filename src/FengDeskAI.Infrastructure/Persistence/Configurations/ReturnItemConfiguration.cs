@@ -34,7 +34,8 @@ public class ReturnItemConfiguration : IEntityTypeConfiguration<ReturnItem>
         builder.HasOne(i => i.ExchangeProductItem)
             .WithMany()
             .HasForeignKey(i => i.ExchangeProductItemId)
-            .OnDelete(DeleteBehavior.Restrict);
+            // Ticket đã đóng giữ nguyên; món đổi đã giao nằm ở order_items (có cột chụp).
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasQueryFilter(i => !i.IsDeleted);
     }

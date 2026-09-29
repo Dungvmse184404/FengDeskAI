@@ -17,8 +17,8 @@ public class NotificationsController : ApiControllerBase
 
     /// <summary>Danh sách thông báo (paged). unreadOnly=true để chỉ lấy chưa đọc.</summary>
     [HttpGet]
-    public async Task<IActionResult> GetMine([FromQuery] PageRequest page, [FromQuery] bool? unreadOnly, CancellationToken ct)
-        => ToActionResult(await _service.GetMyAsync(CurrentUserId, page, unreadOnly, ct));
+    public async Task<IActionResult> GetMine([FromQuery] PageRequest paging, [FromQuery] bool? unreadOnly, CancellationToken ct)
+        => ToActionResult(await _service.GetMyAsync(CurrentUserId, paging, unreadOnly, ct));
 
     /// <summary>Số thông báo chưa đọc — dùng cho badge.</summary>
     [HttpGet("unread-count")]

@@ -130,3 +130,47 @@ Sau khi sửa, chạy lại 2 lệnh curl ở mục 3 để chắc chắn API + 
 - Không để secret trong biến `VITE_*` của FE — chúng bị nhúng công khai vào bundle JS.
 - SSH bằng key, tắt password auth khi đã đủ key: `/etc/ssh/sshd_config` → `PasswordAuthentication no` → `systemctl restart sshd`.
 - Đổi mật khẩu: `passwd` (VPS), Supabase dashboard → Settings → Database (DB).
+
+## 10. Hostname dự phòng cho API
+
+Ngày 29/09/2026 nameserver `ns1/ns2.matbao.vn` ngừng phản hồi → toàn bộ `fengdesk.io.vn` không
+resolve được. API và VPS vẫn chạy bình thường, nhưng **không ai gọi tới được** — và không có cách
+nào chữa từ phía server, vì lỗi nằm ở tầng DNS trước khi traffic chạm tới nginx.
+
+Đường dự phòng đã dựng, dùng nhà cung cấp DNS khác nhưng trỏ về **chính server này**:
+
+| | Hostname | DNS |
+|---|---|---|
+| Chính | `api.fengdesk.io.vn` | Mắt Bão (hoặc Cloudflare sau khi chuyển NS) |
+| Dự phòng | `103-241-43-36.sslip.io` | sslip.io — tự suy IP từ tên, không cần đăng ký |
+
+| Thành phần | Vị trí |
+|---|---|
+| Nginx config dự phòng | `/etc/nginx/sites-available/fengdesk-api-sslip` |
+| SSL cert | `/etc/letsencrypt/live/103-241-43-36.sslip.io/` |
+
+Cả hai proxy về cùng upstream `fengdesk_api`, cùng cấu hình `/hubs/` (WebSocket) và `/api/chat/`
+(timeout 300s). Cert riêng, certbot tự gia hạn.
+
+```bash
+# Kiểm tra đường dự phòng
+curl -s -o /dev/null -w "%{http_code}\n" https://103-241-43-36.sslip.io/health   # mong đợi 200
+```
+
+FE tự chọn đường lúc khởi động: dò `/health` của hostname chính, không tới được thì chuyển sang dự
+phòng và ghi nhớ trong `sessionStorage` cho cả phiên. Cấu hình bằng 2 biến env trên Vercel:
+`VITE_API_BASE_URL` (chính) và `VITE_API_BASE_URL_FALLBACK` (dự phòng). Bỏ trống biến thứ hai là
+tắt tính năng. Chi tiết: `FengDeskAI_FE/src/config/apiBase.ts`.
+
+**Lưu ý:** hai hostname vào cùng một VPS nên đường dự phòng **không** cứu được trường hợp VPS hoặc
+container chết — nó chỉ chống sự cố DNS. Ngoài ra một số mạng doanh nghiệp/trường học chặn
+`sslip.io` và `nip.io`, nên hãy thử trước trên đúng mạng sẽ demo.
+
+### Gỡ khi domain chính đã ổn định
+
+```bash
+rm /etc/nginx/sites-enabled/fengdesk-api-sslip
+certbot delete --cert-name 103-241-43-36.sslip.io
+nginx -t && systemctl reload nginx
+```
+Rồi bỏ `VITE_API_BASE_URL_FALLBACK` trên Vercel và redeploy.

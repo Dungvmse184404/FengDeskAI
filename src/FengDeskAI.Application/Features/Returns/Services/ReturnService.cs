@@ -4,6 +4,7 @@ using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
+using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
@@ -616,10 +617,12 @@ public class ReturnService : IReturnService
 
     private async Task RestockAsync(ReturnRequest rr, CancellationToken ct)
     {
-        var productItemIds = rr.Items.Select(i => i.OrderItem.ProductItemId).Distinct();
+        // Sản phẩm đã bị xoá (mềm/cứng) thì không nhập lại kho — biến thể không còn bán.
+        var productItemIds = rr.Items.Where(i => i.OrderItem.ProductItemId.HasValue)
+            .Select(i => i.OrderItem.ProductItemId!.Value).Distinct();
         var byId = (await _uow.Orders.GetProductItemsAsync(productItemIds, ct)).ToDictionary(p => p.Id);
         foreach (var ri in rr.Items)
-            if (byId.TryGetValue(ri.OrderItem.ProductItemId, out var pi))
+            if (ri.OrderItem.ProductItemId is { } id && byId.TryGetValue(id, out var pi))
                 pi.Stock += ri.Quantity;
     }
 
@@ -647,16 +650,12 @@ public class ReturnService : IReturnService
         foreach (var ri in rr.Items.Where(i => i.ExchangeProductItemId.HasValue))
         {
             var ex = exItems[ri.ExchangeProductItemId!.Value];
-            var productName = ex.Name is null ? ex.Product.Name : $"{ex.Product.Name} - {ex.Name}";
-            newItems.Add(new OrderItem
-            {
-                OrderId = rr.OrderId,
-                ProductItemId = ex.Id,
-                DeliveryId = replacement.Id,
-                ProductName = productName,
-                UnitPrice = ex.Price,
-                Quantity = ri.Quantity,
-            });
+            var line = OrderWorkflow.SnapshotLine(ex, ri.Quantity);
+            line.ProductItem = null; // biến thể đang được tracked sẵn — chỉ cần FK
+            line.OrderId = rr.OrderId;
+            line.DeliveryId = replacement.Id;
+            var productName = line.ProductName;
+            newItems.Add(line);
             shipmentItems.Add(new ShipmentItem(ex.Id.ToString(), productName, ex.Price, ri.Quantity,
                 ex.WeightGram, ex.LengthCm, ex.WidthCm, ex.HeightCm));
             totalWeightGram += ex.WeightGram * ri.Quantity;

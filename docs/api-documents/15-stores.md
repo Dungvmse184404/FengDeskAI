@@ -14,6 +14,7 @@ Quản lý garden store (marketplace). User đã đăng nhập tự mở store (
 |--------|------|-------|-------|
 | GET | `/api/stores` | Public | Store đang hoạt động |
 | GET | `/api/stores/mine` | Authenticated | Store tôi đồng sở hữu |
+| GET | `/api/stores/mine/balance` | Authenticated | Số dư sổ cái (có thể rút / đang giữ) các store tôi SỞ HỮU |
 | GET | `/api/stores/{id}` | Public | Chi tiết store |
 | POST | `/api/stores` | Authenticated | Tự mở store |
 | PUT | `/api/stores/{id}` | Owner/Admin | Cập nhật store |
@@ -48,9 +49,14 @@ Quản lý garden store (marketplace). User đã đăng nhập tự mở store (
   "address": { "id": "guid", "storeId": "guid", "wardId": "guid",
                "streetAddress": "...", "latitude": null, "longitude": null, "isActive": true },
   "owners": [{ "ownerUserId": "guid", "isPrimary": true, "assignedAt": "..." }],
+  "rating": { "average": 4.3, "count": 12 },
   "createdAt": "...", "updatedAt": "..."
 }
 ```
+
+> **`rating`** chỉ có ở `GET /{id}` (null ở `/` và `/mine`): trung bình sao (làm tròn 1 chữ số) + số lượt đánh giá của
+> mọi sản phẩm thuộc cửa hàng, tính theo cột chụp `reviews.garden_store_id`. `count = 0` → chưa có đánh giá. Phân bố
+> 1–5 sao: `GET /api/Review/summary?storeId=` — xem [19-reviews](./19-reviews.md).
 
 ## POST `/api/stores`
 Tự mở store; người tạo thành owner chính. **Request body** (`CreateStoreRequest`):
@@ -123,6 +129,17 @@ Lỗi: `400 StaffNotFound` (user không tồn tại), `400 IdentifierRequired` (
 **DELETE `/{id}/staff/{assignmentId}`** — Owner/Admin. Gỡ hoặc huỷ lời mời (Pending/Accepted → `Revoked`).
 
 ### Lời mời (góc nhìn người được mời)
+
+**GET `/api/stores/mine/balance`** — Authenticated (28/09/2026, menu tài khoản FE). Chỉ store user **sở hữu**
+(nhân viên nhận `stores: []`). Đọc thẳng `ledger_entries` — hai truy vấn bất kể số store:
+
+```json
+{ "available": 1200000, "pending": 300000, "balance": 1500000, "payoutHoldDays": 7,
+  "stores": [{ "storeId": "…", "storeName": "Vườn của Cat", "available": 1200000, "pending": 300000, "balance": 1500000 }] }
+```
+
+`available` = bút toán có `available_at ≤ now` (đã qua khoảng giữ sau khi giao) — cùng số với `ledgerAvailable` của
+`/statistics`; `pending` = phần còn trong khoảng giữ. Cả hai đã trừ phí sàn và công nợ hoàn hàng.
 
 **GET `/api/stores/staff/invitations/mine`** — Authenticated. `data` = mảng `InvitationResponse`:
 ```json

@@ -7,6 +7,14 @@
 > **Thay thế N1** (delta bẻ `r`, ADR v3.2 §11) — gỡ hẳn, không chạy song song.
 > **Kill-switch:** 1 tham số `OCCUPATION_WEIGHT` seed `0.00` ⇒ `d` byte-identical, golden set không đổi.
 > **Formula version:** `3.3` → `3.4`.
+>
+> ⚠️ **CẬP NHẬT v3.7 (2026-09-30)** — `ô` (cách dựng, clamp mệnh, `Wo`, ba mặt A/B/C) giữ **nguyên**,
+> nhưng **phép đo** `ô · p` trong toàn bộ tài liệu này đã đổi thành
+> `Σ min(ô⁺, p) − Σ min(ô⁻, p)`. Lý do: `ô` được dựng cố ý giống `ĝ` (§2.2), nên nó thừa luôn cái lỗi của
+> `ĝ·p`: `Σô⁺ = 1` + `Σp = 1` ⇒ tích trong là một phép trung bình ⇒ trần của sản phẩm = `max p[e]`.
+> Sản phẩm **thuần một hành không đổi điểm** — mọi con số ví dụ trong tài liệu này (vd 100 % Kim ⇒ 0.75
+> ⇒ 88 %) vẫn đúng. Bất biến "một con số duy nhất ở ba mặt" được giữ: mặt A (`OccupationService.ToFitRow`)
+> đổi cùng lúc. Xem [`workspace-gap-cover-v3.7.md`](./workspace-gap-cover-v3.7.md) §2.3.
 
 ---
 

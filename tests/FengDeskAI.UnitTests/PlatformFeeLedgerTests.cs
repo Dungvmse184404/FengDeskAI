@@ -27,7 +27,7 @@ public class PlatformFeeLedgerTests
     [InlineData(6_257, 501)]      // 500.56 → 501
     [InlineData(0, 0)]
     public void ComputeCommission_EightPercent_RoundsToWholeDong(decimal subtotal, decimal expected)
-        => Assert.Equal(expected, PlatformFeePolicy.ComputeCommission(subtotal, PlatformFeePolicy.CommissionRate));
+        => Assert.Equal(expected, PlatformFeePolicy.ComputeCommission(subtotal, PlatformFeePolicy.DefaultCommissionRate));
 
     [Fact]
     public void ComputeCommission_HalfDong_RoundsUp()
@@ -38,9 +38,16 @@ public class PlatformFeeLedgerTests
     public void VendorNet_IsSubtotalMinusCommission()
         => Assert.Equal(138_000m, PlatformFeePolicy.VendorNet(150_000m, 0.08m));
 
-    [Fact]
-    public void PlatformFundedDiscountCap_NeverExceedsCommission()
-        => Assert.True(PlatformFeePolicy.MaxPlatformFundedDiscountRate <= PlatformFeePolicy.CommissionRate);
+    [Theory]
+    [InlineData(0.08)]
+    [InlineData(0.05)]
+    [InlineData(0)]
+    public void PlatformFundedDiscountCap_EqualsConfiguredCommission(decimal rate)
+    {
+        var policy = PlatformFeePolicy.Describe(rate);
+        Assert.Equal(rate, policy.CommissionRate);
+        Assert.Equal(rate, policy.MaxPlatformFundedDiscountRate);
+    }
 
     // ===================== Chia phí ship cho đơn PayOS =====================
 
@@ -70,9 +77,10 @@ public class PlatformFeeLedgerTests
     }
 
     [Fact]
-    public void GroupItemsIntoDeliveries_SnapshotsCurrentCommissionRate()
+    public void GroupItemsIntoDeliveries_UsesRateSnapshottedOnOrder()
     {
-        var order = new Order();
+        // Tỉ lệ khác mặc định: delivery phải lấy đúng số đã chốt vào đơn, không phải hằng số.
+        var order = new Order { CommissionRate = 0.065m };
         var storeId = Guid.NewGuid();
         order.Items.Add(new OrderItem
         {
@@ -86,7 +94,7 @@ public class PlatformFeeLedgerTests
 
         OrderWorkflow.GroupItemsIntoDeliveries(order);
 
-        Assert.Equal(PlatformFeePolicy.CommissionRate, order.Deliveries.Single().CommissionRate);
+        Assert.Equal(0.065m, order.Deliveries.Single().CommissionRate);
     }
 
     // ===================== LedgerService =====================

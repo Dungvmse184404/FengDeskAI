@@ -33,6 +33,7 @@ public class UnitOfWork : IUnitOfWork
         IShippingRepository shipping,
         ITransactionRepository transactions,
         ILedgerRepository ledger,
+        IPlatformFeeRateRepository platformFeeRates,
         IVoucherRepository vouchers,
         INotificationRepository notifications,
         IChatboxRepository chatboxes,
@@ -63,6 +64,7 @@ public class UnitOfWork : IUnitOfWork
         Shipping = shipping;
         Transactions = transactions;
         Ledger = ledger;
+        PlatformFeeRates = platformFeeRates;
         Vouchers = vouchers;
         Notifications = notifications;
         Chatboxes = chatboxes;
@@ -92,6 +94,7 @@ public class UnitOfWork : IUnitOfWork
     public IShippingRepository Shipping { get; }
     public ITransactionRepository Transactions { get; }
     public ILedgerRepository Ledger { get; }
+    public IPlatformFeeRateRepository PlatformFeeRates { get; }
     public IVoucherRepository Vouchers { get; }
     public INotificationRepository Notifications { get; }
     public IChatboxRepository Chatboxes { get; }

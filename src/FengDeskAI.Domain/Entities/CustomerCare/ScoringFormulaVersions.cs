@@ -56,6 +56,14 @@ public static class ScoringFormulaVersions
     /// </summary>
     public const string V36 = "3.6";
 
+    /// <summary>
+    /// v3.7 — luồng phòng: <c>gapScore = Σ min(ĝ⁺, p) − Σ min(ĝ⁻, p)</c> thay cho <c>ĝ·p</c>. Tích trong là
+    /// một phép trung bình nên trần của sản phẩm bằng chính đỉnh khai báo của nó (<c>max p</c>), tức engine
+    /// thưởng cho việc khai thiếu hành. Sản phẩm thuần một hành ra điểm y hệt v3.6. Nhánh Carry và hai trục
+    /// <c>r</c>/<c>ô</c> không đổi. Xem <c>docs/adr/workspace-gap-cover-v3.7.md</c>.
+    /// </summary>
+    public const string V37 = "3.7";
+
     /// <summary>Phiên bản mà engine đang chạy — đóng dấu lên mọi phiên gợi ý mới.</summary>
-    public const string Current = V36;
+    public const string Current = V37;
 }

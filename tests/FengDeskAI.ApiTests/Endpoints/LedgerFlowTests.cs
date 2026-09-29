@@ -23,7 +23,7 @@ namespace FengDeskAI.ApiTests.Endpoints;
 public sealed class LedgerFlowTests
 {
     private const decimal Price = 150_000m;
-    private static readonly decimal Commission = PlatformFeePolicy.ComputeCommission(Price, PlatformFeePolicy.CommissionRate);
+    private static readonly decimal Commission = PlatformFeePolicy.ComputeCommission(Price, PlatformFeePolicy.DefaultCommissionRate);
 
     private readonly ApiTestFixture _fixture;
 
@@ -36,9 +36,9 @@ public sealed class LedgerFlowTests
 
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var data = await ApiEnvelope.DataAsync(response);
-        Assert.Equal(PlatformFeePolicy.CommissionRate, data.GetProperty("commissionRate").GetDecimal());
+        Assert.Equal(PlatformFeePolicy.DefaultCommissionRate, data.GetProperty("commissionRate").GetDecimal());
         Assert.Equal(PayoutPolicy.HoldDays, data.GetProperty("payoutHoldDays").GetInt32());
-        Assert.True(data.GetProperty("maxPlatformFundedDiscountRate").GetDecimal() <= PlatformFeePolicy.CommissionRate);
+        Assert.Equal(PlatformFeePolicy.DefaultCommissionRate, data.GetProperty("maxPlatformFundedDiscountRate").GetDecimal());
     }
 
     [Fact(DisplayName = "LEDGER-02 [Normal] Checkout snapshots the commission rate on each delivery")]
@@ -47,7 +47,7 @@ public sealed class LedgerFlowTests
         var order = await DeliveredOrderScenario.CreateAsync(_fixture);
 
         var delivery = await LoadDeliveryAsync(order.DeliveryId);
-        Assert.Equal(PlatformFeePolicy.CommissionRate, delivery.CommissionRate);
+        Assert.Equal(PlatformFeePolicy.DefaultCommissionRate, delivery.CommissionRate);
     }
 
     [Fact(DisplayName = "LEDGER-03 [Normal] A delivered order credits the garden net of commission, held for the payout window")]
@@ -70,7 +70,7 @@ public sealed class LedgerFlowTests
         Assert.Equal(Price - Commission, stats.GetProperty("ledgerPending").GetDecimal());
         Assert.Equal(0m, stats.GetProperty("ledgerAvailable").GetDecimal());
         Assert.Equal(Commission, stats.GetProperty("platformCommission").GetDecimal());
-        Assert.Equal(PlatformFeePolicy.CommissionRate, stats.GetProperty("commissionRate").GetDecimal());
+        Assert.Equal(PlatformFeePolicy.DefaultCommissionRate, stats.GetProperty("commissionRate").GetDecimal());
     }
 
     [Fact(DisplayName = "LEDGER-04 [Normal] A fully refunded item leaves the garden with zero and returns the commission")]
@@ -127,6 +127,35 @@ public sealed class LedgerFlowTests
     }
 
     // ===================== Hạ tầng =====================
+
+    [Fact(DisplayName = "LEDGER-07 [Normal] Owner balance lists a just-delivered sale as held, not yet withdrawable")]
+    public async Task MyBalance_JustDelivered_IsPendingNotAvailable()
+    {
+        var order = await DeliveredOrderScenario.CreateAsync(_fixture);
+
+        var response = await _fixture.ClientFor(TestRole.GardenOwner).GetAsync("/api/stores/mine/balance");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var data = await ApiEnvelope.DataAsync(response);
+        var store = data.GetProperty("stores").EnumerateArray()
+            .Single(s => s.GetProperty("storeId").GetGuid() == order.StoreId);
+        Assert.Equal(Price - Commission, store.GetProperty("pending").GetDecimal());
+        Assert.Equal(0m, store.GetProperty("available").GetDecimal());
+        Assert.Equal(PayoutPolicy.HoldDays, data.GetProperty("payoutHoldDays").GetInt32());
+        Assert.Equal(data.GetProperty("stores").EnumerateArray().Sum(s => s.GetProperty("balance").GetDecimal()),
+            data.GetProperty("balance").GetDecimal());
+    }
+
+    [Fact(DisplayName = "LEDGER-08 [Security] A user owning no store sees an empty balance")]
+    public async Task MyBalance_NonOwner_IsEmpty()
+    {
+        var client = ScenarioUsers.ClientFor(_fixture, await ScenarioUsers.CreateAsync(_fixture));
+
+        var data = await ApiEnvelope.DataAsync(await client.GetAsync("/api/stores/mine/balance"));
+
+        Assert.Empty(data.GetProperty("stores").EnumerateArray());
+        Assert.Equal(0m, data.GetProperty("balance").GetDecimal());
+    }
 
     private async Task<Delivery> LoadDeliveryAsync(Guid deliveryId)
     {

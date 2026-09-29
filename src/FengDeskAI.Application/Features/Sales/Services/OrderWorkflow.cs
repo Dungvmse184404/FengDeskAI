@@ -1,4 +1,5 @@
 using FengDeskAI.Application.Features.Vendor.Services;
+using FengDeskAI.Domain.Entities.Catalog;
 using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Enums.Sales;
 
@@ -8,13 +9,39 @@ namespace FengDeskAI.Application.Features.Sales.Services;
 public static class OrderWorkflow
 {
     /// <summary>
+    /// Một món trong đơn KÈM ảnh chụp tên/biến thể/SKU/ảnh/vườn lúc đặt — đơn hiển thị đủ dù sau đó sản phẩm bị xoá
+    /// mềm (người bán) hay xoá cứng (Manager). Cần <c>pi.Product</c> đã nạp; có <c>Product.Images</c> thì chụp ảnh.
+    /// </summary>
+    public static OrderItem SnapshotLine(ProductItem pi, int quantity) => new()
+    {
+        ProductItemId = pi.Id,
+        ProductItem = pi,
+        ProductId = pi.ProductId,
+        GardenStoreId = pi.Product.GardenStoreId,
+        ProductName = pi.Name is null ? pi.Product.Name : $"{pi.Product.Name} - {pi.Name}",
+        VariantName = pi.Name,
+        Sku = pi.Sku,
+        ImageUrl = pi.Product.Images?.OrderBy(i => i.SortOrder).Select(i => i.Url).FirstOrDefault(),
+        UnitPrice = pi.Price,
+        Quantity = quantity,
+    };
+
+    /// <summary>
+    /// Vườn bán món này — đọc cột chụp; đơn cũ trước khi có cột (migration đã điền bù) mới rơi về sản phẩm.
+    /// </summary>
+    public static Guid StoreOf(OrderItem item)
+        => item.GardenStoreId
+           ?? item.ProductItem?.Product?.GardenStoreId
+           ?? throw new InvalidOperationException($"Món {item.Id} không xác định được cửa hàng.");
+
+    /// <summary>
     /// Gom order.Items theo store thành các delivery (mỗi store một delivery, status Pending).
     /// Yêu cầu mỗi item đã nạp ProductItem.Product (để biết GardenStoreId).
     /// Gọi lúc checkout với đơn COD; với đơn online gọi khi webhook báo đã thanh toán.
     /// </summary>
     public static void GroupItemsIntoDeliveries(Order order)
     {
-        foreach (var group in order.Items.GroupBy(i => i.ProductItem.Product.GardenStoreId))
+        foreach (var group in order.Items.GroupBy(StoreOf))
         {
             var delivery = new Delivery
             {
@@ -22,7 +49,7 @@ public static class OrderWorkflow
                 Status = DeliveryStatus.Pending,
                 ShippingFee = 0m,
                 Subtotal = group.Sum(i => i.UnitPrice * i.Quantity),
-                CommissionRate = PlatformFeePolicy.CommissionRate,
+                CommissionRate = order.CommissionRate,
             };
             foreach (var item in group)
             {

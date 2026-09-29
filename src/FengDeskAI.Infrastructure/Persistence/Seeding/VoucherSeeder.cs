@@ -36,7 +36,7 @@ public sealed class VoucherSeeder : IDataSeeder
             Code = FreeShip500Code,
             Name = "Miễn phí vận chuyển cho đơn từ 500.000đ",
             Description = "Tự áp khi tổng tiền hàng từ 500.000đ. Mỗi cửa hàng trong đơn được giảm tối đa bằng phí vận chuyển "
-                          + "của cửa hàng đó và không vượt 8% tiền hàng của cửa hàng.",
+                          + "của cửa hàng đó và không vượt phí sàn của cửa hàng.",
             Type = VoucherType.FreeShipping,
             FundedBy = VoucherFundingSource.Platform,
             MinOrderSubtotal = 500_000m,

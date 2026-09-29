@@ -27,6 +27,35 @@ public class LedgerRepository : GenericRepository<LedgerEntry>, ILedgerRepositor
         => _set.Local.FirstOrDefault(e => e.IdempotencyKey == idempotencyKey)
            ?? await _set.AsNoTracking().FirstOrDefaultAsync(e => e.IdempotencyKey == idempotencyKey, ct);
 
+    public async Task<Dictionary<Guid, GardenLedgerSummary>> GetGardenSummariesAsync(
+        IReadOnlyCollection<Guid> gardenStoreIds, DateTime nowUtc, CancellationToken ct = default)
+    {
+        if (gardenStoreIds.Count == 0) return new Dictionary<Guid, GardenLedgerSummary>();
+
+        var rows = await _set.AsNoTracking()
+            .Where(e => e.Account == LedgerAccount.GardenStore && e.GardenStoreId != null
+                        && gardenStoreIds.Contains(e.GardenStoreId.Value))
+            .GroupBy(e => new
+            {
+                StoreId = e.GardenStoreId!.Value,
+                IsAvailable = e.AvailableAt <= nowUtc,
+                IsCommission = e.Type == LedgerEntryType.Commission
+                               || e.Type == LedgerEntryType.CommissionReversal
+                               || e.Type == LedgerEntryType.CommissionReinstated,
+            })
+            .Select(g => new { g.Key.StoreId, g.Key.IsAvailable, g.Key.IsCommission, Amount = g.Sum(e => e.Amount) })
+            .ToListAsync(ct);
+
+        return gardenStoreIds.Distinct().ToDictionary(id => id, id =>
+        {
+            var mine = rows.Where(r => r.StoreId == id).ToList();
+            var available = mine.Where(r => r.IsAvailable).Sum(r => r.Amount);
+            var pending = mine.Where(r => !r.IsAvailable).Sum(r => r.Amount);
+            return new GardenLedgerSummary(available + pending, available, pending,
+                -mine.Where(r => r.IsCommission).Sum(r => r.Amount));
+        });
+    }
+
     public async Task<GardenLedgerSummary> GetGardenSummaryAsync(Guid gardenStoreId, DateTime nowUtc, CancellationToken ct = default)
     {
         // Một lượt đi về DB: gộp theo (đã khả dụng?, là phí sàn?) rồi cộng trong C#.

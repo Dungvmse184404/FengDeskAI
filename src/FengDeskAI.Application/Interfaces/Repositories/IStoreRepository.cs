@@ -5,6 +5,8 @@ using FengDeskAI.Domain.Entities.Vendor;
 
 namespace FengDeskAI.Application.Interfaces.Repositories;
 
+public sealed record OwnedStoreRow(Guid Id, string Name);
+
 public interface IStoreRepository : IGenericRepository<GardenStore>
 {
     Task<List<GardenStore>> GetActiveAsync(CancellationToken ct = default);
@@ -32,6 +34,9 @@ public interface IStoreRepository : IGenericRepository<GardenStore>
     Task<User?> GetPrimaryOwnerAsync(Guid storeId, CancellationToken ct = default);
 
     Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default);
+
+    /// <summary>Chỉ Id + tên các cửa hàng user (đồng) sở hữu — nhẹ, cho menu tài khoản.</summary>
+    Task<List<OwnedStoreRow>> GetOwnedStoreRowsAsync(Guid ownerUserId, CancellationToken ct = default);
     /// <summary>Store mà user là owner HOẶC garden staff đã Accepted — nguồn sự thật cho /stores/mine + quyền vào seller.</summary>
     Task<List<GardenStore>> GetForUserAsync(Guid userId, CancellationToken ct = default);
     Task<List<GardenStoreOwner>> GetOwnersAsync(Guid storeId, CancellationToken ct = default);

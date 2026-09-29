@@ -62,7 +62,7 @@ public sealed class VoucherFlowTests
 
         var storeB = preview.GetProperty("stores").EnumerateArray()
             .Single(s => s.GetProperty("storeId").GetGuid() == data.StoreB.StoreId);
-        var commissionB = PlatformFeePolicy.ComputeCommission(150_000m, PlatformFeePolicy.CommissionRate);
+        var commissionB = PlatformFeePolicy.ComputeCommission(150_000m, PlatformFeePolicy.DefaultCommissionRate);
         Assert.Equal(Math.Min(storeB.GetProperty("shippingFee").GetDecimal(), commissionB),
             storeB.GetProperty("shippingDiscount").GetDecimal());
     }
@@ -156,7 +156,7 @@ public sealed class VoucherFlowTests
 
         var entries = await LedgerAsync(deliveryId);
         Assert.Equal(-discount, entries.Single(e => e.Type == LedgerEntryType.ShippingVoucherSubsidy).Amount);
-        var commission = PlatformFeePolicy.ComputeCommission(600_000m, PlatformFeePolicy.CommissionRate);
+        var commission = PlatformFeePolicy.ComputeCommission(600_000m, PlatformFeePolicy.DefaultCommissionRate);
         Assert.Equal(600_000m - commission, entries.Where(e => e.Account == LedgerAccount.GardenStore).Sum(e => e.Amount));
         // Hai sổ cộng lại = đúng số khách trả (Mock không báo phí nhà vận chuyển).
         Assert.Equal(order.GetProperty("totalAmount").GetDecimal(), entries.Sum(e => e.Amount));

@@ -75,6 +75,10 @@ Giao diện đã ẩn thẻ "Có thể rút" (Dashboard + tab thống kê cửa 
 **sau khi** có sổ cái ở bước 2, vì cả ba lỗi trên đều tan khi mỗi lần cộng/trừ là một dòng sổ có khoá duy
 nhất theo `delivery_id`.
 
+> **28/09/2026 — ĐÃ BẬT LẠI** trên sổ cái: "Có thể rút" = `ledgerAvailable` (qua khoảng giữ, đã trừ phí sàn + công
+> nợ), dòng phụ "Đang giữ" = `ledgerPending`; menu tài khoản FE hiện tổng qua `GET /api/stores/mine/balance`.
+> Còn thiếu lệnh chi (`PayoutDebit`) — xem [`platform-fee-ledger.md`](./platform-fee-ledger.md) §6.
+
 ## 4. Đánh đổi đã biết
 
 **Khoảng giữ = cửa sổ đổi trả (7 ngày).** Đổi lại việc dòng tiền nhà vườn chậm một tuần, sàn không rơi vào

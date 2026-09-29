@@ -132,7 +132,7 @@ public class ShippingVoucherCalculatorTests
         var voucher = FreeShip500(v => { v.UsageLimit = 5; v.UsedCount = 5; });
         var service = ServiceWith(voucher);
 
-        var selection = await service.SelectAsync(Guid.NewGuid(), " freeship500 ", [Store(600_000m, 30_000m)], null);
+        var selection = await service.SelectAsync(Guid.NewGuid(), " freeship500 ", [Store(600_000m, 30_000m)], null, Rate);
 
         Assert.NotNull(selection.Error);
         Assert.Equal(0m, selection.TotalDiscount);
@@ -144,7 +144,7 @@ public class ShippingVoucherCalculatorTests
         var voucher = FreeShip500(v => v.UsageLimitPerUser = 1);
         var service = ServiceWith(voucher, userRedemptions: 1);
 
-        var selection = await service.SelectAsync(Guid.NewGuid(), null, [Store(600_000m, 30_000m)], null);
+        var selection = await service.SelectAsync(Guid.NewGuid(), null, [Store(600_000m, 30_000m)], null, Rate);
 
         Assert.Null(selection.Error);   // tự áp không được thì im lặng, không chặn đặt hàng
         Assert.Null(selection.Voucher);

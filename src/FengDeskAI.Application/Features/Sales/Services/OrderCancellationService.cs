@@ -74,10 +74,12 @@ public class OrderCancellationService : IOrderCancellationService
             }
 
             // Hoàn kho
-            var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
+            // Biến thể đã bị xoá (mềm/cứng) thì không hoàn kho — không còn bán.
+            var productItems = await _uow.Orders.GetProductItemsAsync(
+                order.Items.Where(i => i.ProductItemId.HasValue).Select(i => i.ProductItemId!.Value).Distinct(), ct);
             var byId = productItems.ToDictionary(p => p.Id);
             foreach (var item in order.Items)
-                if (byId.TryGetValue(item.ProductItemId, out var pi))
+                if (item.ProductItemId is { } id && byId.TryGetValue(id, out var pi))
                     pi.Stock += item.Quantity;
 
             order.StatusChangeNote = note;

@@ -23,7 +23,8 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
             .IsRequired();
 
         builder.Property(r => r.UserId).HasColumnName("user_id").IsRequired();
-        builder.Property(r => r.ProductId).HasColumnName("product_id").IsRequired();
+        // Null sau khi sản phẩm bị xoá cứng — đánh giá vẫn giữ.
+        builder.Property(r => r.ProductId).HasColumnName("product_id");
 
         builder.Property(r => r.CreatedAt).HasColumnName("created_at");
         builder.Property(r => r.UpdatedAt).HasColumnName("updated_at");
@@ -31,13 +32,20 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
         builder.Property(r => r.UpdatedBy).HasColumnName("updated_by");
         builder.Property(r => r.IsDeleted).HasColumnName("is_deleted").HasDefaultValue(false);
 
-        // Mỗi user chỉ review 1 product 1 lần — partial unique index
-        builder.HasIndex(r => new { r.UserId, r.ProductId })
-            .HasDatabaseName("UX_reviews_user_product")
+        // Mỗi DÒNG ĐƠN chỉ một đánh giá — mua lại sản phẩm thì được đánh giá lần nữa.
+        builder.Property(r => r.OrderItemId).HasColumnName("order_item_id");
+        builder.HasIndex(r => r.OrderItemId)
+            .HasDatabaseName("UX_reviews_order_item")
             .IsUnique()
-            .HasFilter("is_deleted = FALSE");
+            .HasFilter("is_deleted = FALSE AND order_item_id IS NOT NULL");
+
+        builder.HasIndex(r => new { r.UserId, r.ProductId })
+            .HasDatabaseName("IX_reviews_user_product");
 
         builder.HasIndex(r => r.ProductId);
+        builder.HasIndex(r => r.GardenStoreId);
+        builder.Property(r => r.ProductName).HasColumnName("product_name").HasMaxLength(255);
+        builder.Property(r => r.GardenStoreId).HasColumnName("garden_store_id");
 
         builder.HasOne(r => r.User)
             .WithMany()
@@ -47,7 +55,13 @@ public class ReviewConfiguration : IEntityTypeConfiguration<Review>
         builder.HasOne(r => r.Product)
             .WithMany()
             .HasForeignKey(r => r.ProductId)
-            .OnDelete(DeleteBehavior.Cascade);
+            // Xoá cứng sản phẩm KHÔNG xoá đánh giá của khách (chốt 29/09/2026).
+            .OnDelete(DeleteBehavior.SetNull);
+
+        builder.HasOne(r => r.OrderItem)
+            .WithMany()
+            .HasForeignKey(r => r.OrderItemId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         builder.HasQueryFilter(r => !r.IsDeleted);
     }

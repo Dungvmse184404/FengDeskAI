@@ -60,10 +60,17 @@ public class StoreShippingFeeResponse
 public class OrderItemResponse
 {
     public Guid Id { get; set; }
-    public Guid ProductItemId { get; set; }
+    /// <summary>Null khi sản phẩm đã bị Manager xoá cứng.</summary>
+    public Guid? ProductItemId { get; set; }
 
     /// <summary>Id sản phẩm gốc (Product) của biến thể — FE dùng để đánh giá / mở trang sản phẩm.</summary>
-    public Guid ProductId { get; set; }
+    public Guid? ProductId { get; set; }
+
+    /// <summary>
+    /// Sản phẩm còn bán không (chưa bị xoá). false ⇒ FE hiện "Sản phẩm không còn bán", không dẫn link/mua lại —
+    /// tên, biến thể, ảnh, giá vẫn đủ nhờ các cột chụp lúc đặt.
+    /// </summary>
+    public bool ProductAvailable { get; set; }
 
     /// <summary>Null khi đơn online chưa thanh toán (delivery chưa được tạo).</summary>
     public Guid? DeliveryId { get; set; }

@@ -171,6 +171,7 @@ public static class DependencyInjection
         services.AddScoped<IShippingRepository, ShippingRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
         services.AddScoped<ILedgerRepository, LedgerRepository>();
+        services.AddScoped<IPlatformFeeRateRepository, PlatformFeeRateRepository>();
         services.AddScoped<IVoucherRepository, VoucherRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
@@ -319,6 +320,7 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, PlacementProductDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductAspirationDemoSeeder>();
         services.AddScoped<IDataSeeder, VoucherSeeder>();
+        services.AddScoped<IDataSeeder, OrderSnapshotBackfillSeeder>();
         services.AddScoped<IDataSeeder, LedgerBackfillSeeder>();
 
         return services;

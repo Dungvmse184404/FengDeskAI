@@ -55,7 +55,7 @@ qua `TestSecrets` — không có secret nào nằm trong mã nguồn.
 
 ## Đang phủ những gì
 
-**423 test**, chia hai tầng. Tầng 1 khẳng định **"không nổ"**; tầng 2 khẳng định **nghiệp vụ đúng**.
+**450 test**, chia hai tầng. Tầng 1 khẳng định **"không nổ"**; tầng 2 khẳng định **nghiệp vụ đúng**.
 
 ### Tầng 0-1 — hạ tầng & bề mặt
 
@@ -80,7 +80,8 @@ qua `TestSecrets` — không có secret nào nằm trong mã nguồn.
 | `ConfirmReceivedFlowTests` | Sales | Khách xác nhận đã nhận: chỉ kiện Shipped của chính mình, ghi sổ; endpoint dev `/api/dev/deliveries/*` trả 404 ngoài Development |
 | `StoreStatisticsItemsTests` | Vendor | `itemsByStatus`: đơn PayOS chưa trả + COD đang giao của cùng sản phẩm gộp thành MỘT dòng "Ordered" |
 | `VoucherFlowTests` | Promotion | FREESHIP500 tự áp ≥ 500k, trần phí sàn từng vườn, preview = checkout, mã sai bị từ chối, hủy trả lượt, giới hạn lượt, ghi sổ + bảo toàn tiền, đơn PayOS dùng đúng số chốt theo vườn |
-| `LedgerFlowTests` | Payment | Phí sàn 8% + sổ cái: chính sách công khai, chốt tỉ lệ khi checkout, giao xong ghi đúng số, hoàn trọn về 0 và trả lại phí sàn, miễn công nợ khôi phục số dư, bảo toàn tiền |
+| `PlatformFeeFlowTests` | Payment | Phí sàn cấu hình được: khách bị 403, tỉ lệ sai/thiếu bị 400, Manager đổi ⇒ đơn mới chốt tỉ lệ mới + trần voucher đi theo, đơn cũ giữ nguyên, trùng mức 409 (tự trả về mặc định trong `finally`) |
+| `LedgerFlowTests` | Payment | Phí sàn + sổ cái: chính sách công khai, chốt tỉ lệ khi checkout, giao xong ghi đúng số, hoàn trọn về 0 và trả lại phí sàn, miễn công nợ khôi phục số dư, bảo toàn tiền |
 | `CatalogFlowTests` | Catalog | Sản phẩm (CRUD, biến thể, SKU, ảnh, danh mục, phong thủy, vector ngũ hành), danh mục, tag |
 | `Model3DFlowTests` | Catalog | Hàng chờ model 3D: gửi yêu cầu → staff sinh → xem trước → chấp nhận/từ chối/retry |
 | `StoreFlowTests` | Vendor | Tự đăng ký cửa hàng, địa chỉ, đồng sở hữu, vòng đời lời mời nhân viên, thống kê |

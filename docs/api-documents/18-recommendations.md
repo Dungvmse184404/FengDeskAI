@@ -41,7 +41,10 @@ Mệnh của **phòng**, của **người** và của **sản phẩm** đều qu
 
 1. **Vector phòng** = `Ideal` (theo loại phòng) → **ApplyIntent** (bẻ theo `WorkPurpose`, bảng `work_purpose_element_modifiers`) → so với **Current** (màu/vật liệu user khai, hoặc Interior mặc định).
 2. **Gap** = `adjustedIdeal − current` → phòng **thiếu** (gap > 0) hay **thừa** (gap < 0) hành nào.
-3. **Điểm khớp phòng** `ĝ·p` = `gap · productVector / (|gap|₁ / 2)`. Bơm vào hành thiếu → dương; bơm vào hành đã thừa → âm. Miền **`[−1, +1]`**.
+3. **Điểm khớp phòng** *(v3.7)* `gapScore = Σ min(ĝ⁺[e], p[e]) − Σ min(ĝ⁻[e], p[e])` với `ĝ = gap / (|gap|₁ / 2)`.
+   Đọc là: *"sản phẩm phủ được bao nhiêu phần nhu cầu của phòng, trừ đi phần nó đổ vào hành phòng đã thừa"*.
+   Bơm vào hành thiếu → dương; bơm vào hành đã thừa → âm. Miền **`[−1, +1]`**.
+   ‹ trước v3.7 là tích trong `ĝ·p`, không vượt được `max p[e]` — xem `docs/adr/workspace-gap-cover-v3.7.md` ›
 4. **Điểm hợp mệnh** `r·p` = `Σ productVector[e] × ruleScore(mệnh, e)` — bảng `feng_shui_rules`, **có dấu** (tỷ hòa +1.0 … bị khắc −1.0).
 5. **Trộn theo `WorkspaceScope`**:
 
@@ -172,9 +175,14 @@ chúng, còn `/recommendations` và `/recommendations/fit` thì không — cùng
 > "Đáp ứng / Chưa đáp ứng hành bạn cần", `PERSONAL_AVOID_SCORE` → "Mang / Không mang hành bạn nên tránh".
 > `reasonVi` cũng đảo câu dẫn khi tổng âm. **Đừng so khớp nhãn bằng chuỗi cố định** — dùng `code`.
 
-⚠️ `formulaVersion` của phiên mới là **`"3.6"`** (3.5 = trần phiếu tag `TAG_VOTES_CAP` trong `current`, thêm
+⚠️ `formulaVersion` của phiên mới là **`"3.7"`** (3.5 = trần phiếu tag `TAG_VOTES_CAP` trong `current`, thêm
 `tagVotesScale`; 3.6 = luồng Carry đo `Σ min(n̂,p) − Σ_{kỵ} p` thay `n̂·p`, thêm `personalAvoidElements` và dòng
-`PERSONAL_AVOID_SCORE`). Điểm của hai phiên bản công thức KHÔNG so sánh trực tiếp được với nhau.
+`PERSONAL_AVOID_SCORE`; **3.7** = luồng phòng đo `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` thay `ĝ·p`). Điểm của hai phiên bản
+công thức KHÔNG so sánh trực tiếp được với nhau.
+
+⚠️ `breakdown.vectors.combinedDirection` vẫn là vector **radar** (đang ưu tiên bù hành nào), nhưng từ v3.7
+`productVector · combinedDirection` **không còn** bằng `blended` — số hạng phòng không phải tích trong nữa.
+Muốn dựng lại điểm thì cộng `components[].contribution`, đừng nhân lại vector.
 
 ### Nghề nghiệp — trục thứ ba *(v3.4 · N3)*
 
@@ -202,7 +210,7 @@ Khi trục nghề bật, `components[]` có thêm dòng và breakdown trả thê
 
 | Field | Ghi chú |
 |---|---|
-| `components[OCCUPATION_SCORE].value` | `ô · p` — **cùng con số** với `GET /api/products/{id}/occupation-fit` (mặt A) |
+| `components[OCCUPATION_SCORE].value` | *(v3.7)* `Σ min(ô⁺,p) − Σ min(ô⁻,p)` — **cùng con số** với `GET /api/products/{id}/occupation-fit` (mặt A). Trước v3.7 là `ô·p`; sản phẩm thuần một hành không đổi điểm |
 | `vectors.occupationDirection` | `ô` ĐÃ chặn — vẽ bằng thanh có dấu (`OccupationDirectionPanel`), không chồng lên radar Σ=1 |
 | `vectors.occupationRawDirection` | `ô` trước chặn — FE đánh dấu hành "khắc mệnh" ở chỗ `raw > 0` mà `direction ≤ 0` |
 | `occupation.weight` | `Wo` đã kẹp `≤ 1 − Wp` (luồng phòng) |
@@ -215,7 +223,8 @@ Trục nghề chạy **độc lập với ngày sinh và scope**: khách chưa k
 
 ### `GET /api/products/{id}/occupation-fit` — mặt A, public
 
-"Sản phẩm này hợp NGHỀ NÀO, bao nhiêu %" — `ô · p` cho mọi nghề đang bật có hồ sơ, sắp giảm dần.
+"Sản phẩm này hợp NGHỀ NÀO, bao nhiêu %" — *(v3.7)* `Σ min(ô⁺,p) − Σ min(ô⁻,p)` cho mọi nghề đang bật
+có hồ sơ, sắp giảm dần. Đọc là *"vật này phủ được bao nhiêu phần nhu cầu ngũ hành của nghề"*.
 Không cần đăng nhập, phòng hay ngày sinh (không có mệnh nên dùng `ô` thô). `?occupationCode=IT` để
 lấy đúng một nghề (không phân biệt hoa/thường; không có → 404).
 

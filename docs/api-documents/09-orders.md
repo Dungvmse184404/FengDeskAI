@@ -116,8 +116,9 @@ Paged. `data` = `PagedResult<OrderListItemResponse>`:
   "status": "Processing", "paymentMethod": "PayOS",
   "subtotal": 320000, "totalShippingFee": 30000, "totalAmount": 350000, "note": "...",
   "createdAt": "...",
-  "items": [{ "id": "guid", "productItemId": "guid", "deliveryId": "guid",
-              "productName": "...", "unitPrice": 120000, "quantity": 2, "lineTotal": 240000 }],
+  "items": [{ "id": "guid", "productItemId": "guid", "productId": "guid", "productAvailable": true,
+              "deliveryId": "guid", "productName": "...", "variantName": "Chậu sứ", "imageUrl": "...",
+              "unitPrice": 120000, "quantity": 2, "lineTotal": 240000 }],
   "deliveries": [{ "id": "guid", "gardenStoreId": "guid", "storeName": "...",
                    "status": "Shipped", "shippingFee": 30000, "subtotal": 320000,
                    "trackingCode": "...", "shippingProvider": "GHN",
@@ -125,6 +126,10 @@ Paged. `data` = `PagedResult<OrderListItemResponse>`:
   "statusLogs": [{ "fromStatus": "Pending", "toStatus": "Paid", "note": null, "changedAt": "..." }]
 }
 ```
+
+> **Món trong đơn là ảnh chụp lúc đặt** (29/09/2026): tên, biến thể, ảnh, SKU, cửa hàng lưu ngay trên `order_items`,
+> nên đơn hiển thị đủ dù sản phẩm sau đó bị xoá. `productAvailable: false` = sản phẩm đã bị xoá (mềm hoặc vĩnh viễn) —
+> FE không dẫn link / mua lại / đánh giá; xoá vĩnh viễn thì `productItemId` = `null`. Xem [ADR](../adr/product-deletion.md).
 > `items[].deliveryId` = `null` khi đơn online chưa thanh toán (delivery chưa tạo).
 
 ---

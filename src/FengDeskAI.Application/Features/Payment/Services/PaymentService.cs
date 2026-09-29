@@ -285,10 +285,11 @@ public class PaymentService : IPaymentService
                 await _vouchers.ReinstateForOrderAsync(order.Id, ct);
 
                 // Đơn đã bị job chuyển Expired (kho đã hoàn) — trừ lại kho vì nhận được thanh toán.
-                var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
+                var productItems = await _uow.Orders.GetProductItemsAsync(
+                    order.Items.Where(i => i.ProductItemId.HasValue).Select(i => i.ProductItemId!.Value).Distinct(), ct);
                 var byId = productItems.ToDictionary(p => p.Id);
                 foreach (var item in order.Items)
-                    if (byId.TryGetValue(item.ProductItemId, out var pi))
+                    if (item.ProductItemId is { } id && byId.TryGetValue(id, out var pi))
                         pi.Stock -= item.Quantity;
             }
 
@@ -340,7 +341,7 @@ public class PaymentService : IPaymentService
     private async Task CreateAndLinkDeliveriesAsync(Order order, CancellationToken ct)
     {
         var byStore = new Dictionary<Guid, Delivery>();
-        foreach (var storeId in order.Items.Select(i => i.ProductItem.Product.GardenStoreId).Distinct())
+        foreach (var storeId in order.Items.Select(OrderWorkflow.StoreOf).Distinct())
         {
             var delivery = new Delivery
             {
@@ -348,7 +349,7 @@ public class PaymentService : IPaymentService
                 GardenStoreId = storeId,
                 Status = DeliveryStatus.Pending,
                 ShippingFee = 0m, // chia từ Order.TotalShippingFee ngay dưới, sau khi biết tiền hàng từng vườn
-                CommissionRate = PlatformFeePolicy.CommissionRate,
+                CommissionRate = order.CommissionRate,
             };
             byStore[storeId] = delivery;
             order.Deliveries.Add(delivery);
@@ -362,7 +363,7 @@ public class PaymentService : IPaymentService
         // Pha 2: gắn item vào delivery theo store + cộng subtotal (deliveries đã tồn tại trong transaction)
         foreach (var item in order.Items)
         {
-            var delivery = byStore[item.ProductItem.Product.GardenStoreId];
+            var delivery = byStore[OrderWorkflow.StoreOf(item)];
             item.DeliveryId = delivery.Id;
             item.Delivery = delivery;
             delivery.Subtotal += item.UnitPrice * item.Quantity;

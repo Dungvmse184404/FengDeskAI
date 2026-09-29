@@ -61,6 +61,7 @@ public class AppDbContext : DbContext
     public DbSet<Refund> Refunds => Set<Refund>();
     public DbSet<VendorLiability> VendorLiabilities => Set<VendorLiability>();
     public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
+    public DbSet<PlatformFeeRate> PlatformFeeRates => Set<PlatformFeeRate>();
 
     // Promotion
     public DbSet<Domain.Entities.Promotion.Voucher> Vouchers => Set<Domain.Entities.Promotion.Voucher>();
