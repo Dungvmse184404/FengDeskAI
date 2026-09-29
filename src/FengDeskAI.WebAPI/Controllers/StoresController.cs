@@ -98,7 +98,7 @@ public class StoresController : ApiControllerBase
 
     [HttpGet("{id:guid}/owners")]
     public async Task<IActionResult> GetOwners(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.GetOwnersAsync(id, ct));
+        => ToActionResult(await _service.GetOwnersAsync(id, CurrentUserId, IsAdmin, ct));
 
     /// <summary>Thêm đồng sở hữu (chỉ owner hiện tại hoặc Admin).</summary>
     [HttpPost("{id:guid}/owners")]

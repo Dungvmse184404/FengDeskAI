@@ -481,13 +481,17 @@ public class StoreService : IStoreService
 
     // ===== Owner (đồng sở hữu — marketplace) =====
 
-    public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default)
+    public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default)
     {
         // ExistsAsync cố ý IgnoreQueryFilters (dùng cho FK), nên cửa hàng đã xoá mềm vẫn "tồn tại" — với
         // người ngoài thì nó phải là 404, không lộ danh sách chủ (DEF-16).
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null || store.IsDeleted)
             return ServiceResult<List<StoreOwnerResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+        // Danh sách chủ là dữ liệu nội bộ của cửa hàng: trước đây endpoint chỉ cần [Authorize] nên BẤT KỲ
+        // tài khoản đăng nhập nào cũng đọc được userId của chủ mọi cửa hàng. Giới hạn về owner/staff/admin.
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(id, actorUserId, ct))
+            return ServiceResult<List<StoreOwnerResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.ViewForbidden);
 
         var owners = await _uow.Stores.GetOwnersAsync(id, ct);
         return ServiceResult<List<StoreOwnerResponse>>.Success(_mapper.Map<List<StoreOwnerResponse>>(owners));

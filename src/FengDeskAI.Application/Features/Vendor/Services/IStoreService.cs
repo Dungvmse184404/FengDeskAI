@@ -30,7 +30,7 @@ public interface IStoreService
     Task<IServiceResult<MyStoreBalanceResponse>> GetMyBalanceAsync(Guid userId, CancellationToken ct = default);
 
     // ===== Owner (đồng sở hữu — marketplace) =====
-    Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default);
+    Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
     /// <summary>Thêm đồng sở hữu (owner hiện tại hoặc Admin). Tự cấp flag GardenOwner cho user được thêm.</summary>
     Task<IServiceResult<StoreOwnerResponse>> AddOwnerAsync(Guid id, Guid actorUserId, bool isAdmin, AddOwnerRequest request, CancellationToken ct = default);
     /// <summary>Gỡ đồng sở hữu (owner hiện tại hoặc Admin). Không gỡ được owner primary.</summary>
