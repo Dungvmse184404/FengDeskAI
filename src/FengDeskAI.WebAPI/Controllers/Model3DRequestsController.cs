@@ -64,6 +64,16 @@ public class Model3DRequestsController : ApiControllerBase
     public async Task<IActionResult> Preview(Guid id, CancellationToken ct)
         => ToActionResult(await _service.PreviewAsync(id, ct));
 
+    /// <summary>Stream a preview GLB through the authenticated API; Meshy assets lack browser CORS.</summary>
+    [HttpGet("{id:guid}/preview/model")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> PreviewModel(Guid id, CancellationToken ct)
+    {
+        var result = await _service.DownloadPreviewAsync(id, ct);
+        if (!result.IsSuccess || result.Data is null) return ToActionResult(result);
+        return File(result.Data, "model/gltf-binary");
+    }
+
     /// <summary>Ưng ý — tải GLB từ Meshy, re-host storage vĩnh viễn, ghi đè model hiện tại của sản phẩm.</summary>
     [HttpPost("{id:guid}/accept")]
     public async Task<IActionResult> Accept(Guid id, CancellationToken ct)

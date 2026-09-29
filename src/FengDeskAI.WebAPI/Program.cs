@@ -170,9 +170,9 @@ builder.Services.AddAuthorization(options =>
         p => p.RequireRole(Roles.Manager, Roles.Admin));
     options.AddPolicy(AuthorizationPolicies.CustomerOnly,
         p => p.RequireRole(Roles.Customer));
-    // Người bán tự vận hành shop (marketplace). Admin luôn được phép.
+    // Người bán tự vận hành shop; Manager/Admin có quyền vận hành toàn sàn.
     options.AddPolicy(AuthorizationPolicies.GardenOwnerOrAbove,
-        p => p.RequireRole(Roles.GardenOwner, Roles.Admin));
+        p => p.RequireRole(Roles.GardenOwner, Roles.Manager, Roles.Admin));
 });
 
 // Chống spam gọi LLM ở endpoint workspace AI intake: 10 req/phút, partition theo userId

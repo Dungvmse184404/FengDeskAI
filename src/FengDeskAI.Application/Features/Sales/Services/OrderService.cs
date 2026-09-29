@@ -203,7 +203,11 @@ public class OrderService : IOrderService
         var order = await _uow.Orders.GetDetailAsync(id, isPrivileged ? null : userId, ct);
         if (order is null)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
-        return ServiceResult<OrderDetailResponse>.Success(_mapper.Map<OrderDetailResponse>(order));
+        var response = _mapper.Map<OrderDetailResponse>(order);
+        var returnedQuantities = await _uow.Returns.GetReturnedQuantitiesAsync(order.Items.Select(i => i.Id), ct);
+        foreach (var item in response.Items)
+            item.ReturnedQuantity = returnedQuantities.GetValueOrDefault(item.Id);
+        return ServiceResult<OrderDetailResponse>.Success(response);
     }
 
     /// <summary>
@@ -275,7 +279,10 @@ public class OrderService : IOrderService
         if (!isAdmin && !isOwner && !isStoreStaff)
             return ServiceResult<PagedResult<StoreDeliveryResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
-        var staffScope = !isAdmin && !isOwner ? userId : (Guid?)null;
+        // Accepted staff được xem toàn bộ đơn giao của cửa hàng để nắm hàng đợi công việc.
+        // Việc cập nhật trạng thái vẫn chỉ dành cho staff được gán delivery (kiểm tra ở
+        // UpdateDeliveryStatusAsync và ResourceOperation.UpdateDelivery).
+        Guid? staffScope = null;
         var (deliveries, total) = await _uow.Orders.GetDeliveriesForStoreAsync(
             storeId, staffScope, page.Skip, page.PageSize, ct);
         var items = _mapper.Map<List<StoreDeliveryResponse>>(deliveries);
@@ -697,8 +704,41 @@ public class OrderService : IOrderService
             return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.UpdateDeliveryForbidden);
         if (delivery.Status != DeliveryStatus.Confirmed)
             return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.DeliveryNotConfirmed);
+
+        // Dữ liệu hàng đổi tạo bởi flow cũ có thể đã gọi provider và lưu mã vận đơn nhưng vẫn để
+        // delivery ở Confirmed. Không được gọi provider lần hai; chỉ hoàn tất side effect còn thiếu
+        // để bản ghi trở về trạng thái nhất quán Confirmed → Preparing.
         if (!string.IsNullOrEmpty(delivery.ProviderOrderId))
-            return ServiceResult<DeliveryResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Order.ShipmentAlreadyCreated);
+        {
+            await _uow.ExecuteInTransactionAsync<object?>(async _ =>
+            {
+                var now = DateTime.UtcNow;
+                delivery.Status = DeliveryStatus.Preparing;
+                await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
+                {
+                    DeliveryId = delivery.Id,
+                    SourceType = DeliverySource.System,
+                    FromStatus = DeliveryStatus.Confirmed.ToString(),
+                    ToStatus = DeliveryStatus.Preparing.ToString(),
+                    Note = $"Đồng bộ vận đơn đã có {delivery.ShippingProvider} ({delivery.TrackingCode})",
+                    LoggedAt = now,
+                }, ct);
+                await _uow.Notifications.AddAsync(new Notification
+                {
+                    UserId = delivery.Order.CustomerId,
+                    Type = NotificationType.DeliveryPreparing,
+                    Title = "Đang chuẩn bị hàng",
+                    Message = "Cửa hàng đang chuẩn bị gửi sản phẩm thay thế cho bạn.",
+                    ReferenceId = delivery.Id,
+                    ReferenceType = ReferenceType.Delivery,
+                    IsRead = false,
+                }, ct);
+                return null;
+            }, ct);
+
+            return ServiceResult<DeliveryResponse>.Success(
+                _mapper.Map<DeliveryResponse>(delivery), "Đơn giao đã có vận đơn; đã chuyển sang trạng thái chuẩn bị hàng.");
+        }
 
         // Chặn sớm khi cửa hàng thiếu thông tin giao hàng — nếu để GHN từ chối thì chỉ nhận được
         // lỗi 400 khó hiểu. Message khác nhau: owner/admin tự bổ sung được, garden staff phải báo chủ.
@@ -755,9 +795,8 @@ public class OrderService : IOrderService
         if (delivery is null)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.DeliveryNotFound);
         var isOwner = await _uow.Stores.IsOwnerAsync(delivery.GardenStoreId, userId, ct);
-        var isAssignedStaff = delivery.AssignedStaffId == userId
-            && await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
-        if (!isAdmin && delivery.Order.CustomerId != userId && !isOwner && !isAssignedStaff)
+        var isStoreStaff = await _uow.Stores.IsAcceptedStaffAsync(delivery.GardenStoreId, userId, ct);
+        if (!isAdmin && delivery.Order.CustomerId != userId && !isOwner && !isStoreStaff)
             return ServiceResult<DeliveryOrderDetailResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Order.ViewStoreDeliveryForbidden);
 
         var order = delivery.Order;

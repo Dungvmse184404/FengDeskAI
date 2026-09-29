@@ -12,7 +12,24 @@ public class ReturnMappingProfile : Profile
     {
         CreateMap<ReturnItem, ReturnItemResponse>()
             .ForMember(d => d.ProductName, o => o.MapFrom(s => s.OrderItem != null ? s.OrderItem.ProductName : null))
-            .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.UnitPrice * s.Quantity));
+            .ForMember(d => d.LineTotal, o => o.MapFrom(s => s.UnitPrice * s.Quantity))
+            .ForMember(d => d.ExchangeProductName, o => o.MapFrom(s =>
+                s.ExchangeProductItem != null && s.ExchangeProductItem.Product != null
+                    ? s.ExchangeProductItem.Product.Name
+                    : null))
+            .ForMember(d => d.ExchangeVariantName, o => o.MapFrom(s =>
+                s.ExchangeProductItem != null ? s.ExchangeProductItem.Name : null))
+            .ForMember(d => d.ExchangeUnitPrice, o => o.MapFrom(s =>
+                s.ExchangeProductItem != null ? (decimal?)s.ExchangeProductItem.Price : null))
+            .ForMember(d => d.ExchangeLineTotal, o => o.MapFrom(s =>
+                s.ExchangeProductItem != null ? (decimal?)(s.ExchangeProductItem.Price * s.Quantity) : null))
+            .ForMember(d => d.ExchangeImageUrl, o => o.MapFrom(s =>
+                s.ExchangeProductItem != null && s.ExchangeProductItem.Product != null
+                    ? s.ExchangeProductItem.Product.Images
+                        .OrderBy(i => i.SortOrder)
+                        .Select(i => i.Url)
+                        .FirstOrDefault()
+                    : null));
 
         CreateMap<Refund, RefundResponse>();
         CreateMap<VendorLiability, VendorLiabilityResponse>();

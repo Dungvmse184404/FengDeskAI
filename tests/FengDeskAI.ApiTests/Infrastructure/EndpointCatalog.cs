@@ -49,7 +49,7 @@ public static class EndpointCatalog
         [AuthorizationPolicies.StaffOrAbove] = [Roles.Staff, Roles.Manager, Roles.Admin],
         [AuthorizationPolicies.ManagerOrAbove] = [Roles.Manager, Roles.Admin],
         [AuthorizationPolicies.CustomerOnly] = [Roles.Customer],
-        [AuthorizationPolicies.GardenOwnerOrAbove] = [Roles.GardenOwner, Roles.Admin],
+        [AuthorizationPolicies.GardenOwnerOrAbove] = [Roles.GardenOwner, Roles.Manager, Roles.Admin],
     };
 
     /// <summary>

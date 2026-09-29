@@ -83,6 +83,9 @@ public class OrderItemResponse
     public string? ImageUrl { get; set; }
     public decimal UnitPrice { get; set; }
     public int Quantity { get; set; }
+    /// <summary>Số lượng đã nằm trong yêu cầu đổi/trả hợp lệ (kể cả đang xử lý hoặc đã hoàn tất).</summary>
+    public int ReturnedQuantity { get; set; }
+    public int ReturnableQuantity => Math.Max(0, Quantity - ReturnedQuantity);
     public decimal LineTotal { get; set; }
 }
 

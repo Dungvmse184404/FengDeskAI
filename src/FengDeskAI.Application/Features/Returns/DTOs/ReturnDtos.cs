@@ -14,6 +14,7 @@ public record RmaActor(Guid UserId, bool IsStaff, bool IsManager, bool IsAdmin, 
 {
     public bool CanDecide => IsStaff || IsManager || IsAdmin;
     public bool CanManageRefund => IsManager || IsAdmin;
+    public bool CanOperateAsAdmin => IsManager || IsAdmin;
 }
 
 // ---------- Requests ----------
@@ -58,13 +59,6 @@ public class RequestMoreEvidenceRequest
 public class RejectReturnRequest
 {
     public string Reason { get; set; } = null!;
-}
-
-/// <summary>Khách khai báo đã gửi hàng vật lý trả về cửa hàng.</summary>
-public class ShipBackRequest
-{
-    /// <summary>Mã vận đơn chiều trả do đơn vị vận chuyển cấp.</summary>
-    public string TrackingCode { get; set; } = null!;
 }
 
 public class ApproveRefundRequest
@@ -115,6 +109,11 @@ public class ReturnItemResponse
     public decimal UnitPrice { get; set; }
     public decimal LineTotal { get; set; }
     public Guid? ExchangeProductItemId { get; set; }
+    public string? ExchangeProductName { get; set; }
+    public string? ExchangeVariantName { get; set; }
+    public decimal? ExchangeUnitPrice { get; set; }
+    public decimal? ExchangeLineTotal { get; set; }
+    public string? ExchangeImageUrl { get; set; }
 }
 
 public class RefundResponse

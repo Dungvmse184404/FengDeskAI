@@ -1,4 +1,6 @@
 using FengDeskAI.Domain.Entities.Sales;
+using FengDeskAI.Domain.Enums.Payment;
+using FengDeskAI.Domain.Enums.Sales;
 
 namespace FengDeskAI.Application.Features.Returns.Services;
 
@@ -33,6 +35,13 @@ public static class ReturnWorkflow
     /// <summary>Tổng giá trị các dòng trả (dùng cho số tiền hoàn — không bao giờ vượt giá trị này).</summary>
     public static decimal ComputeRefundAmount(IEnumerable<ReturnItem> items)
         => items.Sum(i => i.UnitPrice * i.Quantity);
+
+    /// <summary>
+    /// Đổi hàng chỉ hoàn tất khi hàng thay thế đã giao và khoản hoàn chênh lệch (nếu có) đã hoàn tất.
+    /// </summary>
+    public static bool CanCompleteExchange(DeliveryStatus replacementStatus, RefundStatus? refundStatus)
+        => replacementStatus == DeliveryStatus.Delivered
+            && (!refundStatus.HasValue || refundStatus == RefundStatus.Completed);
 
     /// <summary>Khóa idempotency tất định theo ticket — 1 ticket chỉ 1 lệnh hoàn tiền (invariant #2).</summary>
     public static string RefundIdempotencyKey(Guid ticketId) => $"rma-refund-{ticketId:N}";

@@ -26,6 +26,9 @@ public interface IModel3DRequestService
     /// <summary>Xem trước kết quả Meshy hiện tại (live poll, không lưu) — để staff quyết định accept hay retry.</summary>
     Task<IServiceResult<Model3DPreviewResponse>> PreviewAsync(Guid requestId, CancellationToken ct = default);
 
+    /// <summary>Download a completed preview through the staff API without accepting or storing it.</summary>
+    Task<IServiceResult<Stream>> DownloadPreviewAsync(Guid requestId, CancellationToken ct = default);
+
     /// <summary>Ưng ý kết quả — tải GLB từ Meshy, re-host storage, ghi đè <c>ProductModel3D</c> hiện tại.</summary>
     Task<IServiceResult<ProductModel3DResponse>> AcceptAsync(Guid requestId, Guid staffUserId, CancellationToken ct = default);
 

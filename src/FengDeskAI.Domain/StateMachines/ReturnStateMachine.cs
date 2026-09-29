@@ -43,7 +43,7 @@ public static class ReturnStateMachine
 
         ReturnRequestStatus.Refunding =>
             to is ReturnRequestStatus.Completed
-                or ReturnRequestStatus.Rejected, // Manager hủy refund Pending do phát hiện gian lận
+                or ReturnRequestStatus.Rejected, // Hủy refund chưa chi (Pending/ManagerReview) khi phát hiện gian lận
 
         _ => false, // Completed / Cancelled / Rejected là terminal
     };

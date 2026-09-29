@@ -181,7 +181,7 @@ public class ChatService : IChatService
 
         var caller = room.Participants.FirstOrDefault(p => p.UserId == callerId);
         var callerIsPlatformStaff = callerType is ParticipantType.Staff or ParticipantType.Manager;
-        var callerIsAdmin = callerType == ParticipantType.Admin;
+        var callerCanOperateAsAdmin = callerType is ParticipantType.Manager or ParticipantType.Admin;
         var isOwner = caller?.Role == ParticipantRole.Owner;
         var isStaffMember = caller is not null &&
             caller.ParticipantType is ParticipantType.Staff or ParticipantType.Manager or ParticipantType.Admin or ParticipantType.Vendor;
@@ -197,7 +197,7 @@ public class ChatService : IChatService
         // tự nhận phòng hỗ trợ của đúng store mình quản lý.
         var canManage = isOwner
             || isStaffMember
-            || (callerIsAdmin && room.IsSupport)
+            || (callerCanOperateAsAdmin && room.IsSupport)
             || (callerIsPlatformStaff && room.IsSupport && !room.GardenStoreId.HasValue)
             || isStoreVendorJoiningOwnRoom;
         if (!canManage)

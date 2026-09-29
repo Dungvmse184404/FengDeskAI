@@ -35,7 +35,7 @@ public class ProductsController : ApiControllerBase
         _occupationService = occupationService;
     }
 
-    private bool IsAdmin => User.IsInRole(Roles.Admin);
+    private bool CanOperateAsAdmin => User.CanOperateAsAdmin();
 
     [HttpGet]
     [AllowAnonymous]
@@ -63,34 +63,34 @@ public class ProductsController : ApiControllerBase
 
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] CreateProductRequest request, CancellationToken ct)
-        => ToActionResult(await _service.CreateAsync(CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.CreateAsync(CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpPut("{id:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> Update(Guid id, [FromBody] UpdateProductRequest request, CancellationToken ct)
-        => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpDelete("{id:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> Delete(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.DeleteAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.DeleteAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     // ----- Product items (SKU) -----
 
     [HttpPost("{id:guid}/items")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> AddItem(Guid id, [FromBody] CreateProductItemRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AddItemAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.AddItemAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpPut("{id:guid}/items/{itemId:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> UpdateItem(Guid id, Guid itemId, [FromBody] UpdateProductItemRequest request, CancellationToken ct)
-        => ToActionResult(await _service.UpdateItemAsync(id, itemId, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.UpdateItemAsync(id, itemId, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpDelete("{id:guid}/items/{itemId:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> DeleteItem(Guid id, Guid itemId, CancellationToken ct)
-        => ToActionResult(await _service.DeleteItemAsync(id, itemId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.DeleteItemAsync(id, itemId, CurrentUserId, CanOperateAsAdmin, ct));
 
     // ----- Product images -----
 
@@ -105,19 +105,19 @@ public class ProductsController : ApiControllerBase
 
         await using var stream = file.OpenReadStream();
         return ToActionResult(await _service.UploadImageAsync(
-            id, CurrentUserId, IsAdmin, stream, file.FileName, file.ContentType, sortOrder, ct));
+            id, CurrentUserId, CanOperateAsAdmin, stream, file.FileName, file.ContentType, sortOrder, ct));
     }
 
     /// <summary>Gắn ảnh sản phẩm bằng URL có sẵn (không upload tệp). Lưu link vào sản phẩm.</summary>
     [HttpPost("{id:guid}/images/link")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> AddImageByUrl(Guid id, [FromBody] CreateProductImageRequest request, CancellationToken ct)
-        => ToActionResult(await _service.AddImageAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.AddImageAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     [HttpDelete("{id:guid}/images/{imageId:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> DeleteImage(Guid id, Guid imageId, CancellationToken ct)
-        => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _service.DeleteImageAsync(id, imageId, CurrentUserId, CanOperateAsAdmin, ct));
 
     // ----- Model 3D (sinh từ ảnh qua Meshy AI) -----
     // Ảnh chưa có model → Initial, ảnh đã có model → Regenerate; cả hai loại đều vào hàng chờ staff.
@@ -139,7 +139,7 @@ public class ProductsController : ApiControllerBase
         var (request, streams) = form.ToRequest();
         try
         {
-            return ToActionResult(await _model3DService.RequestAsync(id, CurrentUserId, IsAdmin, request, ct));
+            return ToActionResult(await _model3DService.RequestAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
         }
         finally
         {
@@ -151,7 +151,7 @@ public class ProductsController : ApiControllerBase
     [HttpGet("{id:guid}/model-3d/requests")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> ListModel3DRequests(Guid id, CancellationToken ct)
-        => ToActionResult(await _model3DService.ListRequestsAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _model3DService.ListRequestsAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>Bật/tắt hiển thị model 3D trên trang sản phẩm — không xóa dữ liệu model đã sinh.</summary>
     [HttpPatch("{id:guid}/model-3d/{modelId:guid}/toggle")]
@@ -159,26 +159,26 @@ public class ProductsController : ApiControllerBase
     public async Task<IActionResult> ToggleModel3D(
         Guid id, Guid modelId, [FromBody] ToggleModel3DVisibilityRequest request, CancellationToken ct)
         => ToActionResult(await _model3DService.ToggleAsync(
-            id, modelId, CurrentUserId, IsAdmin, request.IsEnabled, ct));
+            id, modelId, CurrentUserId, CanOperateAsAdmin, request.IsEnabled, ct));
 
     [HttpDelete("{id:guid}/model-3d/{modelId:guid}")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> DeleteModel3D(Guid id, Guid modelId, CancellationToken ct)
-        => ToActionResult(await _model3DService.DeleteAsync(id, modelId, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _model3DService.DeleteAsync(id, modelId, CurrentUserId, CanOperateAsAdmin, ct));
 
     // ----- Category links -----
 
     [HttpPut("{id:guid}/categories")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetCategories(Guid id, [FromBody] SetCategoriesRequest request, CancellationToken ct)
-        => ToActionResult(await _service.SetCategoriesAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.SetCategoriesAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     // ----- Thuộc tính phong thủy (ứng viên gợi ý) -----
 
     [HttpPut("{id:guid}/feng-shui")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetFengShui(Guid id, [FromBody] SetProductFengShuiRequest request, CancellationToken ct)
-        => ToActionResult(await _service.SetFengShuiAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _service.SetFengShuiAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     /// <summary>
     /// Duyệt thẻ mục tiêu phong thủy (Tài lộc / Sức khỏe…) — quyền SÀN, manager trở lên.
@@ -208,23 +208,23 @@ public class ProductsController : ApiControllerBase
     [HttpGet("{id:guid}/vector")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> GetVector(Guid id, CancellationToken ct)
-        => ToActionResult(await _vectorService.GetAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _vectorService.GetAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>Khai chất liệu / màu / hình khối → auto-calc vector (tầng 2). Rỗng = xóa input.</summary>
     [HttpPut("{id:guid}/element-inputs")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetElementInputs(Guid id, [FromBody] SetProductElementInputsRequest request, CancellationToken ct)
-        => ToActionResult(await _vectorService.SetElementInputsAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _vectorService.SetElementInputsAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     /// <summary>Ghi đè vector ngũ hành thủ công (tầng 1). Yêu cầu Σ ≈ 1.</summary>
     [HttpPut("{id:guid}/vector-override")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> SetVectorOverride(Guid id, [FromBody] SetProductVectorOverrideRequest request, CancellationToken ct)
-        => ToActionResult(await _vectorService.SetVectorOverrideAsync(id, CurrentUserId, IsAdmin, request, ct));
+        => ToActionResult(await _vectorService.SetVectorOverrideAsync(id, CurrentUserId, CanOperateAsAdmin, request, ct));
 
     /// <summary>Bỏ ghi đè, tính lại vector từ input (hoặc về backfill tầng 3).</summary>
     [HttpDelete("{id:guid}/vector-override")]
     [ResourceAuthorize(ResourceOperation.ManageProduct, "id")]
     public async Task<IActionResult> ClearVectorOverride(Guid id, CancellationToken ct)
-        => ToActionResult(await _vectorService.ClearVectorOverrideAsync(id, CurrentUserId, IsAdmin, ct));
+        => ToActionResult(await _vectorService.ClearVectorOverrideAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 }

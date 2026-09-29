@@ -1,11 +1,10 @@
-﻿using AutoMapper;
+using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Returns.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
-using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Announcement;
@@ -30,15 +29,13 @@ public class ReturnService : IReturnService
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
     private readonly IRefundService _refund;
-    private readonly IShippingProvider _shipping;
     private readonly IFileStorage _storage;
 
-    public ReturnService(IUnitOfWork uow, IMapper mapper, IRefundService refund, IShippingProvider shipping, IFileStorage storage)
+    public ReturnService(IUnitOfWork uow, IMapper mapper, IRefundService refund, IFileStorage storage)
     {
         _uow = uow;
         _mapper = mapper;
         _refund = refund;
-        _shipping = shipping;
         _storage = storage;
     }
 
@@ -109,17 +106,22 @@ public class ReturnService : IReturnService
             foreach (var (orderItemId, info) in requested)
             {
                 var oi = orderItemsById[orderItemId];
+                var replacement = exItems[info.Exchange!.Value];
+                if (replacement.Price > oi.UnitPrice)
+                    return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeMoreExpensive);
                 returnedValue += oi.UnitPrice * info.Qty;
-                replacementValue += exItems[info.Exchange!.Value].Price * info.Qty;
+                replacementValue += replacement.Price * info.Qty;
             }
             if (replacementValue > returnedValue)
                 return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeMoreExpensive);
         }
 
         var hasRefund = request.Type == ReturnType.Refund || (request.Type == ReturnType.Exchange && replacementValue < returnedValue);
-        if (isCod && hasRefund && (string.IsNullOrWhiteSpace(request.BankAccountNumber)
+        if (hasRefund && (string.IsNullOrWhiteSpace(request.BankAccountNumber)
                 || string.IsNullOrWhiteSpace(request.BankAccountName) || string.IsNullOrWhiteSpace(request.BankName)))
             return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.BankInfoRequired);
+        if (request.Type == ReturnType.Exchange && hasRefund)
+            refundMethod = RefundMethod.BankTransfer;
 
         var rr = new ReturnRequest
         {
@@ -245,33 +247,6 @@ public class ReturnService : IReturnService
         return await LoadDetailAsync(id, ct);
     }
 
-    public async Task<IServiceResult<ReturnDetailResponse>> ShipBackAsync(
-        Guid id, Guid userId, ShipBackRequest request, CancellationToken ct = default)
-    {
-        if (string.IsNullOrWhiteSpace(request.TrackingCode))
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ReturnTrackingRequired);
-        if (request.TrackingCode.Trim().Length > 100)
-            return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ReturnTrackingRequired);
-
-        var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
-        if (rr is null || rr.CustomerId != userId)
-            return Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound);
-        if (rr.Status != ReturnRequestStatus.ReturnInTransit)
-            return InvalidTransition(rr.Status, ReturnRequestStatus.ReturnInTransit);
-
-        await _uow.ExecuteInTransactionAsync<object?>(async _ =>
-        {
-            rr.SubmitReturnShipment(request.TrackingCode);
-            LogTransition(rr, rr.Status, $"Khách đã gửi hàng trả, mã vận đơn: {rr.ReturnTrackingCode}", userId);
-            await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnRequested,
-                "Khách đã gửi hàng trả", "Khách hàng đã khai báo mã vận đơn trả hàng. Vui lòng theo dõi và xác nhận khi nhận được hàng.",
-                rr.Id, ct);
-            return null;
-        }, ct);
-
-        return await LoadDetailAsync(id, ct);
-    }
-
     public async Task<IServiceResult<ReturnDetailResponse>> UploadImagesAsync(Guid id, Guid userId, IReadOnlyList<ReturnImageFile> files, CancellationToken ct = default)
     {
         if (files is null || files.Count == 0)
@@ -364,15 +339,12 @@ public class ReturnService : IReturnService
         if (error is not null) return error;
         if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.ItemReceived, rr.Reason))
             return InvalidTransition(rr.Status, ReturnRequestStatus.ItemReceived);
-        if (string.IsNullOrWhiteSpace(rr.ReturnTrackingCode))
-            return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.ReturnShipmentNotSubmitted);
-
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
             var now = DateTime.UtcNow;
             var from = rr.Status;
             rr.ConfirmItemReceived(now);      // ReturnInTransit → ItemReceived
-            LogTransition(rr, from, "Vendor xác nhận đã nhận hàng trả", actor.UserId);
+            LogTransition(rr, from, "Vendor xác nhận thực tế đã nhận hàng trả (không tích hợp vận chuyển chiều trả)", actor.UserId);
             rr.MoveToReviewing();             // ItemReceived → Reviewing (chuyển cho Staff quyết định)
             LogTransition(rr, ReturnRequestStatus.ItemReceived, "Chuyển sang bước Staff ra quyết định", actor.UserId);
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnReceived, "Đã nhận hàng trả",
@@ -415,13 +387,13 @@ public class ReturnService : IReturnService
             rr.RouteAfterAccept(); // UnderReview → Reviewing (plant_health) | ReturnInTransit (hàng vật lý)
             LogTransition(rr, routedFrom,
                 rr.Reason == ReturnReason.PlantHealth
-                    ? "Cây chết - bỏ qua thu hồi, chuyển thẳng bước quyết định"
-                    : "Yêu cầu khách gửi hàng trả về để thu hồi", actor.UserId);
+                    ? "Cây chết — bỏ qua thu hồi, chuyển thẳng bước quyết định"
+                    : "Chờ cửa hàng xác nhận thực tế đã nhận lại hàng; khách tự thỏa thuận phương thức gửi/trả", actor.UserId);
 
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Yêu cầu đang được xử lý",
                 rr.Reason == ReturnReason.PlantHealth
                     ? "Nền tảng đã tiếp nhận yêu cầu và đang xem xét (không cần gửi trả cây)."
-                    : "Nền tảng đã tiếp nhận. Vui lòng gửi hàng trả về theo hướng dẫn.",
+                    : "Nền tảng đã tiếp nhận. Vui lòng liên hệ cửa hàng để tự thỏa thuận cách gửi hoặc bàn giao hàng trả; hệ thống không yêu cầu mã vận đơn.",
                 rr.Id, ReferenceType.Return, ct);
             await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnRequested,
                 "Có yêu cầu trả hàng mới",
@@ -528,15 +500,19 @@ public class ReturnService : IReturnService
             {
                 await CreateReplacementDeliveryAsync(rr, exItems, now, ct);
                 LogTransition(rr, rr.Status,
-                    "Đã tạo đơn giao hàng thay thế; ticket sẽ hoàn tất khi giao hàng thành công", actor.UserId);
+                    "Đã tạo đơn giao hàng thay thế; chờ cửa hàng xác nhận và tạo vận đơn", actor.UserId);
 
                 // Đổi rẻ hơn → hoàn chênh lệch (refund độc lập, không đổi trạng thái ticket).
                 if (rr.RefundAmount > 0)
                     await _refund.CreateRefundAsync(rr, rr.RefundAmount, rr.RefundMethod, $"Hoàn chênh lệch đổi hàng ticket #{rr.Id}", ct);
 
-                await NotifyAsync(rr.CustomerId, NotificationType.ExchangeShipped, "Đã tạo đơn đổi hàng",
-                    "Nền tảng đã tạo đơn giao hàng thay thế. Bạn có thể theo dõi tiến trình trong chi tiết yêu cầu.",
+                await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Đã duyệt đổi hàng",
+                    "Cửa hàng sẽ xác nhận và gửi sản phẩm thay thế. Bạn có thể theo dõi đơn giao trong chi tiết yêu cầu.",
                     rr.Id, ReferenceType.Return, ct);
+                await NotifyStoreMembersAsync(rr.Delivery.GardenStoreId, NotificationType.ReturnApproved,
+                    "Có đơn đổi hàng cần gửi",
+                    "Yêu cầu đổi hàng đã được duyệt. Hãy mở Đơn giao để xác nhận và tạo vận đơn cho hàng thay thế.",
+                    rr.Id, ct);
             }
             return null;
         }, ct);
@@ -553,6 +529,9 @@ public class ReturnService : IReturnService
         if (error is not null) return error;
         if (!ReturnStateMachine.CanTransition(rr!.Status, ReturnRequestStatus.Rejected, rr.Reason))
             return InvalidTransition(rr.Status, ReturnRequestStatus.Rejected);
+        if (rr.Refund is { } activeRefund
+            && !RefundStateMachine.CanTransition(activeRefund.Status, RefundStatus.Cancelled))
+            return Fail(ApiStatusCodes.Conflict, "Không thể từ chối yêu cầu khi lệnh hoàn tiền đã được xử lý.");
 
         await _uow.ExecuteInTransactionAsync<object?>(async _ =>
         {
@@ -560,17 +539,14 @@ public class ReturnService : IReturnService
             rr.Reject(actor.UserId, DateTime.UtcNow, request.Reason);
             LogTransition(rr, from, $"Từ chối: {request.Reason}", actor.UserId);
 
-            // Máy trạng thái cho phép Refunding → Rejected, nên staff có thể từ chối một ticket đã
-            // duyệt hoàn tiền (vd phát hiện gian lận sau khi duyệt). Lệnh hoàn tiền lúc đó vẫn đang
-            // Pending, và lượt quét SLA (ProcessPendingRefundsAsync) chỉ lọc theo Status == Pending —
-            // nó sẽ CHI TIỀN cho một ticket đã bị từ chối. Phải hủy lệnh cùng lúc.
-            //
-            // Chỉ hủy khi còn Pending: lệnh đã Processing/Completed thì tiền đã rời đi, hủy ở đây là
-            // nói dối sổ sách — ca đó phải đi đường hoàn tiền ngược, không thuộc phạm vi từ chối.
-            if (rr.Refund is { Status: RefundStatus.Pending } refund)
+            // Lệnh hoàn hiện tại được đưa thẳng tới ManagerReview để chuyển khoản thủ công.
+            // Khi từ chối ticket, phải hủy lệnh chưa chi tiền trong cùng transaction;
+            // nếu không Manager vẫn có thể xác nhận hoàn tiền cho ticket Rejected.
+            // Processing/Completed không được hủy ở đây vì tiền có thể đã rời đi.
+            if (rr.Refund is { Status: RefundStatus.Pending or RefundStatus.ManagerReview } refund)
             {
                 refund.Cancel(actor.UserId);
-                LogTransition(rr, from, $"Hủy lệnh hoàn tiền đang chờ do ticket bị từ chối: {request.Reason}", actor.UserId);
+                LogTransition(rr, from, $"Hủy lệnh hoàn tiền chưa chi do ticket bị từ chối: {request.Reason}", actor.UserId);
             }
 
             await NotifyAsync(rr.CustomerId, NotificationType.ReturnRejected, "Yêu cầu trả hàng bị từ chối",
@@ -587,12 +563,23 @@ public class ReturnService : IReturnService
         var rr = await _uow.Returns.GetByReplacementDeliveryIdAsync(replacementDeliveryId, ct);
         if (rr is null || rr.Status != ReturnRequestStatus.Exchanging) return;
 
-        var from = rr.Status;
-        rr.CompleteExchange();
-        LogTransition(rr, from, "Đơn giao hàng thay thế đã giao thành công", actorId);
-        await NotifyAsync(rr.CustomerId, NotificationType.ExchangeCompleted, "Đổi hàng hoàn tất",
-            "Sản phẩm thay thế đã được giao thành công. Yêu cầu đổi hàng của bạn đã hoàn tất.",
-            rr.Id, ReferenceType.Return, ct);
+        if (ReturnWorkflow.CanCompleteExchange(DeliveryStatus.Delivered, rr.Refund?.Status))
+        {
+            var from = rr.Status;
+            rr.CompleteExchange();
+            LogTransition(rr, from, "Đơn giao hàng thay thế đã giao thành công", actorId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ExchangeCompleted, "Đổi hàng hoàn tất",
+                "Sản phẩm thay thế đã được giao thành công. Yêu cầu đổi hàng của bạn đã hoàn tất.",
+                rr.Id, ReferenceType.Return, ct);
+        }
+        else
+        {
+            LogTransition(rr, rr.Status,
+                "Đơn thay thế đã giao; đang chờ hoàn phần tiền chênh lệch", actorId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Đang hoàn tiền chênh lệch",
+                "Sản phẩm thay thế đã giao thành công. Yêu cầu sẽ hoàn tất sau khi khoản chênh lệch được chuyển cho bạn.",
+                rr.Id, ReferenceType.Return, ct);
+        }
     }
 
     // ===================== Worker =====================
@@ -628,7 +615,8 @@ public class ReturnService : IReturnService
 
     /// <summary>
     /// Tạo delivery thay thế (0đ, is_exchange = true) cho hàng đổi: thêm delivery + LƯU NGAY,
-    /// thêm order_items biến thể thay thế, trừ kho, tạo vận đơn qua provider.
+    /// thêm order_items biến thể thay thế và giữ tồn kho. Cửa hàng xác nhận delivery Pending
+    /// rồi chủ động tạo vận đơn qua API đơn giao hiện có.
     /// </summary>
     private async Task CreateReplacementDeliveryAsync(ReturnRequest rr, Dictionary<Guid, ProductItem> exItems, DateTime now, CancellationToken ct)
     {
@@ -644,71 +632,33 @@ public class ReturnService : IReturnService
         await _uow.SaveChangesAsync(ct);
 
         decimal subtotal = 0m;
-        var totalWeightGram = 0;
         var newItems = new List<OrderItem>();
-        var shipmentItems = new List<ShipmentItem>();
         foreach (var ri in rr.Items.Where(i => i.ExchangeProductItemId.HasValue))
         {
             var ex = exItems[ri.ExchangeProductItemId!.Value];
+            // SnapshotLine (không dựng OrderItem tay): nó chụp thêm ProductId, GardenStoreId,
+            // VariantName, Sku, ImageUrl — thiếu GardenStoreId thì dòng hàng đổi không quy được về
+            // cửa hàng, và đơn cũ mất ảnh/sku khi sản phẩm bị xoá sau này.
             var line = OrderWorkflow.SnapshotLine(ex, ri.Quantity);
             line.ProductItem = null; // biến thể đang được tracked sẵn — chỉ cần FK
             line.OrderId = rr.OrderId;
             line.DeliveryId = replacement.Id;
-            var productName = line.ProductName;
             newItems.Add(line);
-            shipmentItems.Add(new ShipmentItem(ex.Id.ToString(), productName, ex.Price, ri.Quantity,
-                ex.WeightGram, ex.LengthCm, ex.WidthCm, ex.HeightCm));
-            totalWeightGram += ex.WeightGram * ri.Quantity;
             subtotal += ex.Price * ri.Quantity;
             ex.Stock -= ri.Quantity;
         }
         await _uow.Orders.AddOrderItemsAsync(newItems, ct);
         replacement.Subtotal = subtotal;
 
-        var store = (await _uow.Stores.GetWithAddressByIdsAsync(new[] { replacement.GardenStoreId }, ct)).FirstOrDefault();
-        var shipTo = await _uow.UserAddresses.GetWithWardChainAsync(rr.Order.ShippingAddressId, ct);
-
-        try
+        await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
         {
-            var shipment = await _shipping.CreateShipmentAsync(ShipmentRequestBuilder.Build(
-                replacement.Id, rr.OrderId, subtotal, store, shipTo,
-                codAmount: 0m, totalWeightGram: totalWeightGram, items: shipmentItems), ct);
-            replacement.ShippingProvider = shipment.Provider;
-            replacement.ProviderOrderId = shipment.ProviderOrderId;
-            replacement.TrackingCode = shipment.TrackingCode;
-            replacement.TrackingUrl = shipment.TrackingUrl;
-            replacement.EstimatedDeliveryDate = shipment.EstimatedDeliveryDate;
-            replacement.AssignedAt = now;
-            replacement.Status = DeliveryStatus.Confirmed;
-
-            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
-            {
-                DeliveryId = replacement.Id,
-                SourceType = DeliverySource.System,
-                FromStatus = DeliveryStatus.Pending.ToString(),
-                ToStatus = DeliveryStatus.Confirmed.ToString(),
-                Note = $"Tạo vận đơn hàng đổi {shipment.Provider} ({shipment.TrackingCode})",
-                LoggedAt = now,
-            }, ct);
-        }
-        catch (OperationCanceledException) when (ct.IsCancellationRequested)
-        {
-            throw;
-        }
-        catch (Exception)
-        {
-            // Quyết định đổi hàng và giữ tồn kho vẫn được commit. Vendor có thể xác nhận delivery Pending
-            // rồi gọi endpoint tạo shipment hiện có để thử lại, tránh rollback toàn bộ ticket vì provider lỗi.
-            await _uow.Shipping.AddProgressLogAsync(new DeliveryProgressLog
-            {
-                DeliveryId = replacement.Id,
-                SourceType = DeliverySource.System,
-                FromStatus = DeliveryStatus.Pending.ToString(),
-                ToStatus = DeliveryStatus.Pending.ToString(),
-                Note = "Chưa tạo được vận đơn hàng đổi; cửa hàng cần tạo lại vận đơn",
-                LoggedAt = now,
-            }, ct);
-        }
+            DeliveryId = replacement.Id,
+            SourceType = DeliverySource.System,
+            FromStatus = DeliveryStatus.Pending.ToString(),
+            ToStatus = DeliveryStatus.Pending.ToString(),
+            Note = "Đơn đổi hàng chờ cửa hàng xác nhận và tạo vận đơn",
+            LoggedAt = now,
+        }, ct);
 
         rr.ReplacementDeliveryId = replacement.Id;
     }
@@ -728,7 +678,7 @@ public class ReturnService : IReturnService
         var rr = await _uow.Returns.GetWithGraphAsync(id, ct);
         if (rr is null)
             return (null, Fail(ApiStatusCodes.NotFound, ApiStatusMessages.Returns.NotFound));
-        var allowed = actor.IsAdmin
+        var allowed = actor.CanOperateAsAdmin
             || await _uow.Stores.CanManageAsync(rr.Delivery.GardenStoreId, actor.UserId, ct);
         if (!allowed)
             return (null, Fail(ApiStatusCodes.Forbidden, ApiStatusMessages.Returns.ManageForbidden));

@@ -22,7 +22,7 @@ public static class AuthorizationPolicies
     /// <summary>Chỉ Customer.</summary>
     public const string CustomerOnly = nameof(CustomerOnly);
 
-    /// <summary>Người bán (GardenOwner) hoặc Admin — gắn lên endpoint vận hành shop của vendor.</summary>
+    /// <summary>Người bán (GardenOwner) hoặc người có quyền vận hành toàn sàn (Manager/Admin).</summary>
     public const string GardenOwnerOrAbove = nameof(GardenOwnerOrAbove);
 }
 
@@ -33,4 +33,15 @@ public static class Roles
     public const string Staff = nameof(Staff);
     public const string Admin = nameof(Admin);
     public const string GardenOwner = nameof(GardenOwner);
+}
+
+/// <summary>
+/// Các nhóm quyền dùng trong code (ngoài attribute policy).
+/// Manager được phép vận hành sàn như Admin, nhưng không được xem là Admin để truy cập
+/// các chức năng quản trị tài khoản/phân quyền bảo vệ bởi <see cref="AuthorizationPolicies.AdminOnly"/>.
+/// </summary>
+public static class RoleChecks
+{
+    public static bool CanOperateAsAdmin(this System.Security.Claims.ClaimsPrincipal user)
+        => user.IsInRole(Roles.Manager) || user.IsInRole(Roles.Admin);
 }
