@@ -208,7 +208,11 @@ public class StoreService : IStoreService
         address.StreetAddress = request.StreetAddress.Trim();
         address.Latitude = request.Latitude;
         address.Longitude = request.Longitude;
-        ApplySender(address, request.SenderName, request.SenderPhone);
+        // MergeSender (không phải ApplySender): client chỉ gửi 4 field địa chỉ là chuyện bình thường,
+        // và ApplySender ghi thẳng null lên cả SenderName/SenderPhone ⇒ mỗi lần sửa địa chỉ là XOÁ mất
+        // SĐT lấy hàng. API vẫn trả 200 nên FE báo thành công, nhưng GHN hỏng ngay sau đó
+        // (CarrierShopSyncWorker bỏ qua store với PICKUP_PHONE_INVALID). Quy ước: null = không đổi.
+        MergeSender(address, request.SenderName, request.SenderPhone);
 
         await _uow.SaveChangesAsync(ct);
         await TryProvisionShopAsync(id, ct);
@@ -615,6 +619,19 @@ public class StoreService : IStoreService
     {
         address.SenderName = string.IsNullOrWhiteSpace(senderName) ? null : senderName.Trim();
         address.SenderPhone = VietnamPhone.Normalize(senderPhone);
+    }
+
+    /// <summary>
+    /// Cập nhật người gửi theo kiểu hợp nhất, dùng cho SỬA địa chỉ: <c>null</c> = client không gửi field
+    /// đó ⇒ giữ nguyên giá trị đang lưu; chuỗi rỗng/toàn khoảng trắng = chủ động xoá. Khác
+    /// <see cref="ApplySender"/> (dùng khi TẠO mới — lúc đó không có gì để giữ).
+    /// </summary>
+    private static void MergeSender(StoreAddress address, string? senderName, string? senderPhone)
+    {
+        if (senderName is not null)
+            address.SenderName = string.IsNullOrWhiteSpace(senderName) ? null : senderName.Trim();
+        if (senderPhone is not null)
+            address.SenderPhone = VietnamPhone.Normalize(senderPhone);
     }
 
     /// <summary>Cấp flag <see cref="UserRole.GardenOwner"/> cho user nếu chưa có (không SaveChanges).</summary>
