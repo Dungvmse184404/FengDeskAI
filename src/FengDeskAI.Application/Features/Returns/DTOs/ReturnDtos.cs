@@ -109,6 +109,11 @@ public class ReturnItemResponse
     public decimal UnitPrice { get; set; }
     public decimal LineTotal { get; set; }
     public Guid? ExchangeProductItemId { get; set; }
+    public string? ExchangeProductName { get; set; }
+    public string? ExchangeVariantName { get; set; }
+    public decimal? ExchangeUnitPrice { get; set; }
+    public decimal? ExchangeLineTotal { get; set; }
+    public string? ExchangeImageUrl { get; set; }
 }
 
 public class RefundResponse

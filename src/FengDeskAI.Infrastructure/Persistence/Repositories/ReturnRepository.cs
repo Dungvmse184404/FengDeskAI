@@ -16,6 +16,7 @@ public class ReturnRepository : GenericRepository<ReturnRequest>, IReturnReposit
     public Task<ReturnRequest?> GetWithGraphAsync(Guid id, CancellationToken ct = default)
         => _set
             .Include(r => r.Items).ThenInclude(i => i.OrderItem)
+            .Include(r => r.Items).ThenInclude(i => i.ExchangeProductItem)!.ThenInclude(i => i!.Product).ThenInclude(p => p!.Images)
             .Include(r => r.Delivery)
             .Include(r => r.Order)
             .Include(r => r.Refund)
@@ -32,6 +33,7 @@ public class ReturnRepository : GenericRepository<ReturnRequest>, IReturnReposit
     {
         var query = _set.AsNoTracking()
             .Include(r => r.Items).ThenInclude(i => i.OrderItem)
+            .Include(r => r.Items).ThenInclude(i => i.ExchangeProductItem)!.ThenInclude(i => i!.Product).ThenInclude(p => p!.Images)
             .Include(r => r.Delivery)
             .Include(r => r.Images)
             .Include(r => r.StatusLogs)

@@ -395,9 +395,31 @@ public class RefundService : IRefundService
     {
         var ticket = await _uow.Returns.GetWithGraphAsync(refund.ReturnRequestId, ct);
         if (ticket is null) return;
+        var completedExchange = false;
 
         if (ticket.Status == Domain.Enums.Sales.ReturnRequestStatus.Refunding)
             ticket.CompleteRefund();
+        else if (ticket.Status == Domain.Enums.Sales.ReturnRequestStatus.Exchanging
+            && ticket.ReplacementDeliveryId.HasValue)
+        {
+            var replacement = await _uow.Orders.GetDeliveryWithOrderAsync(ticket.ReplacementDeliveryId.Value, ct);
+            if (replacement is not null
+                && ReturnWorkflow.CanCompleteExchange(replacement.Status, refund.Status))
+            {
+                var from = ticket.Status;
+                ticket.CompleteExchange();
+                completedExchange = true;
+                _uow.Returns.AddStatusLog(new ReturnStatusLog
+                {
+                    ReturnRequestId = ticket.Id,
+                    FromStatus = from.ToString(),
+                    ToStatus = ticket.Status.ToString(),
+                    ChangedBy = actorId,
+                    Note = "Đã giao hàng thay thế và hoàn phần tiền chênh lệch",
+                    ChangedAt = DateTime.UtcNow,
+                });
+            }
+        }
 
         await _liability.CreateForRefundAsync(ticket, refund, ct);
 
@@ -411,6 +433,20 @@ public class RefundService : IRefundService
             ReferenceType = ReferenceType.Refund,
             IsRead = false,
         }, ct);
+
+        if (completedExchange)
+        {
+            await _uow.Notifications.AddAsync(new Notification
+            {
+                UserId = ticket.CustomerId,
+                Type = NotificationType.ExchangeCompleted,
+                Title = "Đổi hàng hoàn tất",
+                Message = "Sản phẩm thay thế đã được giao và khoản tiền chênh lệch đã được hoàn.",
+                ReferenceId = ticket.Id,
+                ReferenceType = ReferenceType.Return,
+                IsRead = false,
+            }, ct);
+        }
     }
 
     private IServiceResult<RefundResponse> Ok(Refund refund)

@@ -105,17 +105,22 @@ public class ReturnService : IReturnService
             foreach (var (orderItemId, info) in requested)
             {
                 var oi = orderItemsById[orderItemId];
+                var replacement = exItems[info.Exchange!.Value];
+                if (replacement.Price > oi.UnitPrice)
+                    return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeMoreExpensive);
                 returnedValue += oi.UnitPrice * info.Qty;
-                replacementValue += exItems[info.Exchange!.Value].Price * info.Qty;
+                replacementValue += replacement.Price * info.Qty;
             }
             if (replacementValue > returnedValue)
                 return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.ExchangeMoreExpensive);
         }
 
         var hasRefund = request.Type == ReturnType.Refund || (request.Type == ReturnType.Exchange && replacementValue < returnedValue);
-        if (isCod && hasRefund && (string.IsNullOrWhiteSpace(request.BankAccountNumber)
+        if (hasRefund && (string.IsNullOrWhiteSpace(request.BankAccountNumber)
                 || string.IsNullOrWhiteSpace(request.BankAccountName) || string.IsNullOrWhiteSpace(request.BankName)))
             return Fail(ApiStatusCodes.BadRequest, ApiStatusMessages.Returns.BankInfoRequired);
+        if (request.Type == ReturnType.Exchange && hasRefund)
+            refundMethod = RefundMethod.BankTransfer;
 
         var rr = new ReturnRequest
         {
@@ -557,12 +562,23 @@ public class ReturnService : IReturnService
         var rr = await _uow.Returns.GetByReplacementDeliveryIdAsync(replacementDeliveryId, ct);
         if (rr is null || rr.Status != ReturnRequestStatus.Exchanging) return;
 
-        var from = rr.Status;
-        rr.CompleteExchange();
-        LogTransition(rr, from, "Đơn giao hàng thay thế đã giao thành công", actorId);
-        await NotifyAsync(rr.CustomerId, NotificationType.ExchangeCompleted, "Đổi hàng hoàn tất",
-            "Sản phẩm thay thế đã được giao thành công. Yêu cầu đổi hàng của bạn đã hoàn tất.",
-            rr.Id, ReferenceType.Return, ct);
+        if (ReturnWorkflow.CanCompleteExchange(DeliveryStatus.Delivered, rr.Refund?.Status))
+        {
+            var from = rr.Status;
+            rr.CompleteExchange();
+            LogTransition(rr, from, "Đơn giao hàng thay thế đã giao thành công", actorId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ExchangeCompleted, "Đổi hàng hoàn tất",
+                "Sản phẩm thay thế đã được giao thành công. Yêu cầu đổi hàng của bạn đã hoàn tất.",
+                rr.Id, ReferenceType.Return, ct);
+        }
+        else
+        {
+            LogTransition(rr, rr.Status,
+                "Đơn thay thế đã giao; đang chờ hoàn phần tiền chênh lệch", actorId);
+            await NotifyAsync(rr.CustomerId, NotificationType.ReturnApproved, "Đang hoàn tiền chênh lệch",
+                "Sản phẩm thay thế đã giao thành công. Yêu cầu sẽ hoàn tất sau khi khoản chênh lệch được chuyển cho bạn.",
+                rr.Id, ReferenceType.Return, ct);
+        }
     }
 
     // ===================== Worker =====================

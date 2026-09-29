@@ -166,7 +166,11 @@ public class OrderService : IOrderService
         var order = await _uow.Orders.GetDetailAsync(id, isPrivileged ? null : userId, ct);
         if (order is null)
             return ServiceResult<OrderDetailResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Order.NotFound);
-        return ServiceResult<OrderDetailResponse>.Success(_mapper.Map<OrderDetailResponse>(order));
+        var response = _mapper.Map<OrderDetailResponse>(order);
+        var returnedQuantities = await _uow.Returns.GetReturnedQuantitiesAsync(order.Items.Select(i => i.Id), ct);
+        foreach (var item in response.Items)
+            item.ReturnedQuantity = returnedQuantities.GetValueOrDefault(item.Id);
+        return ServiceResult<OrderDetailResponse>.Success(response);
     }
 
     /// <summary>

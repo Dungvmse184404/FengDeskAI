@@ -29,7 +29,7 @@ public class ReturnRequest : BaseEntity
     public decimal RefundAmount { get; set; }
     public RefundMethod RefundMethod { get; set; } = RefundMethod.Original;
 
-    // Thông tin nhận tiền hoàn cho đơn COD (chuyển khoản) — null với đơn online hoàn về nguồn.
+    // Thông tin nhận tiền hoàn thủ công. Bắt buộc khi ticket có khoản hoàn, kể cả phần chênh lệch đổi hàng.
     public string? BankAccountName { get; set; }
     public string? BankAccountNumber { get; set; }
     public string? BankName { get; set; }
