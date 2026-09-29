@@ -94,6 +94,7 @@ Group: **`ai-op-{operationId}`**. Client **phải gọi `JoinAiOperation` trư�
 ### Rewind — hành vi khi LLM lỗi
 
 Cắt lịch sử + gọi LLM nằm trong **cùng một transaction**. LLM chết ⇒ **rollback**, lịch sử nguyên vẹn, client nhận đúng `503` của `SendAsync`.
+Draft đơn hàng (`ai_order_drafts`) tạo/sửa từ tin bị rewind trở đi cũng bị xóa trong cùng transaction.
 Chỉ rewind được tin của **chính mình**, loại `User`, trong **phòng riêng user↔AI**. Sai điều kiện → `404 "Không tìm thấy tin nhắn."` (cố tình không trả 403 để không lộ tồn tại tin của người khác).
 
 > 💡 Tin nhắn FE tự vẽ khi đang chờ (optimistic) mang id tạm dạng `u-…`, **không phải GUID** — gọi rewind với id đó sẽ luôn `404`. FE phải chặn trước khi gửi request.
@@ -183,6 +184,22 @@ Chỉ rewind được tin của **chính mình**, loại `User`, trong **phòng 
 ```
 
 **POST `/api/chat/ai/chatbox`** — lấy/tạo phòng user ↔ AI và trả `chatboxId` (gọi trước khi upload ảnh ở lượt đầu chưa gửi tin). Query `productId` (guid?, tùy chọn).
+
+### Đặt hàng qua AI — đơn nháp (draft)
+
+Không có endpoint riêng: AI tự gọi tool trong phòng riêng user↔AI. Draft lưu bảng `ai_order_drafts`,
+**mỗi phòng tối đa 1 draft đang mở** (unique index), TTL `AiOrderDraft:DraftTtlMinutes` (mặc định **60'**, đặt lại mỗi lần sửa).
+
+| Tool | Khi nào đưa cho LLM | Việc làm |
+|---|---|---|
+| `prepare_order` | luôn (phòng riêng) | Chưa có draft → **tạo**; đã có → **sửa**: chỉ truyền field đổi (`quantity`, `productItemId`, `productId`, `shippingAddressId`, `paymentMethod`), phần còn lại giữ từ draft |
+| `confirm_order` | **chỉ khi đầu lượt đã có draft** | Tạo đơn thật từ draft (không nhận id). Từ chối nếu draft vừa tạo/sửa trong chính lượt đó |
+| `discard_order_draft` | chỉ khi đầu lượt đã có draft | Xóa draft (không bao giờ hủy đơn đã đặt) |
+
+- Mỗi lượt, BE nạp draft và gắn block **`CURRENT ORDER DRAFT`** (bảng sản phẩm / số lượng / giá / phí ship / địa chỉ / thanh toán) vào prompt, ngay sau lịch sử → AI không quên user đã chọn gì dù tin cũ đã trôi khỏi `MaxHistoryTurns`. Mô tả `prepare_order`/`confirm_order` gửi LLM cũng đổi theo trạng thái draft.
+- `confirm_order` chiếm draft bằng `UPDATE … WHERE status='Pending'` → 2 lượt confirm song song chỉ tạo **1** đơn. Giá đổi / checkout lỗi → draft trở lại `Pending` (kèm giá mới), user xác nhận lại; đặt xong → xóa cứng draft.
+- `AiOrderDraftCleanupWorker` xóa draft hết hạn và draft kẹt `Confirming` quá `ConfirmingGraceMinutes`.
+- **Rewind** xóa draft được tạo/sửa từ tin nhắn bị rewind trở đi.
 
 ---
 

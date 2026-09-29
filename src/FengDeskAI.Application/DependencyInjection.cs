@@ -138,6 +138,7 @@ public static class DependencyInjection
         // Tool có tác dụng phụ (tạo đơn) — chỉ enable ở phòng riêng, xem AiChatService.PrivateRoomOnlyTools.
         services.AddScoped<IAiTool, PrepareOrderTool>();
         services.AddScoped<IAiTool, ConfirmOrderTool>();
+        services.AddScoped<IAiTool, DiscardOrderDraftTool>();
 
         services.AddScoped<IAiChatService, AiChatService>();
 

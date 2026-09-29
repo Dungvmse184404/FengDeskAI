@@ -89,6 +89,9 @@ public class AppDbContext : DbContext
     public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
     public DbSet<RecommendationLog> RecommendationLogs => Set<RecommendationLog>();
 
+    // Trợ lý AI — draft đơn hàng user đã chốt trong phòng chat riêng
+    public DbSet<AiOrderDraft> AiOrderDrafts => Set<AiOrderDraft>();
+
     // Recommendation scoring v3 (vector ngũ hành)
     public DbSet<WorkspaceTypeElement> WorkspaceTypeElements => Set<WorkspaceTypeElement>();
     public DbSet<ElementInputMap> ElementInputMaps => Set<ElementInputMap>();
