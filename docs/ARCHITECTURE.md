@@ -128,7 +128,7 @@ Domain  ←  Application  ←  Infrastructure  ←  WebAPI
 ### 3.4 Cross-cutting
 
 - **Authorization policies** (`WebAPI/Authorization/AuthorizationPolicies.cs`): `AdminOnly`, `StaffOrAbove`, `ManagerOrAbove`, `CustomerOnly`, `GardenOwnerOrAbove`. Store-scoped ownership check ở service layer (`StoreService.IsOwnerOrAdminAsync`).
-- **Background workers** (`WebAPI/Workers/`): `AiBotWorker` (queue + Ollama call), `Model3DPollingWorker` (poll Meshy), `OrderExpirationWorker` (đơn online chưa thanh toán quá hạn → cancel).
+- **Background workers** (`WebAPI/Workers/`): `AiBotWorker` (queue + Ollama call), `Model3DPollingWorker` (poll Meshy), `OrderExpirationWorker` (đơn online chưa thanh toán quá hạn → cancel), `AiOrderDraftCleanupWorker` (xóa draft đơn hàng AI hết hạn / kẹt Confirming).
 - **Realtime**: SignalR hub `/hubs/chat` cho chat. **Chưa có** notification hub — badge unread hiện qua polling 60s (Redux slice + interval).
 - **Exception → HTTP.** Global filter map `UnauthorizedAccessException` → `ServiceResult.Failure(401)`.
 
@@ -219,7 +219,7 @@ Chi tiết: [`docs/ard/bounded-contexts/customer-care.md`](./ard/bounded-context
 ### 5.3 Chat (người ↔ AI + người ↔ người)
 
 - SignalR hub `/hubs/chat` gửi message realtime.
-- Người ↔ AI: `AiBotQueue` enqueue → `AiBotWorker` gọi Ollama (`AiChat` config), model dùng tool-calling; 14 tool ở `CustomerCare/Tools/*`. Tool đọc dữ liệu chính chủ scope theo `context.UserId`; **`ChatRoomDataConsent` chỉ gate `get_chat_partner_info`**; tool có tác dụng phụ (`prepare_order`/`confirm_order`) chỉ bật ở phòng riêng.
+- Người ↔ AI: `AiBotQueue` enqueue → `AiBotWorker` gọi Ollama (`AiChat` config), model dùng tool-calling; 15 tool ở `CustomerCare/Tools/*`. Tool đọc dữ liệu chính chủ scope theo `context.UserId`; **`ChatRoomDataConsent` chỉ gate `get_chat_partner_info`**; tool có tác dụng phụ (`prepare_order`/`confirm_order`/`discard_order_draft`) chỉ bật ở phòng riêng. Đơn nháp lưu `ai_order_drafts` và được gắn lại vào prompt mỗi lượt (block `CURRENT ORDER DRAFT`).
 - Người ↔ người: routing trực tiếp qua hub.
 
 ### 5.4 Sales (multi-store checkout)

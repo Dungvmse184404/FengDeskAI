@@ -84,7 +84,9 @@ trỏ tới **ba** đại lượng khác nhau (`current` / `d` / `T`) — đọc
 ⚠️ Engine chốt **tập sản phẩm**, nhưng AI hiện **vẫn hoán vị được `FinalRank`** trong topN.
 
 ### AI tools
-`Application/Features/CustomerCare/Tools/`: mỗi tool LLM gọi được là 1 class — **14 tool đăng ký DI**. Tool đọc dữ liệu chính chủ tự scope theo `context.UserId`; **`ChatRoomDataConsent` chỉ gate `get_chat_partner_info`**; `prepare_order`/`confirm_order` chỉ bật ở phòng riêng (`AiChatService.PrivateRoomOnlyTools`).
+`Application/Features/CustomerCare/Tools/`: mỗi tool LLM gọi được là 1 class — **15 tool đăng ký DI**. Tool đọc dữ liệu chính chủ tự scope theo `context.UserId`; **`ChatRoomDataConsent` chỉ gate `get_chat_partner_info`**; `prepare_order`/`confirm_order`/`discard_order_draft` chỉ bật ở phòng riêng (`AiChatService.PrivateRoomOnlyTools`).
+
+Đơn nháp AI nằm ở bảng `ai_order_drafts` (1 draft Pending mỗi phòng, TTL `AiOrderDraft:DraftTtlMinutes` = 60'), được nạp lại vào prompt mỗi lượt (`AiOrderDraftPrompt`). Tool có thể ẩn/đổi mô tả theo ngữ cảnh lượt qua `IAiTool.IsAvailable` / `DescribeFor` — `confirm_order` chỉ hiện khi **đầu lượt** đã có draft và tự từ chối nếu draft đổi trong lượt (`AiToolContext.OrderDraftChangedThisTurn`). Đừng đưa lại luật "không confirm cùng lượt" vào prompt: nó từng gây vòng hỏi xác nhận vô hạn. Chi tiết: [`docs/adr/refactor-ai-tool-handles.md`](docs/adr/refactor-ai-tool-handles.md) §6.
 
 > `Tools/CancelOrderTool.cs` là **file rỗng**, chưa implement và không đăng ký DI — đừng tính vào danh sách tool khả dụng.
 
@@ -99,7 +101,7 @@ ship, phí sàn); preview và checkout PHẢI đi qua cùng `VoucherService.Sele
 `subtotal + total_shipping_fee − shipping_discount` (cũng là số COD).
 
 ### Background workers
-`WebAPI/Workers/`: `AiBotWorker` (+ `AiBotQueue`), `Model3DPollingWorker` (poll Meshy), `OrderExpirationWorker` (hết hạn đơn online chưa thanh toán).
+`WebAPI/Workers/`: `AiBotWorker` (+ `AiBotQueue`), `Model3DPollingWorker` (poll Meshy), `OrderExpirationWorker` (hết hạn đơn online chưa thanh toán), `AiOrderDraftCleanupWorker` (xóa draft đơn hàng AI hết hạn / kẹt Confirming).
 
 ## Build / chạy / DB
 
@@ -158,8 +160,8 @@ dotnet test FengDeskAI.slnx
 
 Connection string tìm theo thứ tự: biến môi trường `ConnectionStrings__DefaultConnection` (CI dùng, luôn ưu tiên) → `appsettings.Testing.json` (gitignore, mỗi máy một file) → không có thì dừng kèm hướng dẫn. **Không có giá trị mặc định trong code.**
 
-- `tests/FengDeskAI.UnitTests` — unit test thuần (xunit + Moq). **455 test.**
-- `tests/FengDeskAI.ApiTests` — integration test in-process qua `WebApplicationFactory`. **450 test.** Tầng 1 phủ **toàn bộ** endpoint ở mức smoke + ma trận phân quyền, tự sinh từ routing table nên endpoint mới được phủ ngay; tầng 2 phủ nghiệp vụ theo bounded context (Identity, Sales, Returns/RMA + SLA + công nợ, Catalog + model 3D, Vendor, quản trị + tham số chấm điểm, Workspace, gợi ý, đánh giá, giao hàng, địa chỉ, bảng tra cứu). Xem [`tests/FengDeskAI.ApiTests/README.md`](tests/FengDeskAI.ApiTests/README.md) và [`docs/adr/api-integration-testing.md`](docs/adr/api-integration-testing.md).
+- `tests/FengDeskAI.UnitTests` — unit test thuần (xunit + Moq). **469 test.**
+- `tests/FengDeskAI.ApiTests` — integration test in-process qua `WebApplicationFactory`. **455 test.** Tầng 1 phủ **toàn bộ** endpoint ở mức smoke + ma trận phân quyền, tự sinh từ routing table nên endpoint mới được phủ ngay; tầng 2 phủ nghiệp vụ theo bounded context (Identity, Sales, Returns/RMA + SLA + công nợ, Catalog + model 3D, Vendor, quản trị + tham số chấm điểm, Workspace, gợi ý, đánh giá, giao hàng, địa chỉ, bảng tra cứu). Xem [`tests/FengDeskAI.ApiTests/README.md`](tests/FengDeskAI.ApiTests/README.md) và [`docs/adr/api-integration-testing.md`](docs/adr/api-integration-testing.md).
 - **Ca test có tác dụng phụ lên phiên đăng nhập** (thứ làm đổi `TokenVersion`: tạo cửa hàng, khóa user, đổi role, thu hồi phiên) phải dùng `ScenarioUsers.CreateAsync` — nhắm vào user mẫu dùng chung sẽ làm token của role đó chết và kéo mọi ca chạy sau đỏ theo.
 - `TestDatabaseGuard` chặn cứng việc chạy test vào DB từ xa (Supabase/Railway). **Đừng gỡ.**
 - Thêm tích hợp ngoài mới → phải thêm fake trong `ApiTestFactory`, không thì test gọi ra dịch vụ thật.

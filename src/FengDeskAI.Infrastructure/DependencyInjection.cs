@@ -177,6 +177,7 @@ public static class DependencyInjection
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
         services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+        services.AddScoped<IAiOrderDraftRepository, AiOrderDraftRepository>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         // Cấu hình chấm điểm gần như không đổi nhưng bị đọc ở mọi request chấm điểm; với DB ở Sydney
         // (~300ms/round-trip) riêng khối đó đã hơn một giây mỗi lần. Bọc một lớp cache trong bộ nhớ.
@@ -276,6 +277,7 @@ public static class DependencyInjection
         // chatbox (Ai:Chat), intake (Ai:Intake). Chat/intake dùng chung IAiChatClient = RelayChatClient.
         services.AddSettings<AiRelayOptions>(configuration);
         services.AddSettings<AiChatOptions>(configuration);
+        services.AddSettings<AiOrderDraftOptions>(configuration);
         services.AddSettings<WorkspaceIntakeOptions>(configuration);
         services.AddHttpClient(); // bật IHttpClientFactory — RelayChatClient tạo client per-provider
         services.AddSingleton<IAiChatTransport, OllamaTransport>();

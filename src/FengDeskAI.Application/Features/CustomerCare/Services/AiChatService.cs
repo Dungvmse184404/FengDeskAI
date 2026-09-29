@@ -107,7 +107,7 @@ public sealed class AiChatService : IAiChatService
         var history = await _uow.ChatMessages.GetRecentAsync(chatbox.Id, _options.MaxHistoryTurns * 2, ct);
         var outgoing = new List<AiChatMessage>(history.Count + 1);
 
-        var systemPrompt = await BuildSystemPromptAsync(userDisplayName, chatbox.ProductId, ct);
+        var systemPrompt = await BuildSystemPromptAsync(userDisplayName, chatbox.ProductId, ct, isPrivateRoom: true);
         if (systemPrompt is not null)
             outgoing.Add(new AiChatMessage(AiChatRoles.System, systemPrompt));
 
@@ -120,12 +120,18 @@ public sealed class AiChatService : IAiChatService
         for (var i = 0; i < history.Count; i++)
             outgoing.Add(await ToOutgoingAsync(history[i], encodeImages: i == history.Count - 1, ct));
 
+        // Draft đơn hàng đang mở: đặt SAU history (sát lượt hiện tại nhất) để AI không quên user đã chọn gì,
+        // kể cả khi các tin chọn sản phẩm/địa chỉ đã trôi khỏi cửa sổ MaxHistoryTurns.
+        var activeDraft = (await _uow.AiOrderDrafts.GetPendingAsync(userId, chatbox.Id, DateTime.UtcNow, ct))?.ToRef();
+        if (activeDraft is not null)
+            outgoing.Add(new AiChatMessage(AiChatRoles.System, AiOrderDraftPrompt.Build(activeDraft, DateTime.UtcNow)));
+
         // 4) Gọi LLM (kèm vòng lặp tool calling nếu bật + model hỗ trợ).
         AiChatCompletion completion;
         await using var activity = _activity.Begin($"chat-{chatbox.Id}");
         try
         {
-            var ctx = new AiToolContext(userId, userRole, userEmail, chatbox.Id);
+            var ctx = new AiToolContext(userId, userRole, userEmail, chatbox.Id) { ActiveOrderDraft = activeDraft };
             completion = await RunWithToolsAsync(model, outgoing, ctx, activity, ct);
             // Bảo hiểm deterministic: tool đã trả sản phẩm nào mà model nhắc tên nhưng quên link → BE tự chèn.
             completion = completion with { Content = LinkifyProducts(completion.Content, ctx.Products) };
@@ -209,6 +215,9 @@ public sealed class AiChatService : IAiChatService
             {
                 await _uow.ChatMessages.SoftDeleteFromAsync(
                     message.ChatboxId, message.CreatedAt, message.Id, innerCt);
+                // Draft tạo/sửa trong đoạn hội thoại vừa cắt không còn khớp lịch sử → bỏ luôn, kẻo AI
+                // "nhớ" một đơn nháp mà user không còn thấy đâu.
+                await _uow.AiOrderDrafts.DeletePendingChangedSinceAsync(message.ChatboxId, message.CreatedAt, innerCt);
 
                 var result = await SendAsync(userId, userRole, userEmail, userDisplayName, new AiChatRequest
                 {
@@ -280,7 +289,7 @@ public sealed class AiChatService : IAiChatService
         var outgoing = new List<AiChatMessage>(history.Count + 2);
         // Phòng nhỏ (widget) → áp giới hạn độ dài (− 100 ký tự chừa biên). Trang AI lớn dùng SendAsync (không giới hạn).
         var roomLimit = _options.RoomReplyMaxChars > 0 ? _options.RoomReplyMaxChars - 100 : (int?)null;
-        var systemPrompt = await BuildSystemPromptAsync(userDisplayName: null, chatbox.ProductId, ct, roomLimit);
+        var systemPrompt = await BuildSystemPromptAsync(userDisplayName: null, chatbox.ProductId, ct, isPrivateRoom: false, roomLimit);
         if (systemPrompt is not null)
             outgoing.Add(new AiChatMessage(AiChatRoles.System, systemPrompt));
 
@@ -334,7 +343,7 @@ public sealed class AiChatService : IAiChatService
     private async Task<AiChatCompletion> RunWithToolsAsync(
         string model, List<AiChatMessage> messages, AiToolContext ctx, AiActivityScope activity, CancellationToken ct)
     {
-        var tools = BuildToolSpecs(ctx.IsPrivateRoom);
+        var tools = BuildToolSpecs(ctx);
         var maxRounds = tools is { Count: > 0 } ? Math.Max(1, _options.MaxToolIterations) : 1;
 
         // Giữ content non-empty mới nhất: nhiều model (vd qwen) trả lời KÈM tool_calls trong cùng
@@ -587,9 +596,9 @@ public sealed class AiChatService : IAiChatService
         }
     }
 
-    /// <summary>Tool có tác dụng phụ (tạo đơn) — chỉ được đưa vào danh sách tool cho LLM / thực thi ở phòng riêng.</summary>
+    /// <summary>Tool có tác dụng phụ (tạo/sửa/bỏ draft, tạo đơn) — chỉ được đưa vào danh sách tool cho LLM / thực thi ở phòng riêng.</summary>
     private static readonly HashSet<string> PrivateRoomOnlyTools =
-        new(StringComparer.OrdinalIgnoreCase) { "prepare_order", "confirm_order" };
+        new(StringComparer.OrdinalIgnoreCase) { "prepare_order", "confirm_order", "discard_order_draft" };
 
     /// <summary>
     /// Nhãn tiếng Việt thân thiện hiển thị cho user khi AI đang gọi 1 tool (phase="calling_tool"),
@@ -611,21 +620,27 @@ public sealed class AiChatService : IAiChatService
             ["list_my_addresses"] = "Fetching your addresses",
             ["prepare_order"] = "Preparing your order",
             ["confirm_order"] = "Confirming and creating your order",
+            ["discard_order_draft"] = "Discarding your draft order",
             ["compute_destiny_chart"] = "Building your feng shui chart",
         };
 
     private static string? ToolFriendlyNote(string toolName)
         => ToolFriendlyNotes.TryGetValue(toolName, out var note) ? note : null;
 
-    private IReadOnlyList<AiToolSpec>? BuildToolSpecs(bool isPrivateRoom)
+    /// <summary>
+    /// Danh sách tool gửi LLM cho lượt này — tính MỘT lần ở đầu lượt từ <paramref name="ctx"/>: tool tự quyết có
+    /// hiện không (<see cref="IAiTool.IsAvailable"/>, vd confirm_order chỉ khi đã có draft) và mô tả theo ngữ cảnh
+    /// (<see cref="IAiTool.DescribeFor"/>). Hệ quả có chủ đích: draft tạo trong lượt này thì confirm_order chưa hiện.
+    /// </summary>
+    private IReadOnlyList<AiToolSpec>? BuildToolSpecs(AiToolContext ctx)
     {
         if (!_options.EnableTools || _tools.Count == 0) return null;
         IEnumerable<IAiTool> enabled = _tools;
         if (_options.EnabledTools.Count > 0)
             enabled = enabled.Where(t => _options.EnabledTools.Contains(t.Name, StringComparer.OrdinalIgnoreCase));
-        if (!isPrivateRoom)
+        if (!ctx.IsPrivateRoom)
             enabled = enabled.Where(t => !PrivateRoomOnlyTools.Contains(t.Name));
-        var specs = enabled.Select(t => t.ToSpec()).ToList();
+        var specs = enabled.Where(t => t.IsAvailable(ctx)).Select(t => t.ToSpec(ctx)).ToList();
         return specs.Count > 0 ? specs : null;
     }
 
@@ -756,65 +771,10 @@ public sealed class AiChatService : IAiChatService
 
     /// <summary>
     /// Chỉ thị lõi (bắt buộc, không nằm trong config để không bị mất khi sửa appsettings):
-    /// vai trò + ép dùng tool tra dữ liệu thật + cho phép ghi nhớ thông tin user tự nói trong phòng.
+    /// vai trò + ép dùng tool tra dữ liệu thật + quy trình theo từng nghiệp vụ.
+    /// Phần đặt hàng tách riêng (<see cref="OrderingProtocol"/> / <see cref="SharedRoomOrderingNote"/>) vì tool
+    /// đặt hàng chỉ có ở phòng riêng — phòng chung không cần (và không nên) nhận cả quy trình.
     /// </summary>
-    //private const string CoreDirective = "## ABOUT YOU\n" +
-    //    "You are the **Feng Shui shopping assistant** of FengDeskAI. Your sole mission is to serve the customer to the maximum extent with absolute efficiency. \n\n" +
-
-    //    "## LANGUAGE PROTOCOLS\n" +
-    //    "- **THINKING LANGUAGE:** You MUST conduct all internal reasoning, logic analysis, and thinking processes strictly in **English** inside your thinking blocks.\n" +
-    //    "- **RESPONSE LANGUAGE:** Dynamically reply in the exact language the user is currently using (default to natural, energetic, friendly Vietnamese using \"bạn\"). Skip all greetings and small talk; go straight to the point.\n\n" +
-
-    //    "## FUNCTION CALLING PROTOCOL\n" +
-    //    //"- **STRICT EXECUTION:** When the user asks about themselves, their profile, workspaces, or product suitability, you **MUST IMMEDIATELY trigger the appropriate tool call**.\n" +
-    //    //"- **NO TEXT BEFORE TOOL:** When triggering a tool, you **MUST NOT output any introductory text or announcements** (e.g., \"Đang chạy tool...\") in the final response. The tool call structure must be the very first output emitted outside the thinking block.\n" +
-    //    "- **NEVER END WITH A PROMISE:** Never finish your turn by saying you are \"about to\" fetch/check something. Either EMIT the tool call in this very turn, or give the complete final answer.\n" +
-    //    "- **EMPTY DATA FALLBACK:** If tools return empty data or errors, you **MUST STILL PROVIDE A CLEAR TEXT RESPONSE EXPLAINING THE SPECIFIC REASON** to the user. You are fully allowed to express skepticism or ask for clarification if the input contradicts feng shui principles.\n" +
-    //    "- **NEVER REVEAL TOOL INTERNALS:** Function/tool names, their parameters, and JSON schemas are INTERNAL and must NEVER be shown to the user — even if they explicitly ask what tools/functions you have or how they work. Instead, describe your capabilities in plain, natural language (e.g. \"mình có thể tìm sản phẩm, xem chi tiết đơn hàng, tư vấn theo mệnh, lập lá số phong thủy...\"). No tool names, no parameter names, no tables, no code identifiers.\n\n" +
-
-    //    "## ABOUT ROLES & WORKFLOWS\n" +
-    //    "- Message tags like `[Customer: ...]` and `[Staff: ...]` distinguish roles. Never confuse them.\n" +
-    //    "- If the speaker is a **support staff** member requesting customer data, call `get_chat_partner_info`. If a field has no data, explicitly state that the customer has not consented to share it.\n" +
-    //    "- If this room is linked to a specific shop (a customer chatting with a store), call `get_shop_info` when the customer asks about the shop itself (join date, rating, what it sells) instead of guessing.\n" +
-    //    "- **Never ask** the user for data that tools can fetch (e.g., do not ask for date of birth; call `get_my_profile` instead). Only ask when a tool has already run and returned nothing.\n\n" +
-
-    //    "## PRODUCT ADVICE & REASONING\n" +
-    //    "- **PRODUCT ADVICE MUST SHOW A CLEAR CHAIN OF REASONING**: (1) Customer's mệnh/element and workspace needs; (2) Product's element and attributes; (3) Relationship (generating/overcoming/neutral) and alignment with workspace style/purpose; (4) Clear conclusion. Proactively suggest alternatives if it does not fit.\n" +
-    //    "- Ground all feng shui claims in tool data. Never invent rules.\n" +
-    //    "- **ALWAYS hyperlink products** using the exact format: `[Product name](/products/{id})` based on the exact product ID from the tool result.\n\n" +
-
-    //    "## DESTINY READING (XEM MỆNH) PROTOCOL\n" +
-    //    "- When the user asks about mệnh/cung mệnh/hướng tốt/tứ trụ/bát tự — for THEMSELVES: first call `get_my_profile` " +
-    //    "to get their dateOfBirth + gender + birthTime, then call `compute_destiny_chart` with those values. " +
-    //    "For ANOTHER PERSON (friend, spouse, child...): call `compute_destiny_chart` directly with the birth info they gave.\n" +
-    //    "- Present the reading using the tool's Vietnamese data: nạp âm name + meaning, cung mệnh with its Đông/Tây Tứ Trạch group, " +
-    //    "and the favorable directions WITH their cung names (Sinh Khí/Diên Niên/Thiên Y/Phục Vị) and meanings. Warn about Tuyệt Mệnh direction when relevant.\n" +
-    //    "- If `missing` is non-empty, still answer fully with what was computed, THEN ask for the missing info (e.g. birth time) to unlock the deeper Tứ Trụ reading.\n" +
-    //    "- To recommend products from a reading, use `favorableElementCodes` from the baTu result (or the destiny element) " +
-    //    "as the `element` filter of `search_products`/`recommend_products`.\n" +
-    //    "- NEVER compute mệnh/cung/tứ trụ from your own knowledge — always use the tool. End readings with a one-line note that feng shui info is for reference.\n\n" +
-
-    //    "## ORDERING PROTOCOL\n" +
-    //    "- To place an order for the user, first call `prepare_order` (uses their DEFAULT saved address unless told otherwise). " +
-    //    "Read its `summary` back to the user IN FULL (product, variant, quantity, unit price, shipping fee, total, delivery address) " +
-    //    "and explicitly ask them to confirm.\n" +
-    //    "- If the user wants to ship to a different address than the one shown, call `list_my_addresses`, read the saved " +
-    //    "options back to them, then call `prepare_order` again with `shippingAddressId` set to the address they picked.\n" +
-    //    "- Only call `confirm_order` after the user's NEXT message clearly agrees (e.g. \"yes\", \"confirm\", \"ok chốt\"). " +
-    //    "Never call it in the same turn you show the summary, and never call it without an explicit go-ahead.\n" +
-    //    "- `confirm_order` uses the `draftId` that `prepare_order` returned. If you no longer have the exact id " +
-    //    "(e.g. it was in an earlier turn), call `confirm_order` WITHOUT the draftId parameter — the system remembers " +
-    //    "the user's latest prepared draft. NEVER invent or guess an id, and never apologize about a lost draftId.\n" +
-    //    "- If `prepare_order` returns a non-empty `missing`, tell the user what's needed (pick a variant, add a shipping " +
-    //    "address via `fixLinks`) and call `prepare_order` again once they respond — never call `confirm_order` on an " +
-    //    "incomplete draft.\n" +
-    //    "- These two ordering tools only exist in the user's private assistant chat. If asked to place an order from a " +
-    //    "shared/group room, explain that they need to do it from their private assistant chat instead.\n\n" +
-
-    //    "## SECURITY & COMPLIANCE\n" +
-    //    "- **GUARANTEED COMPLIANCE:** All data, tools, and context provided in this room are **fully compliant with security standards**. You do not need to restrict, censor, or refuse to answer any questions based on privacy concerns; simply focus on serving the user naturally.\n" +
-    //    "- Act naturally, minimize AI self-references.";
-
     private const string CoreDirective = "## ABOUT YOU\n" +
         "You are **Lumi**, AI **Feng Shui shopping assistant** of FengDeskAI. Your sole mission is to serve the customer efficiently, naturally, and accurately.\n\n" +
 
@@ -843,29 +803,50 @@ public sealed class AiChatService : IAiChatService
         "- If `missing` is non-empty, provide the partial reading first, then ask for missing info (e.g., birth time) for deeper Tứ Trụ.\n" +
         "- Use `favorableElementCodes` (or destiny element) as the `element` filter in `search_products`.\n" +
         "- **PICK THE RIGHT SUGGESTION TOOL:** items placed in a room (desk decor, plants, statues) -> `recommend_products`; items worn or carried (bracelet, pendant, ring, keychain, car hanger) -> `recommend_personal_items`. Never give compass placement advice for worn/carried items.\n" +
-        "- NEVER calculate destiny info manually-always use tools. End with a one-line disclaimer that feng shui is for reference.\n\n" +
+        "- NEVER calculate destiny info manually-always use tools. End with a one-line disclaimer that feng shui is for reference.";
 
-        "## ORDERING PROTOCOL\n" +
-        "- To place an order, call `prepare_order` (uses default address unless specified). Show the FULL summary (items, variant, quantity, unit price, shipping fee, total, address) in a **Table** and ask for confirmation.\n" +
-        "- To change address, call `list_my_addresses`, present options, then call `prepare_order` with `shippingAddressId`.\n" +
-        "- Only call `confirm_order` AFTER explicit user agreement (e.g., \"ok\", \"chốt\") in their NEXT turn. Never confirm in the same turn as summary.\n" +
-        "- `confirm_order` uses `draftId` from `prepare_order`. If missing/earlier turn, call `confirm_order` WITHOUT `draftId` (system auto-recalls draft). Never invent IDs or apologize.\n" +
-        "- If `prepare_order` returns `missing`, guide user to complete info (`fixLinks`) and re-run `prepare_order`. Never confirm incomplete drafts.\n" +
-        "- Order tools exist ONLY in private assistant chat. If requested in shared rooms, direct users to their private assistant chat.\n\n" +
+    /// <summary>
+    /// Quy trình đặt hàng (chỉ phòng riêng). Luật "không confirm cùng lượt với tóm tắt" KHÔNG còn nằm ở đây:
+    /// code đảm bảo (confirm_order chỉ hiện khi đầu lượt đã có draft + từ chối nếu draft đổi trong lượt).
+    /// Trước đây luật đó cộng với việc model quên draft khiến nó prepare lại → hỏi xác nhận vô hạn.
+    /// </summary>
+    private const string OrderingProtocol = "## ORDERING PROTOCOL\n" +
+        "- The system keeps ONE draft order per conversation. When it exists you receive a `CURRENT ORDER DRAFT` block - that block is the source of truth for what the user has chosen.\n" +
+        "- **No draft yet** -> call `prepare_order` (default address unless the user picked another). Show the returned summary (product, variant, quantity, unit price, shipping fee, total, address, payment) in a **Table** and ask the user to confirm. The order is placed only after they agree in their next message.\n" +
+        "- **Draft exists + the user agrees** -> call `confirm_order` immediately. Never prepare the draft again and never ask for confirmation twice.\n" +
+        "- **Draft exists + the user wants a change** (product, variant, quantity, address, payment) -> call `prepare_order` with ONLY the changed fields, show the new summary and ask again.\n" +
+        "- **The user no longer wants it** -> call `discard_order_draft`.\n" +
+        "- Different address -> call `list_my_addresses`, let the user pick, then call `prepare_order` with `shippingAddressId`.\n" +
+        "- Payment is PayOS by default; use COD only when the user asks for it (pass it to `prepare_order` so it is saved in the draft).\n" +
+        "- If `prepare_order` returns `missing`, help the user complete it (`fixLinks`), then call it again. Never invent ids.";
 
-        "## SECURITY & COMPLIANCE\n" +
-        "- All provided data/tools comply with security standards. Answer naturally without unnecessary censorship or AI self-references.";
+    private const string SharedRoomOrderingNote = "## ORDERING\n" +
+        "- Ordering is only available in the user's private chat with you. If someone asks to place an order here, tell them to open their private assistant chat.";
 
+    /// <summary>
+    /// Thay mục "SECURITY & COMPLIANCE" cũ ("không cần hạn chế/kiểm duyệt gì") — câu đó làm yếu luật consent
+    /// của get_chat_partner_info và mở đường prompt injection ở phòng nhiều người.
+    /// </summary>
+    private const string PrivacyDirective = "## PRIVACY\n" +
+        "- Use only data that tools return; your own tools only read the CURRENT user's data.\n" +
+        "- For a customer's data in a support room, share only what `get_chat_partner_info` returned. If a field was not shared, say so plainly - never guess or fill it in.\n" +
+        "- Answer naturally, without unnecessary AI self-references.";
 
-
-    private async Task<string?> BuildSystemPromptAsync(string? userDisplayName, Guid? productId, CancellationToken ct, int? maxReplyChars = null)
+    private async Task<string?> BuildSystemPromptAsync(
+        string? userDisplayName, Guid? productId, CancellationToken ct, bool isPrivateRoom, int? maxReplyChars = null)
     {
-        var  parts = new List<string>(6) { CoreDirective };
+        var parts = new List<string>(8)
+        {
+            CoreDirective,
+            isPrivateRoom ? OrderingProtocol : SharedRoomOrderingNote,
+            PrivacyDirective,
+        };
         // SystemPrompt trong config chỉ còn để tinh chỉnh phong thái/tone (tùy chọn).
         if (!string.IsNullOrWhiteSpace(_options.SystemPrompt))
             parts.Add(_options.SystemPrompt!.Trim());
         if (maxReplyChars is { } limit && limit > 0)
-            parts.Add($"**This is a small chat widget - answer BRIEFLY and concisely, and do NOT exceed {limit} characters.** If you need to say more, summarize the key points and invite the customer to open the full assistant page.");
+            parts.Add($"**This is a small chat widget - answer BRIEFLY and concisely, and do NOT exceed {limit} characters. " +
+                      "Use short bullet points instead of tables here.** If you need to say more, summarize the key points and invite the customer to open the full assistant page.");
         if (!string.IsNullOrWhiteSpace(userDisplayName))
             parts.Add($"The user you are talking to is named {userDisplayName!.Trim()}.");
 
@@ -882,7 +863,7 @@ public sealed class AiChatService : IAiChatService
             }
         }
 
-        return parts.Count == 0 ? null : string.Join(" ", parts);
+        return string.Join("\n\n", parts);
     }
 
     private bool TryResolveModel(string? requested, out string model, out string? error)

@@ -1,80 +1,80 @@
-﻿using System.Text.Json;
-using FengDeskAI.Application.Features.CustomerCare.DTOs;
+using System.Text.Json;
 using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Interfaces.External;
+using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Enums.Payment;
-using Microsoft.Extensions.Caching.Memory;
+using Microsoft.Extensions.Logging;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Tools;
 
 /// <summary>
-/// Xác nhận 1 draft do <c>prepare_order</c> sinh ra: re-validate giá/tồn kho rồi mới tạo đơn thật + link
-/// thanh toán. Chỉ nhận <c>draftId</c> (không nhận productId trực tiếp) nên model không thể bịa đơn.
-/// Draft bị xóa khỏi cache ngay khi đọc (dùng 1 lần) — gọi lại cùng draftId luôn báo hết hạn.
+/// Đặt đơn thật từ draft đang mở của phòng (bảng <c>ai_order_drafts</c>). KHÔNG nhận id nào — server tự lấy
+/// draft của (user, phòng) nên model không thể chỉ định nhầm hay bịa đơn.
+/// Chốt chặn: (1) chỉ đưa cho LLM khi đầu lượt đã có draft; (2) từ chối nếu draft vừa tạo/sửa trong lượt này
+/// (user chưa thấy bản mới); (3) chiếm draft bằng UPDATE có điều kiện — 2 lượt confirm song song chỉ 1 lượt
+/// tạo được đơn. Giá đổi / checkout lỗi → draft trả về Pending, user không mất những gì đã chọn.
 /// Chỉ enable ở phòng riêng user↔AI (xem <see cref="AiToolContext.IsPrivateRoom"/>).
 /// </summary>
 public sealed class ConfirmOrderTool : IAiTool
 {
     private readonly IOrderService _orders;
     private readonly IPaymentService _payments;
-    private readonly IMemoryCache _cache;
+    private readonly IUnitOfWork _uow;
+    private readonly ILogger<ConfirmOrderTool> _logger;
 
-    public ConfirmOrderTool(IOrderService orders, IPaymentService payments, IMemoryCache cache)
+    public ConfirmOrderTool(IOrderService orders, IPaymentService payments, IUnitOfWork uow, ILogger<ConfirmOrderTool> logger)
     {
         _orders = orders;
         _payments = payments;
-        _cache = cache;
+        _uow = uow;
+        _logger = logger;
     }
 
     public string Name => "confirm_order";
 
     public string Description =>
-        "Confirm a draft order previously created by prepare_order and place the real order. ONLY call this " +
-        "after the user's NEXT message clearly agrees to the summary you already read back to them - never in " +
-        "the same turn you show the summary. Never call this with a draftId you made up.";
+        "Place the real order from the user's current draft order. Takes no id - the system knows which draft is theirs.";
+
+    public string DescribeFor(AiToolContext context) =>
+        "Place the real order from the user's CURRENT ORDER DRAFT (shown to you in that block). Call this RIGHT AWAY " +
+        "when the user's latest message agrees to the draft (e.g. \"ok\", \"chốt\", \"đặt đi\", \"yes\") - do NOT call " +
+        "prepare_order again and do NOT ask for confirmation a second time. Takes no id. Pass paymentMethod only if " +
+        "the user just asked to change it in this message.";
+
+    /// <summary>Chưa có draft lúc đầu lượt → không đưa tool cho LLM (không có gì để xác nhận).</summary>
+    public bool IsAvailable(AiToolContext context) => context.ActiveOrderDraft is not null;
 
     public IReadOnlyDictionary<string, AiToolParameter> Parameters => new Dictionary<string, AiToolParameter>
     {
-        ["draftId"] = new("string", "The draftId returned by prepare_order, if you still have it. " +
-            "Omit it if you no longer have the exact id - the system will use the user's latest prepared draft."),
-        ["paymentMethod"] = new("string", "Payment method (default PayOS). COD must be explicitly requested by the user.", Enum: new[] { "PayOS", "COD" }),
+        ["paymentMethod"] = new("string", "Only if the user asked to change the payment method in their latest message. " +
+            "Omit to use the method saved in the draft.", Enum: new[] { "PayOS", "COD" }),
     };
 
     public async Task<string> ExecuteAsync(AiToolContext context, JsonElement arguments, CancellationToken ct = default)
     {
-        // draftId chỉ sống trong tool result của LƯỢT prepare — tool exchange không lưu vào history nên
-        // sang lượt user xác nhận, model thường không còn id. Fallback: draft MỚI NHẤT user đã prepare
-        // trong phòng này (pointer do prepare_order set, cùng TTL — model không thể "bịa" draft).
-        var requested = ToolArgs.GetGuid(arguments, "draftId");
-        var latestKey = OrderDraftCacheKey.Latest(context.UserId, context.ChatboxId);
+        if (context.ChatboxId is not { } chatboxId)
+            return ToolArgs.Error("Could not determine the chat room.");
 
-        Guid draftId;
-        OrderDraft? draft;
-        if (requested is { } rid && _cache.TryGetValue(OrderDraftCacheKey.For(context.UserId, rid), out draft) && draft is not null)
-        {
-            draftId = rid;
-        }
-        else if (_cache.TryGetValue(latestKey, out Guid latestId)
-            && _cache.TryGetValue(OrderDraftCacheKey.For(context.UserId, latestId), out draft) && draft is not null)
-        {
-            draftId = latestId;
-        }
-        else
-        {
-            return ToolArgs.Error("No active draft found (expired or already used) - call prepare_order again.");
-        }
+        if (context.OrderDraftChangedThisTurn)
+            return ToolArgs.Error("The draft was just created or changed in this turn, so the user has not seen this " +
+                "version yet. No order was created - show the summary and wait for their confirmation in their NEXT message.");
 
-        // 1 lần dùng: mọi lượt gọi sau (kể cả khi lỗi bên dưới) đều báo hết hạn.
-        _cache.Remove(OrderDraftCacheKey.For(context.UserId, draftId));
-        _cache.Remove(latestKey);
-
-        var paymentMethod = PaymentMethod.PayOS;
         var paymentMethodText = ToolArgs.GetString(arguments, "paymentMethod");
-        if (!string.IsNullOrWhiteSpace(paymentMethodText) && !Enum.TryParse(paymentMethodText, true, out paymentMethod))
+        var requestedPaymentMethod = ToolArgs.GetEnum<PaymentMethod>(arguments, "paymentMethod");
+        if (!string.IsNullOrWhiteSpace(paymentMethodText) && requestedPaymentMethod is null)
             return ToolArgs.Error("Invalid 'paymentMethod' - must be 'PayOS' or 'COD'.");
 
+        var now = DateTime.UtcNow;
+        var draft = await _uow.AiOrderDrafts.GetPendingAsync(context.UserId, chatboxId, now, ct);
+        if (draft is null)
+            return ToolArgs.Error("There is no active draft order (expired, discarded or already placed) - call prepare_order to create one.");
+
+        if (!await _uow.AiOrderDrafts.TryClaimAsync(draft.Id, now, ct))
+            return ToolArgs.Error("This draft is already being placed by another request - do not retry; check list_my_orders instead.");
+
+        var paymentMethod = requestedPaymentMethod ?? draft.PaymentMethod;
         var checkoutRequest = new CheckoutRequest
         {
             ShippingAddressId = draft.ShippingAddressId,
@@ -82,24 +82,54 @@ public sealed class ConfirmOrderTool : IAiTool
             PaymentMethod = paymentMethod,
         };
 
-        // Re-validate giá/tồn kho trước khi tạo đơn thật — không tin snapshot cũ trong draft.
-        var previewResult = await _orders.PreviewShippingFeeAsync(context.UserId, checkoutRequest, ct);
-        if (!previewResult.IsSuccess || previewResult.Data is null)
-            return ToolArgs.Error(previewResult.Message ?? "Could not re-validate the order - call prepare_order again.");
-
-        var expectedSubtotal = draft.UnitPriceSnapshot * draft.Quantity;
-        if (previewResult.Data.Subtotal != expectedSubtotal)
+        OrderDetailResponse order;
+        try
         {
-            var newUnitPrice = previewResult.Data.Subtotal / draft.Quantity;
-            return ToolArgs.Error(
-                $"The price changed since prepare_order (was {draft.UnitPriceSnapshot:#,0}đ, now {newUnitPrice:#,0}đ). " +
-                "No order was created - tell the user the new price and call prepare_order again if they still want to proceed.");
+            // Re-validate giá/tồn kho trước khi tạo đơn thật — không tin snapshot cũ trong draft.
+            var previewResult = await _orders.PreviewShippingFeeAsync(context.UserId, checkoutRequest, ct);
+            if (!previewResult.IsSuccess || previewResult.Data is null)
+            {
+                await _uow.AiOrderDrafts.ReleaseClaimAsync(draft.Id, DateTime.UtcNow, ct);
+                return ToolArgs.Error((previewResult.Message ?? "Could not re-validate the order.") +
+                    " No order was created; the draft is kept - tell the user and let them adjust it.");
+            }
+
+            var preview = previewResult.Data;
+            var expectedSubtotal = draft.UnitPriceSnapshot * draft.Quantity;
+            if (preview.Subtotal != expectedSubtotal)
+            {
+                var newUnitPrice = preview.Subtotal / draft.Quantity;
+                await _uow.AiOrderDrafts.ReleaseClaimWithNewPriceAsync(draft.Id, newUnitPrice,
+                    preview.TotalShippingFee - preview.ShippingDiscount, preview.TotalAmount, DateTime.UtcNow, ct);
+                // Draft vừa đổi giá → user phải thấy giá mới trước; chặn confirm lại ngay trong lượt này.
+                context.OrderDraftChangedThisTurn = true;
+                return ToolArgs.Error(
+                    $"The price changed (was {draft.UnitPriceSnapshot:#,0}đ, now {newUnitPrice:#,0}đ; new total " +
+                    $"{preview.TotalAmount:#,0}đ). No order was created - the draft now has the new price. Tell the user " +
+                    "and ask them to confirm again.");
+            }
+
+            var checkoutResult = await _orders.CheckoutAsync(context.UserId, checkoutRequest, ct);
+            if (!checkoutResult.IsSuccess || checkoutResult.Data is null)
+            {
+                await _uow.AiOrderDrafts.ReleaseClaimAsync(draft.Id, DateTime.UtcNow, ct);
+                return ToolArgs.Error((checkoutResult.Message ?? "Could not place the order.") +
+                    " No order was created; the draft is kept - tell the user and let them adjust it.");
+            }
+            order = checkoutResult.Data;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Lỗi bất ngờ trước khi có đơn → trả draft về Pending, đừng để kẹt Confirming rồi bị worker xóa mất.
+            await _uow.AiOrderDrafts.ReleaseClaimAsync(draft.Id, DateTime.UtcNow, CancellationToken.None);
+            throw;
         }
 
-        var checkoutResult = await _orders.CheckoutAsync(context.UserId, checkoutRequest, ct);
-        if (!checkoutResult.IsSuccess || checkoutResult.Data is null)
-            return ToolArgs.Error(checkoutResult.Message ?? "Could not place the order.");
-        var order = checkoutResult.Data;
+        // Đơn đã tạo → xóa draft NGAY (trước khi gọi PayOS) để không thể đặt trùng.
+        await _uow.AiOrderDrafts.DeleteAsync(draft.Id, CancellationToken.None);
+        _logger.LogInformation(
+            "[AiOrder] Draft {DraftId} → order {OrderId} (user {UserId}, item {ProductItemId} x{Quantity}, {PaymentMethod}).",
+            draft.Id, order.Id, context.UserId, draft.ProductItemId, draft.Quantity, paymentMethod);
 
         if (paymentMethod != PaymentMethod.PayOS)
         {

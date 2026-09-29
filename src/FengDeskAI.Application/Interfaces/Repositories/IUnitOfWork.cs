@@ -48,6 +48,9 @@ public interface IUnitOfWork
     IChatboxRepository Chatboxes { get; }
     IChatMessageRepository ChatMessages { get; }
 
+    /// <summary>Draft đơn hàng trợ lý AI (tối đa 1 draft Pending mỗi phòng chat riêng).</summary>
+    IAiOrderDraftRepository AiOrderDrafts { get; }
+
     // CustomerCare
     IReviewRepository Reviews { get; }
 

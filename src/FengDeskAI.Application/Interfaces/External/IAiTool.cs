@@ -21,6 +21,22 @@ public sealed record AiProductRef(Guid Id, string Name);
 public sealed record AiPaymentRef(Guid OrderId, decimal Amount, string CheckoutUrl, string? QrCode, int ExpiresInMinutes);
 
 /// <summary>
+/// Ảnh chụp draft đơn hàng đang mở của phòng TẠI ĐẦU LƯỢT chat (bảng <c>ai_order_drafts</c>).
+/// AiChatService dùng để gắn block "CURRENT ORDER DRAFT" vào prompt và để chọn/mô tả tool đặt hàng.
+/// </summary>
+public sealed record AiOrderDraftRef(
+    Guid ProductId,
+    string ProductName,
+    string? VariantName,
+    int Quantity,
+    decimal UnitPrice,
+    decimal ShippingFee,
+    decimal TotalAmount,
+    string AddressText,
+    string PaymentMethod,
+    DateTime ExpiresAt);
+
+/// <summary>
 /// Ngữ cảnh thực thi tool — scope theo user để không lộ dữ liệu người khác.
 /// <paramref name="ChatboxId"/>: phòng đang hội thoại (dùng cho tool đọc thông tin đối phương theo consent).
 /// <paramref name="IsPrivateRoom"/>: true = phòng riêng user↔AI (SendAsync); false = phòng chung nhiều người
@@ -38,6 +54,15 @@ public sealed record AiToolContext(Guid UserId, string? UserRole, string? UserEm
 
     /// <summary>Thanh toán tạo trong lượt này (confirm_order + PayOS). Null = không có.</summary>
     public AiPaymentRef? Payment { get; set; }
+
+    /// <summary>Draft đơn hàng đang mở lúc BẮT ĐẦU lượt (null = chưa có). Chỉ nạp ở phòng riêng.</summary>
+    public AiOrderDraftRef? ActiveOrderDraft { get; init; }
+
+    /// <summary>
+    /// true khi draft vừa được tạo/sửa/bỏ TRONG lượt này — user chưa thấy phiên bản mới nên
+    /// confirm_order phải từ chối (luật "không confirm cùng lượt với lúc hiện tóm tắt" do code đảm bảo).
+    /// </summary>
+    public bool OrderDraftChangedThisTurn { get; set; }
 }
 
 /// <summary>
@@ -50,9 +75,18 @@ public interface IAiTool
     string Description { get; }
     IReadOnlyDictionary<string, AiToolParameter> Parameters { get; }
     Task<string> ExecuteAsync(AiToolContext context, JsonElement arguments, CancellationToken ct = default);
+
+    /// <summary>Mô tả gửi LLM theo ngữ cảnh lượt chat (vd có/chưa có draft đơn hàng). Mặc định = <see cref="Description"/>.</summary>
+    string DescribeFor(AiToolContext context) => Description;
+
+    /// <summary>Có đưa tool này cho LLM trong lượt này không (vd confirm_order chỉ khi đã có draft). Mặc định true.</summary>
+    bool IsAvailable(AiToolContext context) => true;
 }
 
 public static class AiToolExtensions
 {
     public static AiToolSpec ToSpec(this IAiTool tool) => new(tool.Name, tool.Description, tool.Parameters);
+
+    public static AiToolSpec ToSpec(this IAiTool tool, AiToolContext context)
+        => new(tool.Name, tool.DescribeFor(context), tool.Parameters);
 }

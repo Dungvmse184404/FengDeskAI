@@ -1,6 +1,7 @@
 # ARD — Refactor: AI tool-calling bằng handle ngắn + draft đơn hàng lưu DB
 
-> **Status:** Proposal (chưa code). Bản này đã qua một vòng đối chiếu với code thật — các ràng buộc
+> **Status:** §6 (draft xuống DB) + §7 phần ORDERING **đã triển khai 30/09/2026** — xem [§13](#13-đã-triển-khai--chỗ-lệch-so-với-bản-đề-xuất).
+> Phần handle ngắn (§2–§5, PR 1a/1b) vẫn là Proposal (chưa code). Bản này đã qua một vòng đối chiếu với code thật — các ràng buộc
 > từ interceptor / transaction / query filter ở §6.1 là **đã kiểm chứng**, không phải giả định.
 > **Mục tiêu:** (1) model KHÔNG bao giờ nhìn thấy hay phải chép GUID; (2) draft đơn hàng sống trong
 > DB, chịu được restart server, và **tự xóa cứng** sau khi đặt xong hoặc sau thời gian không dùng.
@@ -557,3 +558,36 @@ Chạy thử để xem model nhỏ có bám mã được không **trước khi**
 - [`ARCHITECTURE.md`](../ARCHITECTURE.md#34-cross-cutting) §3.4 — thêm `AiOrderDraftCleanupWorker` vào danh sách background worker.
 - [`docs/adr/ai-order-tool-design.md`](./ai-order-tool-design.md) — ADR cũ mô tả draft trong cache: đánh dấu superseded bởi file này.
 - [`CLAUDE.md`](../../CLAUDE.md#ai-tools) mục "AI tools" — ghi rõ quy ước handle.
+
+---
+
+## 13. Đã triển khai — chỗ lệch so với bản đề xuất
+
+Triển khai PR 2 (draft xuống DB) **trước** PR 1 (handle) vì lỗi đang gặp ngoài thực tế: AI xác nhận đơn mãi mà
+không đặt. Nguyên nhân: luật prompt "never confirm in the same turn as summary" + tool result không lưu vào
+history ⇒ sang lượt "ok chốt" model không chắc còn draft, gọi lại `prepare_order`, lượt đó lại có summary nên
+không được confirm ⇒ hỏi xác nhận vô hạn.
+
+| Hạng mục | Bản đề xuất | Đã làm | Lý do |
+|---|---|---|---|
+| Model nhớ draft | chỉ bỏ `draftId` | + block **`CURRENT ORDER DRAFT`** gắn vào prompt mỗi lượt (`AiOrderDraftPrompt`), đặt sau history | Draft là nguồn sự thật, không phụ thuộc cửa sổ `MaxHistoryTurns` (VPS = 4) |
+| Luật "không confirm cùng lượt" | giữ trong prompt | **chuyển sang code**: `confirm_order` chỉ hiện khi đầu lượt đã có draft (`IAiTool.IsAvailable`) + từ chối nếu `AiToolContext.OrderDraftChangedThisTurn` | Luật trong prompt chính là thứ gây vòng lặp |
+| Sửa draft | DELETE + INSERT mỗi lần prepare | `prepare_order` **sửa tại chỗ**, tham số thiếu lấy từ draft (đổi số lượng chỉ cần `quantity`) | User đổi 1 thứ thì không phải chọn lại mọi thứ |
+| Bỏ draft | — | tool mới **`discard_order_draft`** | Yêu cầu user |
+| Mô tả tool | tĩnh | `IAiTool.DescribeFor(ctx)`: `prepare_order` chuyển sang "EDIT…", `confirm_order` nói rõ "user đồng ý → gọi ngay" | Yêu cầu user |
+| Giá đổi / checkout lỗi | xóa draft | **trả về Pending** (giá đổi thì kèm giá mới + chặn confirm lại trong lượt) | User không mất những gì đã chọn |
+| Cột thêm | — | `product_id`, `payment_method`, snapshot hiển thị (`product_name`, `variant_name`, `address_text`, `shipping_fee_snapshot`, `total_amount_snapshot`) | Dựng prompt không cần join (DB VPS ~311ms/query); COD không bị quên giữa các lượt |
+| `chatbox_id` | nullable | NOT NULL | Draft chỉ tồn tại ở phòng riêng |
+| TTL | 15' tính từ lúc tạo | **60'**, đặt lại mỗi lần sửa | Draft giờ nằm trong prompt; 15' quá ngắn cho hội thoại tư vấn |
+| Rewind | — | `RewindAsync` xóa draft có `updated_at >=` mốc tin bị rewind | Tránh AI "nhớ" draft thuộc đoạn hội thoại đã cắt |
+| Index | `(user, chatbox, status, expires_at)` | **unique partial** `(user_id, chatbox_id) WHERE status='Pending' AND NOT is_deleted` + `(status, expires_at)` | DB tự đảm bảo 1 draft mở mỗi phòng |
+
+Prompt cũng được soát lại cùng đợt: ORDERING PROTOCOL chỉ gửi ở phòng riêng (phòng chung nhận 1 dòng),
+mục "SECURITY & COMPLIANCE — không cần kiểm duyệt" thay bằng **PRIVACY** (tôn trọng field chưa chia sẻ), widget
+phòng nhỏ dùng gạch đầu dòng thay bảng.
+
+Test: `tests/FengDeskAI.UnitTests/AiOrderDraftToolTests.cs` (tool + prompt), `tests/FengDeskAI.ApiTests/Endpoints/AiOrderDraftRepositoryTests.cs`
+(race `TryClaim`, unique index, rewind, purge — Postgres thật).
+
+**Còn nợ:** ERD drawio chưa thêm bảng `ai_order_drafts`; PR 1a/1b (handle) chưa làm.
+
