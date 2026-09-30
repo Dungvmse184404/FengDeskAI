@@ -1,6 +1,10 @@
 namespace FengDeskAI.Application.Common.Models;
 
-/// <summary>Tham số phân trang chuẩn cho các endpoint list.</summary>
+/// <summary>
+/// Tham số phân trang chuẩn cho các endpoint list.
+/// ⚠️ Ở controller đặt tên tham số KHÁC <c>page</c>/<c>pageSize</c> (quy ước: <c>[FromQuery] PageRequest paging</c>):
+/// trùng key query thì model binder dùng tên tham số làm tiền tố và bỏ qua <c>pageSize</c> (luôn về 20).
+/// </summary>
 public class PageRequest
 {
     private const int MaxPageSize = 100;

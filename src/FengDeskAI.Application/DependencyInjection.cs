@@ -1,4 +1,4 @@
-﻿using FengDeskAI.Application.Common.Sanitization;
+using FengDeskAI.Application.Common.Sanitization;
 using FengDeskAI.Application.Features.Catalog.Mappings;
 using FengDeskAI.Application.Features.Catalog.Services;
 using FengDeskAI.Application.Features.Chat.Mappings;
@@ -45,6 +45,7 @@ public static class DependencyInjection
             cfg.AddProfile<VendorMappingProfile>();
             cfg.AddProfile<CatalogMappingProfile>();
             cfg.AddProfile<SalesMappingProfile>();
+            cfg.AddProfile<FengDeskAI.Application.Features.Promotion.Mappings.PromotionMappingProfile>();
             cfg.AddProfile<ReturnMappingProfile>();
             cfg.AddProfile<ShippingMappingProfile>();
             cfg.AddProfile<ReviewMappingProfile>();
@@ -91,6 +92,11 @@ public static class DependencyInjection
         services.AddScoped<IReturnService, ReturnService>();
         services.AddScoped<IRefundService, RefundService>();
         services.AddScoped<IVendorLiabilityService, VendorLiabilityService>();
+        services.AddScoped<ILedgerService, LedgerService>();
+        services.AddScoped<FengDeskAI.Application.Features.Vendor.Services.IPlatformFeeService,
+            FengDeskAI.Application.Features.Vendor.Services.PlatformFeeService>();
+        services.AddScoped<FengDeskAI.Application.Features.Promotion.Services.IVoucherService,
+            FengDeskAI.Application.Features.Promotion.Services.VoucherService>();
         services.AddScoped<FengDeskAI.Application.Features.Vendor.Services.IPayoutCreditService,
             FengDeskAI.Application.Features.Vendor.Services.PayoutCreditService>();
 
@@ -132,6 +138,7 @@ public static class DependencyInjection
         // Tool có tác dụng phụ (tạo đơn) — chỉ enable ở phòng riêng, xem AiChatService.PrivateRoomOnlyTools.
         services.AddScoped<IAiTool, PrepareOrderTool>();
         services.AddScoped<IAiTool, ConfirmOrderTool>();
+        services.AddScoped<IAiTool, DiscardOrderDraftTool>();
 
         services.AddScoped<IAiChatService, AiChatService>();
 

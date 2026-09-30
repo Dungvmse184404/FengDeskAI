@@ -198,9 +198,13 @@ public sealed class RecommendationScorer : IRecommendationScorer
                     : $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - trục cá nhân đang tắt "
                         + $"nên cân nhắc ở mức đầy đủ {userPenalty:0.00}.";
 
+                // `cautions` nói SỰ THẬT và ĐỘ LỚN, không nói KẾT LUẬN. Kết luận là việc của con số cuối —
+                // mà khoản trừ này ĐÃ nằm trong con số đó rồi. Thêm "chưa hợp với bạn" vào đây là trừ hai lần
+                // trước mắt người đọc: họ thấy "Phù hợp 72 %" rồi ngay dưới là một câu bảo chưa hợp, và hai
+                // lời khuyên đánh nhau. Nói rõ "đã trừ vào điểm" thì một sự thật chỉ được đếm đúng một lần.
                 cautions.Add(scaled
-                    ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - chưa hợp với bạn ({userPenalty:0.00})."
-                    : $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - nên cân nhắc"
+                    ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - đã trừ {userPenalty:0.00} vào điểm ở trên."
+                    : $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - đã trừ {userPenalty:0.00} vào điểm ở trên"
                         + (ctx.Scope == WorkspaceScope.Private ? " (không gian riêng tư)." : " (không gian dùng chung)."));
             }
             else if (policy.Target == ScoringTarget.PersonalNeed
@@ -227,7 +231,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
 
                 cautions.Add(
                     $"Vật phẩm có {clashShare:P0} {clashing} - khắc bản mệnh "
-                    + $"{ElementSemantics.ElementName(personalDominant)} của bạn, phần này chưa hợp với bạn.");
+                    + $"{ElementSemantics.ElementName(personalDominant)} của bạn; đã trừ {userPenalty:0.00} vào điểm ở trên.");
             }
             else if (!scaled)
             {
@@ -268,11 +272,16 @@ public sealed class RecommendationScorer : IRecommendationScorer
         var ruleScoreVector = direction.RuleScoreVector;
         var combinedDirection = direction.CombinedDirection;
 
-        // v3.6 — nhánh Carry đo "phủ nhu cầu" trừ "rơi vào kỵ thần" thay cho tích trong (ADR personal-need-v3.6 §2.2):
-        //   n̂·p với hai vector Σ=1 không âm kẹt trần max(n̂) = 0.6 — vật khớp hoàn hảo chỉ 76%. Σ min(n̂, p)
-        //   khớp hoàn hảo = 1, cấp thừa không cộng thêm (như "thêm thừa" bên phòng); phần rơi vào kỵ thần
-        //   trừ thẳng theo tỉ trọng. Luồng phòng giữ ĝ·p.
-        decimal? needCover = null, avoidHit = null;
+        // CẢ HAI nhánh đo "phủ nhu cầu" trừ "phần lệch" thay cho tích trong. Lý do chung: vector mục tiêu
+        // có Σ phía dương đúng bằng 1 và p là simplex, nên tích trong LÀ một phép trung bình có trọng số —
+        // mà trung bình không vượt nổi phần tử lớn nhất, tức trần của sản phẩm bằng chính đỉnh khai báo của
+        // nó. Hệ quả: engine thưởng cho việc khai thiếu hành.
+        //   v3.6 (Carry, ADR personal-need-v3.6 §2.2):  Σ min(n̂, p) − Σ_{kỵ} p
+        //   v3.7 (phòng, ADR workspace-gap-cover-v3.7): Σ min(ĝ⁺, p) − Σ min(ĝ⁻, p)
+        // Phía trừ khác nhau vì bên Carry kỵ thần là một TẬP (có/không) còn bên phòng hành thừa có MỨC ĐỘ.
+        // Với sản phẩm thuần một hành, cả hai công thức trùng khít tích trong cũ (§2.1a) — đổi này không
+        // dịch thang điểm, chỉ trả lại phần bị mất cho sản phẩm khai đủ hành.
+        decimal? needCover = null, avoidHit = null, gapCover = null, gapOverfill = null;
         decimal gapScore;
         if (policy.Target == ScoringTarget.PersonalNeed)
         {
@@ -282,7 +291,9 @@ public sealed class RecommendationScorer : IRecommendationScorer
         }
         else
         {
-            gapScore = Math.Clamp(normalizedGap.Dot(product.Vector), -1m, 1m);
+            gapCover = NeedCover(normalizedGap, product.Vector);
+            gapOverfill = Overfill(normalizedGap, product.Vector);
+            gapScore = Math.Clamp(gapCover.Value - gapOverfill.Value, -1m, 1m);
         }
         DescribeTarget(policy.Target, target, product.Vector, productDominant, gapScore, facts, cautions);
         if (avoidHit is > 0m)
@@ -291,7 +302,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 .Where(x => x.Value > 0m && ctx.PersonalAvoid.Contains(x.Element))
                 .OrderByDescending(x => x.Value)
                 .Select(x => ElementSemantics.ElementName(x.Element)));
-            cautions.Add($"{avoidHit.Value:P0} vật phẩm là {avoiding} - hành bạn nên tránh, nên chưa thật hợp với bạn.");
+            cautions.Add($"{avoidHit.Value:P0} vật phẩm là {avoiding} - hành bạn nên tránh; phần này đã trừ vào điểm ở trên.");
         }
 
         // ── Bước 2d (v3.1) — trộn trục cá nhân, CHỈ cho nhánh chấm theo phòng ──
@@ -309,16 +320,27 @@ public sealed class RecommendationScorer : IRecommendationScorer
         // ── Bước 2e (v3.4 · N3) — trục nghề, cho CẢ hai nhánh ──
         //    blended = (1 − Wp − Wo)·gap + Wp·personal + Wo·occupation. Ở Carry, Wp = 0.
         decimal wo = occupation?.Weight ?? 0m;
-        decimal? occupationScore = occupation is { } axis
-            ? Math.Clamp(axis.Direction.Dot(product.Vector), -1m, 1m)
-            : null;
+        // v3.7 — trục nghề đo giống hệt trục phòng, vì `ô` được dựng ĐÚ NG THEO `ĝ` (nửa-L1, Σô⁺ = 1):
+        // cùng cấu trúc thì cùng lỗi — tích trong là một phép trung bình, trần rơi về `max p[e]`. Chữa mỗi
+        // trục phòng thì 20% điểm còn lại vẫn kẹt trần cũ.
+        // Lưu ý: sau `ClampAgainstDestiny`, `Σô⁺` có thể < 1 (hành nghề cần nhưng khắc mệnh bị chặn về 0).
+        // Đó là chủ ý: sức chứa của "cốc nghề" giảm đi đúng phần nghề không được phép kéo — cùng ý với
+        // ghi chú "không chuẩn hoá lại sau clamp" ở OccupationAxis, và `ClampNoteVi` vẫn nói ra cho user.
+        decimal? occupationCover = null, occupationOverfill = null;
+        decimal? occupationScore = null;
+        if (occupation is { } axis)
+        {
+            occupationCover = NeedCover(axis.Direction, product.Vector);
+            occupationOverfill = Overfill(axis.Direction, product.Vector);
+            occupationScore = Math.Clamp(occupationCover.Value - occupationOverfill.Value, -1m, 1m);
+        }
 
         decimal blended = (1m - wp - wo) * gapScore
             + wp * (personalScore ?? 0m)
             + wo * (occupationScore ?? 0m);
 
-        if (occupation is { } occ && occupationScore is { } os)
-            DescribeOccupationAffinity(occ, product.Vector, os, facts, cautions);
+        if (occupation is { } occ && occupationScore is { } os2)
+            DescribeOccupationAffinity(occ, product.Vector, os2, facts, cautions);
 
         // ── Bước 3 — Directional Validation (bỏ qua với vật mang theo người / cây) ──
         var (dirPenalty, placementHint) = policy.Direction == DirectionMode.Soft
@@ -359,7 +381,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 : ElementDirection.PersonalTargetOf(ctx.AdjustedIdeal, mine2, ctx.PersonalWeight),
             Components: BuildComponents(
                 ctx, policy, product, normalizedGap, gapScore, personalScore, destiny, occupation, occupationScore,
-                needCover, avoidHit, ruleScoreVector),
+                needCover, avoidHit, ruleScoreVector, gapCover, gapOverfill),
             Penalties: BuildPenalties(
                 ctx, userPenalty, userPenaltyCode, userPenaltyLabel, userPenaltyReason,
                 userPenaltyParam, userPenaltyFactor, userPenaltyFactorLabel,
@@ -378,7 +400,11 @@ public sealed class RecommendationScorer : IRecommendationScorer
                 ? Enum.GetValues<FengShuiElement>().Where(ctx.PersonalAvoid.Contains).ToList()
                 : null,
             PersonalNeedCover: needCover,
-            PersonalAvoidHit: avoidHit);
+            PersonalAvoidHit: avoidHit,
+            GapCover: gapCover,
+            GapOverfill: gapOverfill,
+            OccupationCover: occupationCover,
+            OccupationOverfill: occupationOverfill);
 
         return new ScoredProduct(product.ProductId, score, facts, cautions, placementHint, breakdown);
     }
@@ -390,7 +416,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
         ScoringContext ctx, PlacementPolicy policy, ProductFacts product,
         ElementVector normalizedGap, decimal gapScore, decimal? personalScore, FengShuiElement? destiny,
         OccupationAxis? occupation, decimal? occupationScore,
-        decimal? needCover = null, decimal? avoidHit = null, ElementVector? ruleScore = null)
+        decimal? needCover = null, decimal? avoidHit = null, ElementVector? ruleScore = null,
+        decimal? gapCover = null, decimal? gapOverfill = null)
     {
         decimal wo = occupation?.Weight ?? 0m;
         var components = new List<ScoreComponent>();
@@ -423,8 +450,11 @@ public sealed class RecommendationScorer : IRecommendationScorer
             components.Add(new ScoreComponent(
                 ScoreComponentCodes.GapScore, SignedLabel(gapScore, "nhu cầu của phòng"),
                 Value: gapScore, Weight: 1m - wp - wo, Contribution: (1m - wp - wo) * gapScore,
-                ReasonVi: DescribeVectorMatch(
-                    normalizedGap, product.Vector, "hành phòng đang thiếu", "hành phòng đã thừa", gapScore)));
+                // v3.7 — câu giải thích phải kể đúng phép tính đang chạy: "phủ được bao nhiêu phần
+                // nhu cầu", không phải "ĝ nhân p". DescribeVectorMatch vẫn dùng cho hai trục còn lại
+                // (r, ô) vì chúng vẫn là tích trong thật.
+                ReasonVi: DescribeCoverMatch(
+                    normalizedGap, product.Vector, "phòng", "hành phòng đã thừa")));
 
             if (personalScore is { } ps && destiny is { } mine)
             {
@@ -449,8 +479,8 @@ public sealed class RecommendationScorer : IRecommendationScorer
             components.Add(new ScoreComponent(
                 ScoreComponentCodes.OccupationScore, SignedLabel(os, $"nghề {axis.NameVi}"),
                 Value: os, Weight: wo, Contribution: wo * os,
-                ReasonVi: DescribeVectorMatch(
-                    axis.Direction, product.Vector, "hành nghề bạn cần", "hành nghề bạn nên tránh", os)
+                ReasonVi: DescribeCoverMatch(
+                    axis.Direction, product.Vector, $"nghề {axis.NameVi}", "hành nghề bạn nên tránh")
                     + ClampNoteVi(axis, destiny)));
         }
 
@@ -596,9 +626,10 @@ public sealed class RecommendationScorer : IRecommendationScorer
         }
         else if (personalScore < -0.05m)
         {
+            // Không có penalty riêng ở nhánh này — nó đi qua số hạng `r·p`, vốn đã là một dòng waterfall.
             cautions.Add(relation == FengShuiRelation.BiKhac
-                ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} - chưa hợp với bạn."
-                : $"Hành {ElementSemantics.ElementName(productDominant)} làm hao khí bản mệnh {ElementSemantics.ElementName(personalDominant)} - hợp ở mức vừa phải.");
+                ? $"Hành {ElementSemantics.ElementName(productDominant)} khắc bản mệnh {ElementSemantics.ElementName(personalDominant)} của bạn - số hạng bản mệnh ở trên đã tính theo đó ({personalScore:+0.00;-0.00})."
+                : $"Hành {ElementSemantics.ElementName(productDominant)} làm hao khí bản mệnh {ElementSemantics.ElementName(personalDominant)} của bạn ({personalScore:+0.00;-0.00}).");
         }
     }
 
@@ -663,7 +694,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
             // với gap phòng; giữ lời văn riêng phòng khi không có hành thừa nào khớp.
             var worsened = topExcess.Where(e => productVector[e] > 0m).ToList();
             if (worsened.Count > 0)
-                cautions.Add($"Bơm thêm hành {string.Join("/", worsened.Select(ElementSemantics.ElementName))} vốn đã thừa trong phòng - nên cân nhắc.");
+                cautions.Add($"Bơm thêm hành {string.Join("/", worsened.Select(ElementSemantics.ElementName))} vốn đã thừa trong phòng - phần này đã trừ vào điểm ở trên.");
             else
                 cautions.Add(personal
                     ? "Hành của vật phẩm chưa khớp hành bản mệnh bạn đang cần."
@@ -740,6 +771,24 @@ public sealed class RecommendationScorer : IRecommendationScorer
         return Math.Clamp(sum, 0m, 1m);
     }
 
+    /// <summary>
+    /// v3.7 — phần sản phẩm đổ vào hành phòng ĐÃ THỪA: <c>Σ min(ĝ⁻[e], p[e])</c>.
+    /// <para>
+    /// Đối xứng với <see cref="NeedCover"/> nhưng đọc phía ÂM của cùng một vector. Dùng <c>min</c> chứ
+    /// không phải <c>Σ p[e]</c> (như <see cref="AvoidHit"/> bên Carry) vì "phòng đã thừa" là một mức độ
+    /// chứ không phải một tập có/không: cấp 0.4 Hỏa vào phòng chỉ thừa 0.1 Hỏa thì phần vượt quá không
+    /// làm mọi thứ tệ thêm — nó chỉ là phần nước rót ra ngoài cốc.
+    /// </para>
+    /// </summary>
+    internal static decimal Overfill(ElementVector direction, ElementVector productVector)
+    {
+        decimal sum = 0m;
+        foreach (var (element, value) in direction.Enumerate())
+            if (value < 0m)
+                sum += Math.Min(-value, productVector[element]);
+        return Math.Clamp(sum, 0m, 1m);
+    }
+
     /// <summary>v3.6 — phần sản phẩm rơi vào kỵ thần: <c>Σ_{e ∈ kỵ} p[e]</c>.</summary>
     internal static decimal AvoidHit(IReadOnlySet<FengShuiElement> avoid, ElementVector productVector)
     {
@@ -748,6 +797,47 @@ public sealed class RecommendationScorer : IRecommendationScorer
             if (value > 0m && avoid.Contains(element))
                 sum += value;
         return Math.Clamp(sum, 0m, 1m);
+    }
+
+    /// <summary>
+    /// Câu giải thích cho mọi trục đo theo kiểu "phủ" (v3.7): phủ được hành nào / còn thiếu hành nào /
+    /// cấp dư vào hành nào. Dùng chung cho <c>GAP_SCORE</c> (<paramref name="subject"/> = "phòng") và
+    /// <c>OCCUPATION_SCORE</c> ("nghề Tài chính") — một câu văn cho một phép tính, hai dòng waterfall đọc
+    /// giống nhau. Cùng bố cục với <see cref="DescribeNeedCover"/> bên Carry.
+    /// </summary>
+    /// <param name="subject">Chủ thể đang có nhu cầu — "phòng", "nghề Tài chính".</param>
+    /// <param name="unwantedLabel">Nhãn vế trừ — "hành phòng đã thừa", "hành nghề bạn nên tránh".</param>
+    internal static string DescribeCoverMatch(
+        ElementVector direction, ElementVector productVector, string subject, string unwantedLabel)
+    {
+        var covered = direction.Enumerate()
+            .Where(x => x.Value > 0m && productVector[x.Element] > 0m)
+            .OrderByDescending(x => Math.Min(x.Value, productVector[x.Element]))
+            .Select(x => $"{ElementSemantics.ElementName(x.Element)} {Math.Min(x.Value, productVector[x.Element]):0.00}/{x.Value:0.00}")
+            .ToList();
+        var missing = direction.Enumerate()
+            .Where(x => x.Value > 0m && productVector[x.Element] <= 0m)
+            .OrderByDescending(x => x.Value)
+            .Select(x => $"{ElementSemantics.ElementName(x.Element)} {x.Value:0.00}")
+            .ToList();
+        var over = direction.Enumerate()
+            .Where(x => x.Value < 0m && productVector[x.Element] > 0m)
+            .OrderByDescending(x => Math.Min(-x.Value, productVector[x.Element]))
+            .Select(x => $"{ElementSemantics.ElementName(x.Element)} {Math.Min(-x.Value, productVector[x.Element]):0.00}")
+            .ToList();
+
+        var tail = over.Count > 0 ? $" Sản phẩm cấp thêm {string.Join(", ", over)} - {unwantedLabel}." : "";
+
+        if (covered.Count == 0)
+            return over.Count > 0
+                ? $"Sản phẩm chưa mang hành nào {subject} đang cần.{tail}"
+                : $"Hành của sản phẩm trung tính với nhu cầu của {subject}.";
+
+        var text = $"Đáp ứng {string.Join(", ", covered)} phần {subject} đang cần";
+        text += missing.Count > 0
+            ? $"; {subject} còn cần thêm {string.Join(", ", missing)}."
+            : $" - đúng trọn nhu cầu của {subject}.";
+        return text + tail;
     }
 
     private static string DescribeNeedCover(ElementVector need, ElementVector productVector)
@@ -779,7 +869,7 @@ public sealed class RecommendationScorer : IRecommendationScorer
         var avoidVi = string.Join(", ", Enum.GetValues<FengShuiElement>().Where(avoid.Contains).Select(ElementSemantics.ElementName));
         return hits.Count == 0
             ? $"Hành bạn nên tránh là {avoidVi} - vật này không mang hành nào trong số đó."
-            : $"Hành bạn nên tránh là {avoidVi}; vật này có {string.Join(", ", hits)} nên phần đó chưa hợp với bạn.";
+            : $"Hành bạn nên tránh là {avoidVi}; vật này có {string.Join(", ", hits)} - đó là phần bị trừ ở dòng này.";
     }
 
     /// <summary>

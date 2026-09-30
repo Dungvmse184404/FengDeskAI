@@ -22,12 +22,26 @@ public class Order : BaseEntity
 
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }
+
+    /// <summary>Tổng giảm phí ship từ voucher. Khách trả <c>TotalAmount = Subtotal + TotalShippingFee − ShippingDiscount</c>.</summary>
+    public decimal ShippingDiscount { get; set; }
+
+    /// <summary>Mã voucher đã áp (chụp lại để hiển thị); chi tiết lượt dùng ở <c>voucher_redemptions</c>.</summary>
+    public string? VoucherCode { get; set; }
+
+    /// <summary>
+    /// Tỉ lệ phí sàn chốt lúc đặt — cũng là tỉ lệ đã dùng để tính trần voucher. Mọi delivery của đơn (kể cả
+    /// delivery sinh muộn lúc webhook PayOS) lấy đúng số này, nên Manager đổi phí giữa chừng không làm lệch đơn.
+    /// </summary>
+    public decimal CommissionRate { get; set; }
+
     public decimal TotalAmount { get; set; }
     public string? Note { get; set; }
 
     public UserAddress ShippingAddress { get; set; } = null!;
     public ICollection<OrderItem> Items { get; set; } = new List<OrderItem>();
     public ICollection<Delivery> Deliveries { get; set; } = new List<Delivery>();
+    public ICollection<OrderStoreCharge> StoreCharges { get; set; } = new List<OrderStoreCharge>();
     public ICollection<OrderStatusLog> StatusLogs { get; set; } = new List<OrderStatusLog>();
 
     [System.ComponentModel.DataAnnotations.Schema.NotMapped]

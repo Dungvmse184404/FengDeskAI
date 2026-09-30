@@ -33,7 +33,8 @@ public class CartItemConfiguration : IEntityTypeConfiguration<CartItem>
         builder.HasOne(i => i.ProductItem)
             .WithMany()
             .HasForeignKey(i => i.ProductItemId)
-            .OnDelete(DeleteBehavior.Restrict);
+            // Xoá cứng sản phẩm ⇒ dòng giỏ đi theo.
+            .OnDelete(DeleteBehavior.Cascade);
 
         builder.HasQueryFilter(i => !i.IsDeleted);
     }

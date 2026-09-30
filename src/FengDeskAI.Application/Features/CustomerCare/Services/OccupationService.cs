@@ -101,7 +101,12 @@ public sealed class OccupationService : IOccupationService
             ScoringParamCodes.OccupationWeight, occupation.Code, occupation.NameVi);
         if (axis is null) return null;
 
-        decimal score = Math.Round(Math.Clamp(axis.RawDirection.Dot(productVector), -1m, 1m), 3);
+        // v3.7 — phải đổi CÙNG LÚ C với `OCCUPATION_SCORE` trong engine: điểm ở đây và dòng waterfall
+        // là CÙNG MỘT con số theo thiết kế (ADR occupation-product-fit-v1 §1, "một con số duy nhất").
+        // Đổi một bên thì chip trang sản phẩm và breakdown nói hai số khác nhau cho cùng một việc.
+        decimal raw = RecommendationScorer.NeedCover(axis.RawDirection, productVector)
+            - RecommendationScorer.Overfill(axis.RawDirection, productVector);
+        decimal score = Math.Round(Math.Clamp(raw, -1m, 1m), 3);
         return new OccupationFitRow
         {
             Code = occupation.Code,
@@ -110,8 +115,8 @@ public sealed class OccupationService : IOccupationService
             DisplayPercent = ScoreBreakdownMapping.DisplayPercentOf(score),
             TierVi = ScoreBreakdownMapping.TierVi(score),
             Direction = ScoreBreakdownMapping.Rows(axis.RawDirection),
-            ReasonVi = RecommendationScorer.DescribeVectorMatch(
-                axis.RawDirection, productVector, $"hành nghề {occupation.NameVi} cần", $"hành nghề {occupation.NameVi} nên tránh"),
+            ReasonVi = RecommendationScorer.DescribeCoverMatch(
+                axis.RawDirection, productVector, $"nghề {occupation.NameVi}", $"hành nghề {occupation.NameVi} nên tránh"),
         };
     }
 }

@@ -69,6 +69,29 @@ public interface IProductRepository : IGenericRepository<Product>
     Task AddItemAsync(ProductItem item, CancellationToken ct = default);
     void RemoveItem(ProductItem item);
 
+    /// <summary>
+    /// Sản phẩm (hoặc riêng một biến thể) còn nằm trong đơn CHƯA ĐÓNG không: đơn chưa giao xong, đã giao nhưng
+    /// còn trong khoảng đổi trả (<paramref name="deliveredAfter"/>), hay đang có yêu cầu trả/đổi hàng chưa kết thúc.
+    /// Còn ⇒ không cho xoá (hoàn kho, hoàn hàng, đổi hàng vẫn cần biến thể). Đơn đã đóng thì xoá thoải mái — đơn
+    /// hiển thị từ cột chụp lúc đặt. Tính cả biến thể đã xoá mềm.
+    /// </summary>
+    Task<bool> HasOpenOrdersAsync(Guid productId, Guid? itemId, DateTime deliveredAfter, CancellationToken ct = default);
+
+    /// <summary>Tìm cả sản phẩm đã bị người bán xoá mềm — Manager vẫn xoá cứng được.</summary>
+    Task<Product?> GetByIdIncludingDeletedAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>
+    /// XOÁ CỨNG sản phẩm bằng một câu DELETE (bỏ qua cơ chế xoá mềm). DB tự xử lý phần còn lại: biến thể, ảnh, thuộc
+    /// tính, dòng giỏ bị xoá theo; món trong đơn và đánh giá chỉ mất liên kết (SET NULL) — nội dung còn nguyên.
+    /// </summary>
+    Task HardDeleteAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>Các biến thể còn sống của sản phẩm (tracked) — để xoá mềm theo sản phẩm.</summary>
+    Task<List<ProductItem>> GetItemsForUpdateAsync(Guid productId, CancellationToken ct = default);
+
+    /// <summary>Gỡ các biến thể khỏi mọi giỏ hàng (xoá mềm dòng giỏ). Chạy thẳng câu UPDATE — gọi trong transaction.</summary>
+    Task RemoveFromCartsAsync(IReadOnlyCollection<Guid> itemIds, CancellationToken ct = default);
+
     // Quản lý ảnh
     Task<ProductImage?> GetImageAsync(Guid productId, Guid imageId, CancellationToken ct = default);
     Task<List<ProductImage>> ListImagesAsync(Guid productId, CancellationToken ct = default);

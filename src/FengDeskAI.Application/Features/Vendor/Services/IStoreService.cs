@@ -26,9 +26,11 @@ public interface IStoreService
 
     /// <summary>Các store user hiện tại đồng sở hữu (kênh người bán).</summary>
     Task<IServiceResult<List<StoreResponse>>> GetMineAsync(Guid userId, CancellationToken ct = default);
+    /// <summary>Số dư sổ cái các cửa hàng user sở hữu — hai truy vấn bất kể số cửa hàng.</summary>
+    Task<IServiceResult<MyStoreBalanceResponse>> GetMyBalanceAsync(Guid userId, CancellationToken ct = default);
 
     // ===== Owner (đồng sở hữu — marketplace) =====
-    Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default);
+    Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default);
     /// <summary>Thêm đồng sở hữu (owner hiện tại hoặc Admin). Tự cấp flag GardenOwner cho user được thêm.</summary>
     Task<IServiceResult<StoreOwnerResponse>> AddOwnerAsync(Guid id, Guid actorUserId, bool isAdmin, AddOwnerRequest request, CancellationToken ct = default);
     /// <summary>Gỡ đồng sở hữu (owner hiện tại hoặc Admin). Không gỡ được owner primary.</summary>

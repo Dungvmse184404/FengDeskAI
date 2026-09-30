@@ -154,8 +154,10 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
                             || i.Delivery.Status == Domain.Enums.Sales.DeliveryStatus.Delivered))
             .Select(i => new
             {
-                i.ProductItem.ProductId,
-                i.ProductItem.Product.Name,
+                // Cột chụp: món của sản phẩm đã xoá vẫn vào thống kê. Tên ưu tiên tên sản phẩm hiện tại (không kèm
+                // biến thể); sản phẩm đã xoá thì lấy tên chụp lúc đặt.
+                ProductId = i.ProductId ?? i.ProductItem!.ProductId,
+                Name = i.ProductItem!.Product.Name ?? i.ProductName,
                 i.OrderId,
                 Value = i.UnitPrice * i.Quantity,
                 i.Quantity,
@@ -171,11 +173,13 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
                 i.ProductId, i.Name, i.OrderId, i.Value, i.Quantity, i.DeliveryFee, i.DeliverySubtotal)))
             .ToList();
 
-        // COD đang giao = tiền CHƯA thu ⇒ cùng lớp với đơn online chưa trả, không phải lớp "đã thanh toán".
-        var codRows = GroupItemsByProduct(deliveryItemFacts
+        // COD đang giao = tiền CHƯA thu ⇒ cùng lớp "Ordered" với đơn online chưa trả; gộp chung với nhóm đó ở
+        // dưới (một lần GroupBy) — gộp riêng rồi nối lại sẽ ra HAI dòng cho cùng (sản phẩm × Ordered).
+        var codFacts = deliveryItemFacts
             .Where(x => x.DeliveryStatus != Domain.Enums.Sales.DeliveryStatus.Delivered
                         && x.PaymentMethod == Domain.Enums.Payment.PaymentMethod.COD)
-            .Select(x => x.Fact), "Ordered");
+            .Select(x => x.Fact)
+            .ToList();
         var activeRows = GroupItemsByProduct(deliveryItemFacts
             .Where(x => x.DeliveryStatus != Domain.Enums.Sales.DeliveryStatus.Delivered
                         && x.PaymentMethod == Domain.Enums.Payment.PaymentMethod.PayOS)
@@ -191,11 +195,11 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             .Where(i => i.Order.Status == Domain.Enums.Sales.OrderStatus.Pending
                         && i.Order.PaymentMethod == Domain.Enums.Payment.PaymentMethod.PayOS
                         && i.DeliveryId == null
-                        && i.ProductItem.Product.GardenStoreId == storeId)
+                        && (i.GardenStoreId ?? i.ProductItem!.Product.GardenStoreId) == storeId)
             .Select(i => new
             {
-                i.ProductItem.ProductId,
-                i.ProductItem.Product.Name,
+                ProductId = i.ProductId ?? i.ProductItem!.ProductId,
+                Name = i.ProductItem!.Product.Name ?? i.ProductName,
                 i.OrderId,
                 Value = i.UnitPrice * i.Quantity,
                 i.Quantity,
@@ -206,8 +210,9 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
         var awaitingOrders = awaitingItems.Select(i => i.OrderId).Distinct().Count();
         var awaitingValue = awaitingItems.Sum(i => i.Value) + activeCod.Sum(d => d.Subtotal);
         // Chưa có delivery ⇒ chưa có phí ship để phân bổ, truyền 0.
-        var awaitingRows = GroupItemsByProduct(awaitingItems
-            .Select(i => new ItemFact(i.ProductId, i.Name, i.OrderId, i.Value, i.Quantity, 0m, 0m)), "Ordered");
+        var orderedRows = GroupItemsByProduct(awaitingItems
+            .Select(i => new ItemFact(i.ProductId, i.Name, i.OrderId, i.Value, i.Quantity, 0m, 0m))
+            .Concat(codFacts), "Ordered");
 
         // [4/8] Hoàn tiền: đi qua ReturnItem (có sản phẩm + số lượng thật sự bị trả), chỉ tính ticket đã hoàn xong.
         var refundedRows = await _context.Set<Domain.Entities.Sales.ReturnItem>()
@@ -215,7 +220,11 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             .Where(ri => ri.ReturnRequest.Delivery.GardenStoreId == storeId
                          && ri.ReturnRequest.Refund != null
                          && ri.ReturnRequest.Refund.Status == Domain.Enums.Payment.RefundStatus.Completed)
-            .GroupBy(ri => new { ri.OrderItem.ProductItem.ProductId, ri.OrderItem.ProductItem.Product.Name })
+            .GroupBy(ri => new
+            {
+                ProductId = ri.OrderItem.ProductId ?? ri.OrderItem.ProductItem!.ProductId,
+                Name = ri.OrderItem.ProductItem!.Product.Name ?? ri.OrderItem.ProductName,
+            })
             .Select(g => new StoreStatisticsItemRow
             {
                 ProductId = g.Key.ProductId,
@@ -301,7 +310,7 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             ActiveDeliveriesValue = activeValue,
             AwaitingPaymentOrders = awaitingOrders,
             AwaitingPaymentValue = awaitingValue,
-            ItemsByStatus = awaitingRows.Concat(codRows).Concat(activeRows)
+            ItemsByStatus = orderedRows.Concat(activeRows)
                 .Concat(completedRows).Concat(refundedRows).ToList(),
             ShippingFeeByStatus = shippingByStatus,
             PayoutHoldDays = PayoutPolicy.HoldDays,
@@ -513,6 +522,13 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             .Include(s => s.Address).ThenInclude(a => a!.Ward)
             .Include(s => s.Owners)
             .OrderByDescending(s => s.CreatedAt)
+            .ToListAsync(ct);
+
+    public Task<List<OwnedStoreRow>> GetOwnedStoreRowsAsync(Guid ownerUserId, CancellationToken ct = default)
+        => _set.AsNoTracking()
+            .Where(s => s.Owners.Any(o => o.OwnerUserId == ownerUserId))
+            .OrderByDescending(s => s.CreatedAt)
+            .Select(s => new OwnedStoreRow(s.Id, s.Name))
             .ToListAsync(ct);
 
     public Task<List<GardenStore>> GetForUserAsync(Guid userId, CancellationToken ct = default)

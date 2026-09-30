@@ -31,6 +31,13 @@ if not exist "src\FengDeskAI.WebAPI\appsettings.json" (
   exit /b 1
 )
 
+REM Sao luu ban dang chay tren VPS truoc khi ghi de - day nham thi chep lai la xong.
+for /f %%i in ('powershell -NoProfile -Command "Get-Date -Format yyyyMMdd-HHmmss"') do set STAMP=%%i
+echo.
+echo === Sao luu tren VPS: .env.bak-%STAMP%, appsettings.json.bak-%STAMP% ===
+ssh %VPS_USER%@%VPS_HOST% "cd %REMOTE_DIR% && cp -p .env .env.bak-%STAMP% && cp -p %APPSETTINGS_REL% %APPSETTINGS_REL%.bak-%STAMP%"
+if errorlevel 1 goto fail
+
 echo.
 echo === Copy .env.vps -^> %VPS_USER%@%VPS_HOST%:%REMOTE_DIR%/.env ===
 scp .env.vps %VPS_USER%@%VPS_HOST%:%REMOTE_DIR%/.env
@@ -48,7 +55,7 @@ if errorlevel 1 goto fail
 
 echo.
 echo [OK] Da cap nhat .env + appsettings, API restart (khong rebuild).
-echo Kiem tra: curl https://api.fengdesk.io.vn/api/workspace/speech-config
+echo Kiem tra: curl https://api.fengdesk.io.vn/api/products?pageSize=1   (mong doi 200)
 pause
 exit /b 0
 

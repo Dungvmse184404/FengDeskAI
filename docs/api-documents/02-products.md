@@ -13,13 +13,15 @@ Ghi (product, SKU, ảnh, danh mục, phong thủy) yêu cầu **owner/staff c�
 | Method | Path | Quyền | Mô tả |
 |--------|------|-------|-------|
 | GET | `/api/products` | Public | Tìm/lọc sản phẩm (paged) |
+| GET | `/api/products/sku-suggestion` | Authenticated | Một mã SKU sàn `FD-XXXXXXXX` chưa dùng (`data` là chuỗi) — FE điền sẵn ô SKU; không giữ chỗ, lúc lưu vẫn kiểm trùng |
 | GET | `/api/products/{id}` | Public | Chi tiết sản phẩm |
 | POST | `/api/products` | Owner/Admin | Tạo sản phẩm |
 | PUT | `/api/products/{id}` | Owner/Admin | Cập nhật sản phẩm |
-| DELETE | `/api/products/{id}` | Owner/Admin | Xóa (mềm) sản phẩm |
+| DELETE | `/api/products/{id}` | Owner/Admin | Xóa **mềm** sản phẩm + biến thể, gỡ khỏi giỏ. **`409` khi còn đơn chưa đóng** — dùng `PUT` với `isActive: false` (Ngừng bán). Đơn cũ vẫn đủ món (cột chụp) |
+| DELETE | `/api/products/{id}/permanent` | ManagerOrAbove | Xóa **vĩnh viễn** (mọi cửa hàng, kể cả sản phẩm đã xoá mềm). `409` khi còn đơn chưa đóng. Đơn cũ + đánh giá giữ nội dung — [ADR](../adr/product-deletion.md) |
 | POST | `/api/products/{id}/items` | Owner/Admin | Thêm SKU |
 | PUT | `/api/products/{id}/items/{itemId}` | Owner/Admin | Sửa SKU |
-| DELETE | `/api/products/{id}/items/{itemId}` | Owner/Admin | Xóa SKU |
+| DELETE | `/api/products/{id}/items/{itemId}` | Owner/Admin | Xóa mềm SKU, gỡ khỏi giỏ. **`409` khi còn đơn chưa đóng** — đặt tồn kho 0 |
 | POST | `/api/products/{id}/images` | Owner/Admin | Upload ảnh (multipart) |
 | POST | `/api/products/{id}/images/link` | Owner/Admin | Gắn ảnh bằng URL |
 | DELETE | `/api/products/{id}/images/{imageId}` | Owner/Admin | Xóa ảnh |

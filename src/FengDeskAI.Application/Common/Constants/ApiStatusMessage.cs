@@ -133,6 +133,10 @@ public static class ApiStatusMessages
         public const string Created = "Tạo sản phẩm thành công.";
         public const string Updated = "Cập nhật sản phẩm thành công.";
         public const string Deleted = "Đã xóa sản phẩm.";
+        public const string DeleteHasOpenOrdersFormat =
+            "Sản phẩm đang có đơn chưa hoàn tất (đang xử lý/giao, trong {0} ngày đổi trả sau khi giao, hoặc đang trả/đổi hàng) "
+            + "nên chưa xóa được. Hãy chuyển sang Ngừng bán để ẩn khỏi cửa hàng, rồi xóa khi các đơn đã đóng.";
+        public const string HardDeleted = "Đã xóa vĩnh viễn sản phẩm.";
         public const string CategoriesNotExist = "Có danh mục không tồn tại.";
         public const string CategoriesUpdated = "Cập nhật danh mục sản phẩm thành công.";
 
@@ -143,6 +147,8 @@ public static class ApiStatusMessages
         public const string ItemCreated = "Thêm biến thể thành công.";
         public const string ItemUpdated = "Cập nhật biến thể thành công.";
         public const string ItemDeleted = "Đã xóa biến thể.";
+        public const string ItemDeleteHasOpenOrders =
+            "Biến thể đang có đơn chưa hoàn tất nên chưa xóa được. Hãy đặt tồn kho về 0 để ngừng bán, rồi xóa khi các đơn đã đóng.";
 
         public const string ImageUrlRequired = "URL ảnh không được để trống.";
         public const string ImageFileRequired = "Vui lòng chọn tệp ảnh để tải lên.";
@@ -435,6 +441,12 @@ public static class ApiStatusMessages
         public const string NotPurchased = "Bạn chưa mua sản phẩm này nên không thể đánh giá.";
         public const string ProductNotFound = "Không tìm thấy sản phẩm.";
         public const string AlreadyReviewed = "Bạn đã đánh giá sản phẩm này rồi.";
+        public const string OrderItemNotFound = "Không tìm thấy sản phẩm này trong đơn hàng của bạn.";
+        public const string NotDelivered = "Chỉ đánh giá được sau khi đã nhận hàng.";
+        public const string Returned = "Sản phẩm đã hoàn hàng nên không thể đánh giá.";
+        public const string ProductUnavailable = "Sản phẩm không còn bán nên không thể đánh giá.";
+        public const string TargetRequired = "Cần chọn sản phẩm hoặc dòng đơn hàng để đánh giá.";
+        public const string SummaryTargetInvalid = "Cần đúng một trong hai: productId hoặc storeId.";
         public const string RatingInvalid = "Điểm đánh giá phải từ 1 đến 5.";
         public const string ContentRequired = "Nội dung đánh giá không được để trống.";
     }

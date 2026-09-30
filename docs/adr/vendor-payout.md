@@ -1,6 +1,9 @@
-﻿# ADR — Đối soát & chi tiền cho nhà vườn (payout T+N)
+# ADR — Đối soát & chi tiền cho nhà vườn (payout T+N)
 
 **Trạng thái:** ĐANG TẮT (24/09/2026) — code còn, cờ `PayoutPolicy.CreditToBalanceEnabled = false`
+**Cập nhật 28/09/2026:** mục 3.1 (sổ cái) ĐÃ LÀM — xem [`platform-fee-ledger.md`](./platform-fee-ledger.md). Lỗi #1 và #3 ở
+§3b không còn áp dụng cho số liệu đọc từ sổ (`ledgerAvailable` có khoá idempotency, không đếm hai lần); lỗi #2
+đã sửa ở sổ (công nợ là bút toán âm). Việc cộng `users.balance` vẫn tắt — sẽ bị thay bằng lệnh chi đọc từ sổ.
 **Ngày:** 2026-09-23
 
 ## 1. Bối cảnh
@@ -40,7 +43,7 @@ Hai điểm phải giữ đúng nếu ai sửa:
 
 Chưa đụng tới: sổ cái, lệnh rút, thông tin ngân hàng, trừ công nợ khỏi số dư.
 
-## 3. Việc còn phải làm (bước 2 — chưa làm)
+## 3. Việc còn phải làm (bước 2 — mục 1 đã làm 28/09/2026, còn lại chưa)
 
 1. **Sổ cái** `garden_ledger_entries` (garden_id, delivery_id/liability_id, amount có dấu, type, available_at,
    payout_id?). Không cộng dồn on-the-fly như hiện tại nữa: tiền đã chi phải **khoá lại**, mà muốn khoá thì
@@ -71,6 +74,10 @@ Ngoài ra `balance` chưa có DTO/endpoint nào đọc, nên tiền cộng vào 
 Giao diện đã ẩn thẻ "Có thể rút" (Dashboard + tab thống kê cửa hàng), chỉ còn hiển thị doanh thu. Bật lại
 **sau khi** có sổ cái ở bước 2, vì cả ba lỗi trên đều tan khi mỗi lần cộng/trừ là một dòng sổ có khoá duy
 nhất theo `delivery_id`.
+
+> **28/09/2026 — ĐÃ BẬT LẠI** trên sổ cái: "Có thể rút" = `ledgerAvailable` (qua khoảng giữ, đã trừ phí sàn + công
+> nợ), dòng phụ "Đang giữ" = `ledgerPending`; menu tài khoản FE hiện tổng qua `GET /api/stores/mine/balance`.
+> Còn thiếu lệnh chi (`PayoutDebit`) — xem [`platform-fee-ledger.md`](./platform-fee-ledger.md) §6.
 
 ## 4. Đánh đổi đã biết
 

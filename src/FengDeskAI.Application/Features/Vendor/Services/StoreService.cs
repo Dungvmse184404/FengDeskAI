@@ -22,10 +22,12 @@ public class StoreService : IStoreService
     private readonly IMapper _mapper;
     private readonly INotificationService _notifications;
     private readonly IStoreShopProvisioner _shopProvisioner;
+    private readonly IPlatformFeeService _platformFee;
 
     public StoreService(IUnitOfWork uow, IMapper mapper, INotificationService notifications,
-        IStoreShopProvisioner shopProvisioner)
+        IStoreShopProvisioner shopProvisioner, IPlatformFeeService platformFee)
     {
+        _platformFee = platformFee;
         _uow = uow;
         _mapper = mapper;
         _notifications = notifications;
@@ -41,7 +43,11 @@ public class StoreService : IStoreService
         var store = await _uow.Stores.GetDetailAsync(id, ct);
         if (store is null)
             return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
-        return ServiceResult<StoreResponse>.Success(_mapper.Map<StoreResponse>(store));
+
+        var response = _mapper.Map<StoreResponse>(store);
+        var (average, count) = await _uow.Reviews.GetStoreRatingSummaryAsync(id, ct);
+        response.Rating = new StoreRatingResponse { Average = Math.Round(average, 1), Count = count };
+        return ServiceResult<StoreResponse>.Success(response);
     }
 
     public async Task<IServiceResult<StoreResponse>> CreateAsync(Guid actorUserId, CreateStoreRequest request, CancellationToken ct = default)
@@ -202,7 +208,11 @@ public class StoreService : IStoreService
         address.StreetAddress = request.StreetAddress.Trim();
         address.Latitude = request.Latitude;
         address.Longitude = request.Longitude;
-        ApplySender(address, request.SenderName, request.SenderPhone);
+        // MergeSender (không phải ApplySender): client chỉ gửi 4 field địa chỉ là chuyện bình thường,
+        // và ApplySender ghi thẳng null lên cả SenderName/SenderPhone ⇒ mỗi lần sửa địa chỉ là XOÁ mất
+        // SĐT lấy hàng. API vẫn trả 200 nên FE báo thành công, nhưng GHN hỏng ngay sau đó
+        // (CarrierShopSyncWorker bỏ qua store với PICKUP_PHONE_INVALID). Quy ước: null = không đổi.
+        MergeSender(address, request.SenderName, request.SenderPhone);
 
         await _uow.SaveChangesAsync(ct);
         await TryProvisionShopAsync(id, ct);
@@ -445,15 +455,47 @@ public class StoreService : IStoreService
         return ServiceResult<List<StoreResponse>>.Success(stores);
     }
 
+    public async Task<IServiceResult<MyStoreBalanceResponse>> GetMyBalanceAsync(Guid userId, CancellationToken ct = default)
+    {
+        var stores = await _uow.Stores.GetOwnedStoreRowsAsync(userId, ct);
+        var summaries = await _uow.Ledger.GetGardenSummariesAsync(stores.Select(s => s.Id).ToList(), DateTime.UtcNow, ct);
+
+        var rows = stores.Select(s =>
+        {
+            var sum = summaries.GetValueOrDefault(s.Id) ?? new GardenLedgerSummary(0m, 0m, 0m, 0m);
+            return new StoreBalanceResponse
+            {
+                StoreId = s.Id,
+                StoreName = s.Name,
+                Available = sum.Available,
+                Pending = sum.Pending,
+                Balance = sum.Balance,
+            };
+        }).ToList();
+
+        return ServiceResult<MyStoreBalanceResponse>.Success(new MyStoreBalanceResponse
+        {
+            Available = rows.Sum(r => r.Available),
+            Pending = rows.Sum(r => r.Pending),
+            Balance = rows.Sum(r => r.Balance),
+            PayoutHoldDays = PayoutPolicy.HoldDays,
+            Stores = rows,
+        });
+    }
+
     // ===== Owner (đồng sở hữu — marketplace) =====
 
-    public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, CancellationToken ct = default)
+    public async Task<IServiceResult<List<StoreOwnerResponse>>> GetOwnersAsync(Guid id, Guid actorUserId, bool isAdmin, CancellationToken ct = default)
     {
         // ExistsAsync cố ý IgnoreQueryFilters (dùng cho FK), nên cửa hàng đã xoá mềm vẫn "tồn tại" — với
         // người ngoài thì nó phải là 404, không lộ danh sách chủ (DEF-16).
         var store = await _uow.Stores.GetByIdAsync(id, ct);
         if (store is null || store.IsDeleted)
             return ServiceResult<List<StoreOwnerResponse>>.Failure(ApiStatusCodes.NotFound, ApiStatusMessages.Store.NotFound);
+        // Danh sách chủ là dữ liệu nội bộ của cửa hàng: trước đây endpoint chỉ cần [Authorize] nên BẤT KỲ
+        // tài khoản đăng nhập nào cũng đọc được userId của chủ mọi cửa hàng. Giới hạn về owner/staff/admin.
+        if (!isAdmin && !await _uow.Stores.CanManageAsync(id, actorUserId, ct))
+            return ServiceResult<List<StoreOwnerResponse>>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Staff.ViewForbidden);
 
         var owners = await _uow.Stores.GetOwnersAsync(id, ct);
         return ServiceResult<List<StoreOwnerResponse>>.Success(_mapper.Map<List<StoreOwnerResponse>>(owners));
@@ -540,7 +582,18 @@ public class StoreService : IStoreService
         if (!await IsOwnerOrAdminAsync(id, actorUserId, isAdmin, ct))
             return ServiceResult<StoreStatisticsResponse>.Failure(ApiStatusCodes.Forbidden, ApiStatusMessages.Store.StatisticsForbidden);
 
-        return ServiceResult<StoreStatisticsResponse>.Success(await _uow.Stores.GetStatisticsAsync(id, range, ct));
+        var stats = await _uow.Stores.GetStatisticsAsync(id, range, ct);
+
+        // Số "thực nhận" đọc thẳng từ sổ cái — thêm MỘT lượt đi về DB (câu gộp sẵn theo nhóm), không tính lại
+        // từ deliveries: sổ đã trừ phí sàn theo tỉ lệ chốt từng đơn và công nợ hoàn hàng.
+        var ledger = await _uow.Ledger.GetGardenSummaryAsync(id, DateTime.UtcNow, ct);
+        stats.CommissionRate = await _platformFee.GetCurrentRateAsync(ct);
+        stats.PlatformCommission = ledger.CommissionCharged;
+        stats.LedgerBalance = ledger.Balance;
+        stats.LedgerAvailable = ledger.Available;
+        stats.LedgerPending = ledger.Pending;
+
+        return ServiceResult<StoreStatisticsResponse>.Success(stats);
     }
 
     private async Task<bool> IsOwnerOrAdminAsync(Guid storeId, Guid userId, bool isAdmin, CancellationToken ct)
@@ -566,6 +619,19 @@ public class StoreService : IStoreService
     {
         address.SenderName = string.IsNullOrWhiteSpace(senderName) ? null : senderName.Trim();
         address.SenderPhone = VietnamPhone.Normalize(senderPhone);
+    }
+
+    /// <summary>
+    /// Cập nhật người gửi theo kiểu hợp nhất, dùng cho SỬA địa chỉ: <c>null</c> = client không gửi field
+    /// đó ⇒ giữ nguyên giá trị đang lưu; chuỗi rỗng/toàn khoảng trắng = chủ động xoá. Khác
+    /// <see cref="ApplySender"/> (dùng khi TẠO mới — lúc đó không có gì để giữ).
+    /// </summary>
+    private static void MergeSender(StoreAddress address, string? senderName, string? senderPhone)
+    {
+        if (senderName is not null)
+            address.SenderName = string.IsNullOrWhiteSpace(senderName) ? null : senderName.Trim();
+        if (senderPhone is not null)
+            address.SenderPhone = VietnamPhone.Normalize(senderPhone);
     }
 
     /// <summary>Cấp flag <see cref="UserRole.GardenOwner"/> cho user nếu chưa có (không SaveChanges).</summary>

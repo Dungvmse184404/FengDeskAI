@@ -22,8 +22,8 @@ public class VendorLiabilitiesController : ApiControllerBase
 
     /// <summary>Công nợ của một garden (vendor sở hữu garden hoặc Manager).</summary>
     [HttpGet("gardens/{gardenId:guid}")]
-    public async Task<IActionResult> GetByGarden(Guid gardenId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetByGardenAsync(gardenId, RmaActor, page, ct));
+    public async Task<IActionResult> GetByGarden(Guid gardenId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetByGardenAsync(gardenId, RmaActor, paging, ct));
 
     /// <summary>Vendor phản đối khoản trừ (trong dispute_deadline).</summary>
     [HttpPost("{id:guid}/dispute")]

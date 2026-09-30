@@ -1,0 +1,4 @@
+# Script shell phải là LF: bash của WSL/Linux đọc "\r" cuối dòng thành một phần lệnh
+# ("set: pipefail: invalid option name"). .bat cần CRLF.
+*.sh  text eol=lf
+*.bat text eol=crlf

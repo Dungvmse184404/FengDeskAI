@@ -54,7 +54,7 @@ public sealed class AiChatOptions
     public bool EnableTools { get; set; } = true;
 
     /// <summary>Số vòng gọi tool tối đa cho 1 lượt chat (chặn lặp vô hạn).</summary>
-    public int MaxToolIterations { get; set; } = 10;
+    public int MaxToolIterations { get; set; } = 15;
 
     /// <summary>Lọc tool được phép (theo Name). Rỗng → cho phép tất cả tool đã đăng ký.</summary>
     public List<string> EnabledTools { get; set; } = new();

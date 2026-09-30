@@ -1,5 +1,10 @@
 # AI Order Tool — Thiết kế trước khi code
 
+> ⚠️ **Superseded (30/09/2026)** — phần draft trong cache, `draftId`, luật "confirm ở lượt kế" trong prompt đã
+> được thay bằng draft lưu DB + block `CURRENT ORDER DRAFT` + tool `discard_order_draft`. Xem
+> [`refactor-ai-tool-handles.md`](./refactor-ai-tool-handles.md) §6 và mục "Đã triển khai" ở đó. Ba nguyên tắc
+> an toàn bên dưới vẫn giữ nguyên.
+
 > Cho phép user đặt hàng ngay trong chatbox AI: "tôi muốn mua sản phẩm A" → AI chuẩn bị đơn,
 > xin xác nhận, tạo đơn và đưa link thanh toán. **AI không bao giờ tự thanh toán.**
 

@@ -142,6 +142,9 @@ builder.Services.AddApplication();
 builder.Services.AddSettings<OrderExpirationOptions>(builder.Configuration);
 builder.Services.AddHostedService<OrderExpirationWorker>();
 
+// Worker xóa draft đơn hàng của trợ lý AI đã hết hạn / kẹt Confirming (options AiOrderDraft đăng ký ở Infrastructure).
+builder.Services.AddHostedService<AiOrderDraftCleanupWorker>();
+
 // Worker poll job sinh model 3D (Meshy) đang xử lý → hoàn tất / đánh dấu lỗi.
 
 // Worker cấp mã shop nhà vận chuyển cho store cũ chưa có (mỗi store = 1 điểm lấy hàng riêng).
@@ -193,6 +196,9 @@ var app = builder.Build();
 if (args.Contains("seed", StringComparer.OrdinalIgnoreCase))
 {
     await app.Services.RunSeedersAsync();
+    // Giải phóng tường minh singleton của container (pool kết nối, client HTTP…) rồi mới thoát.
+    await app.DisposeAsync();
+    Console.WriteLine("Seed xong — thoát, không bật web server.");
     return;
 }
 
@@ -223,6 +229,10 @@ app.UseRateLimiter();
 
 app.MapControllers();
 app.MapHub<ChatHub>("/hubs/chat");
+
+// Health check công khai — FE dò xem hostname nào còn sống (chính/dự phòng) trước khi gọi API.
+// Cố ý KHÔNG truy vấn DB: chỉ cần biết tiến trình API còn phục vụ
+app.MapGet("/health", () => Results.Ok(new { ok = true })).AllowAnonymous();
 
 app.Run();
 

@@ -32,6 +32,11 @@ public class StoresController : ApiControllerBase
     public async Task<IActionResult> GetMine(CancellationToken ct)
         => ToActionResult(await _service.GetMineAsync(CurrentUserId, ct));
 
+    /// <summary>Số dư sổ cái (có thể rút / đang giữ) của các store user sở hữu — menu tài khoản.</summary>
+    [HttpGet("mine/balance")]
+    public async Task<IActionResult> GetMyBalance(CancellationToken ct)
+        => ToActionResult(await _service.GetMyBalanceAsync(CurrentUserId, ct));
+
     [HttpGet("{id:guid}")]
     [AllowAnonymous]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -93,7 +98,7 @@ public class StoresController : ApiControllerBase
 
     [HttpGet("{id:guid}/owners")]
     public async Task<IActionResult> GetOwners(Guid id, CancellationToken ct)
-        => ToActionResult(await _service.GetOwnersAsync(id, ct));
+        => ToActionResult(await _service.GetOwnersAsync(id, CurrentUserId, CanOperateAsAdmin, ct));
 
     /// <summary>Thêm đồng sở hữu (chỉ owner hiện tại hoặc Admin).</summary>
     [HttpPost("{id:guid}/owners")]

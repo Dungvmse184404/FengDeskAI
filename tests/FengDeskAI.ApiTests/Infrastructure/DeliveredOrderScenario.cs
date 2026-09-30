@@ -20,11 +20,21 @@ public static class DeliveredOrderScenario
     public static async Task<DeliveredOrder> CreateAsync(ApiTestFixture fixture)
     {
         var data = await SalesScenario.SeedAsync(fixture, fixture.UserId(TestRole.Customer));
+        return await PlaceAsync(fixture, data, data.StoreA.ProductItemId, deliver: true);
+    }
+
+    /// <summary>
+    /// Khách (role Customer) đặt COD một biến thể của <paramref name="data"/>.StoreA; <paramref name="deliver"/> = false
+    /// thì dừng ở Pending (chưa giao). Gọi nhiều lần với cùng biến thể = khách mua lại.
+    /// </summary>
+    public static async Task<DeliveredOrder> PlaceAsync(
+        ApiTestFixture fixture, SalesScenarioData data, Guid productItemId, bool deliver)
+    {
         var customer = fixture.ClientFor(TestRole.Customer);
 
         await customer.DeleteAsync("/api/cart");
         var add = await customer.PostAsJsonAsync("/api/cart/items",
-            new { productItemId = data.StoreA.ProductItemId, quantity = 1 });
+            new { productItemId, quantity = 1 });
         Assert.True(add.IsSuccessStatusCode, await Describe(add, "thêm vào giỏ"));
 
         var checkout = await customer.PostAsJsonAsync("/api/orders", new
@@ -41,14 +51,16 @@ public static class DeliveredOrderScenario
         var orderItemId = root.GetProperty("items")[0].GetProperty("id").GetGuid();
 
         var owner = fixture.ClientFor(TestRole.GardenOwner);
-        foreach (var status in new[] { "Confirmed", "Preparing", "Shipped", "Delivered" })
+        foreach (var status in deliver ? new[] { "Confirmed", "Preparing", "Shipped", "Delivered" } : [])
         {
             var response = await owner.PatchAsJsonAsync(
                 $"/api/orders/deliveries/{deliveryId}/status", new { status });
             Assert.True(response.IsSuccessStatusCode, await Describe(response, $"chuyển delivery sang {status}"));
         }
 
-        return new DeliveredOrder(orderId, deliveryId, orderItemId, data.StoreA.StoreId, data.StoreB.ProductItemId);
+        // Seed một cửa hàng thì không có biến thể để đổi hàng (chỉ ca RMA đổi hàng cần tới).
+        var exchangeItemId = data.Stores.Count > 1 ? data.StoreB.ProductItemId : Guid.Empty;
+        return new DeliveredOrder(orderId, deliveryId, orderItemId, data.StoreA.StoreId, exchangeItemId);
     }
 
     private static async Task<string> Describe(HttpResponseMessage response, string step)

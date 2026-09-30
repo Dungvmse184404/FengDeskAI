@@ -8,4 +8,5 @@ public enum DeliverySource
     Manual = 0,  // nhân viên store cập nhật tay
     Webhook = 1, // callback từ nhà vận chuyển
     System = 2,  // hệ thống tự động (vd rollup)
+    Customer = 3, // khách xác nhận đã nhận hàng
 }

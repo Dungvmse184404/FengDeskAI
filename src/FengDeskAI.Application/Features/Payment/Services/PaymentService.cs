@@ -1,7 +1,9 @@
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Payment.DTOs;
+using FengDeskAI.Application.Features.Promotion.Services;
 using FengDeskAI.Application.Features.Sales.Services;
+using FengDeskAI.Application.Features.Vendor.Services;
 using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Payment;
@@ -23,9 +25,12 @@ public class PaymentService : IPaymentService
     private readonly IOrderCancellationService _cancellation;
     private readonly ILogger<PaymentService> _logger;
 
+    private readonly IVoucherService _vouchers;
+
     public PaymentService(IUnitOfWork uow, IPaymentGateway gateway,
-        IOrderCancellationService cancellation, ILogger<PaymentService> logger)
+        IOrderCancellationService cancellation, ILogger<PaymentService> logger, IVoucherService vouchers)
     {
+        _vouchers = vouchers;
         _uow = uow;
         _gateway = gateway;
         _cancellation = cancellation;
@@ -276,11 +281,15 @@ public class PaymentService : IPaymentService
         {
             if (order.Status == OrderStatus.Expired)
             {
+                // Lúc hết hạn lượt voucher đã được trả; khách lại vừa trả đúng giá đã giảm ⇒ giữ lại lượt.
+                await _vouchers.ReinstateForOrderAsync(order.Id, ct);
+
                 // Đơn đã bị job chuyển Expired (kho đã hoàn) — trừ lại kho vì nhận được thanh toán.
-                var productItems = await _uow.Orders.GetProductItemsAsync(order.Items.Select(i => i.ProductItemId).Distinct(), ct);
+                var productItems = await _uow.Orders.GetProductItemsAsync(
+                    order.Items.Where(i => i.ProductItemId.HasValue).Select(i => i.ProductItemId!.Value).Distinct(), ct);
                 var byId = productItems.ToDictionary(p => p.Id);
                 foreach (var item in order.Items)
-                    if (byId.TryGetValue(item.ProductItemId, out var pi))
+                    if (item.ProductItemId is { } id && byId.TryGetValue(id, out var pi))
                         pi.Stock -= item.Quantity;
             }
 
@@ -332,14 +341,15 @@ public class PaymentService : IPaymentService
     private async Task CreateAndLinkDeliveriesAsync(Order order, CancellationToken ct)
     {
         var byStore = new Dictionary<Guid, Delivery>();
-        foreach (var storeId in order.Items.Select(i => i.ProductItem.Product.GardenStoreId).Distinct())
+        foreach (var storeId in order.Items.Select(OrderWorkflow.StoreOf).Distinct())
         {
             var delivery = new Delivery
             {
                 OrderId = order.Id,
                 GardenStoreId = storeId,
                 Status = DeliveryStatus.Pending,
-                ShippingFee = 0m,
+                ShippingFee = 0m, // chia từ Order.TotalShippingFee ngay dưới, sau khi biết tiền hàng từng vườn
+                CommissionRate = order.CommissionRate,
             };
             byStore[storeId] = delivery;
             order.Deliveries.Add(delivery);
@@ -353,11 +363,13 @@ public class PaymentService : IPaymentService
         // Pha 2: gắn item vào delivery theo store + cộng subtotal (deliveries đã tồn tại trong transaction)
         foreach (var item in order.Items)
         {
-            var delivery = byStore[item.ProductItem.Product.GardenStoreId];
+            var delivery = byStore[OrderWorkflow.StoreOf(item)];
             item.DeliveryId = delivery.Id;
             item.Delivery = delivery;
             delivery.Subtotal += item.UnitPrice * item.Quantity;
         }
+
+        OrderWorkflow.ApplyStoreCharges(order, await _uow.Orders.GetStoreChargesAsync(order.Id, ct));
     }
 
     private static long GenerateOrderCode()

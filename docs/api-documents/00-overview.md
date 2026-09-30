@@ -12,8 +12,20 @@ Tài liệu API cho hệ thống **FengDeskAI** (BackEnd `.NET 8`, kiến trúc 
 |------------|-----|
 | Dev (HTTPS) | `https://localhost:7016` |
 | Dev (HTTP) | `http://localhost:5244` |
+| Production — chính | `https://api.fengdesk.io.vn` |
+| Production — dự phòng | `https://103-241-43-36.sslip.io` |
+
+Hostname dự phòng dùng nhà cung cấp DNS khác, trỏ về **cùng một** server. Nó tồn tại vì
+nameserver của `fengdesk.io.vn` từng ngừng phản hồi khiến API không ai gọi được dù vẫn chạy.
+FE tự chọn giữa hai hostname lúc khởi động (`FengDeskAI_FE/src/config/apiBase.ts`) — xem
+`docs/VPS_OPERATIONS.md` §10.
 
 Swagger UI (chỉ Development): `GET /swagger`.
+
+### `GET /health`
+
+Không cần auth, không chạm DB — trả `200 { "ok": true }`. Dùng cho FE dò hostname còn sống và cho
+monitoring. Cố ý không truy vấn DB vì DB đặt ở Sydney, mỗi query tốn ~280ms.
 
 ---
 

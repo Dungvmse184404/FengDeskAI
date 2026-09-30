@@ -44,7 +44,8 @@ public class CartRepository : GenericRepository<Cart>, ICartRepository
                .FirstOrDefaultAsync(pi => pi.Id == productItemId, ct);
 
     public Task<List<ProductItem>> GetProductItemsAsync(IEnumerable<Guid> productItemIds, CancellationToken ct = default)
-        => _context.Set<ProductItem>().Include(pi => pi.Product)
+        // Kèm ảnh: checkout "mua ngay" chụp ảnh sản phẩm vào món trong đơn.
+        => _context.Set<ProductItem>().Include(pi => pi.Product).ThenInclude(p => p.Images)
                .Where(pi => productItemIds.Contains(pi.Id))
                .ToListAsync(ct);
 }

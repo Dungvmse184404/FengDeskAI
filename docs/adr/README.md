@@ -23,6 +23,7 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 | [task-workspace-element-analysis.md](./task-workspace-element-analysis.md) | Phân tích ngũ hành từ input workspace |
 | [product-placement-personal-recommendation.md](./product-placement-personal-recommendation.md) | `ProductPlacement` + gợi ý vật phẩm mang theo người (tool `recommend_personal_items`) |
 | [product-template-shared-fengshui.md](./product-template-shared-fengshui.md) | **Proposal** — bản mẫu sản phẩm: nguồn phong thủy dùng chung giữa các shop |
+| [product-deletion.md](./product-deletion.md) | **IMPLEMENTED (2026-09-29)** — người bán xoá mềm, Manager xoá vĩnh viễn; `order_items`/`reviews` chụp dữ liệu lúc đặt nên đơn cũ + đánh giá còn nguyên; chặn khi còn đơn chưa đóng |
 | [platform-sku-generation.md](./platform-sku-generation.md) | Sinh SKU ở backend (`FD-XXXXXXXX`), bỏ 2 generator trùng lặp bên FE |
 | [ai-chat-rewind-design.md](./ai-chat-rewind-design.md) | Rewind hội thoại AI: sửa & gửi lại tin của mình, cắt đuôi lịch sử |
 | [workspace-element-insights-design.md](./workspace-element-insights-design.md) | Diễn giải ngũ hành phòng thành lời khuyên đọc được |
@@ -68,8 +69,11 @@ Nhật ký các quyết định / thay đổi thực tế đã làm trong quá t
 | [personalized-recommendation-v3.1.md](./personalized-recommendation-v3.1.md) | v3.1: trục cá nhân (`personalScore` × `Wp` theo `Scope`) cho luồng workspace + lọc `Aspiration` — **§3.3/§3.4 superseded một phần bởi v3.2** |
 | [score-explainability-v3.2.md](./score-explainability-v3.2.md) | **v3.2 (ACCEPTED)** — chuẩn hoá `gapScore` về ±1.0, `PersonalConflictMode.Scaled` (L2), `ScoreBreakdown` + radar `priorityVector`, yếu tố nghề nghiệp |
 | [occupation-product-fit-v1.md](./occupation-product-fit-v1.md) | **v3.4 (IMPLEMENTED 2026-09-11)** — nghề nghiệp thành trục thứ ba N3: `d = (1−Wp−Wo)·ĝ + Wp·r + Wo·ô` (phòng) và `(1−Wo)·n̂ + Wo·ô` (Carry); hồ sơ Σ=1 seed sẵn; % theo nghề ở trang sản phẩm; gỡ N1 |
+| [workspace-gap-cover-v3.7.md](./workspace-gap-cover-v3.7.md) | **v3.7 (IMPLEMENTED 2026-09-30)** — trục **phòng** và trục **nghề** đổi sang `Σ min(d⁺,p) − Σ min(d⁻,p)` thay tích trong. `d·p` với `Σd⁺ = 1` và `Σp = 1` là một phép trung bình nên trần của sản phẩm bằng chính `max p` ⇒ engine thưởng cho việc khai thiếu hành. Sản phẩm thuần 1 hành giữ nguyên điểm; `r·p` (bản mệnh) giữ tích trong |
 | [personal-need-v3.6.md](./personal-need-v3.6.md) | **v3.6 (IMPLEMENTED 2026-09-20)** — luồng Carry: dụng thần có **kỵ thần** (suy từ Tứ Trụ / hành khắc mệnh), điểm = `Σ min(n̂,p) − Σ_{kỵ} p` thay tích trong ⇒ khớp hoàn hảo 100 %, gỡ trần 0.6 |
-| [vendor-payout.md](./vendor-payout.md) | **ĐANG MỞ (2026-09-23)** — giữ tiền **7 ngày** sau khi giao (`PayoutPolicy.HoldDays`, bằng cửa sổ đổi trả); qua hạn thì `PayoutCreditService` cộng thẳng vào `users.balance` của chủ vườn **primary**. Sổ cái + lệnh rút + thông tin ngân hàng **chưa có** |
+| [vendor-payout.md](./vendor-payout.md) | **ĐANG MỞ (2026-09-23)** — giữ tiền **7 ngày** sau khi giao (`PayoutPolicy.HoldDays`, bằng cửa sổ đổi trả). Cộng `users.balance` **đang tắt**; sổ cái đã có (xem dòng dưới), lệnh rút + thông tin ngân hàng **chưa có** |
+| [voucher-freeship.md](./voucher-freeship.md) | **IMPLEMENTED (2026-09-28)** — FREESHIP500 là voucher thật ở BE (tự áp ≥ 500k); giảm mỗi vườn ≤ min(phí ship, phí sàn 8%); giữ lượt bằng UPDATE nguyên tử; tiền theo vườn chốt ở `order_store_charges`; sửa lỗi FE mount trang hai lần |
+| [platform-fee-ledger.md](./platform-fee-ledger.md) | **IMPLEMENTED (2026-09-28)** — phí sàn **8%** chốt theo từng delivery; sổ cái `ledger_entries` (chỉ thêm, khoá idempotency) cho vườn + sàn; phí ship thuộc sàn, phí GHN thật tách cột `carrier_shipping_fee`; voucher sàn tài trợ ≤ phí sàn |
 | [current-tag-votes-cap-v3.5.md](./current-tag-votes-cap-v3.5.md) | **v3.5 (IMPLEMENTED 2026-09-19)** — `TAG_VOTES_CAP = 5` chặn trần tổng phiếu tag trong `current`; `PERSONAL_WEIGHT_PRIVATE` 0.5 → 0.3, `SHARED` 0.3 → 0.2 để điểm không ngược radar |
 
 > v2 đã bị xóa (chỉ còn stub trỏ sang v3, không còn nội dung). Engine hiện tại: xem [`docs/ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md).

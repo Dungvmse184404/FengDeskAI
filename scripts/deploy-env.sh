@@ -24,6 +24,11 @@ cd "$(dirname "$0")/.."
 [ -f .env.vps ] || { echo "Không tìm thấy .env.vps"; exit 1; }
 [ -f "$APPSETTINGS_REL" ] || { echo "Không tìm thấy $APPSETTINGS_REL"; exit 1; }
 
+# Sao lưu bản đang chạy trên VPS trước khi ghi đè — đẩy nhầm thì chép lại là xong.
+STAMP="$(date +%Y%m%d-%H%M%S)"
+echo "→ Sao lưu trên VPS: .env.bak-$STAMP, appsettings.json.bak-$STAMP"
+ssh "$VPS_USER@$VPS_HOST" "cd $REMOTE_DIR && cp -p .env .env.bak-$STAMP && cp -p $APPSETTINGS_REL $APPSETTINGS_REL.bak-$STAMP"
+
 echo "→ Copy .env.vps          -> $VPS_USER@$VPS_HOST:$REMOTE_DIR/.env"
 scp .env.vps "$VPS_USER@$VPS_HOST:$REMOTE_DIR/.env"
 
@@ -34,4 +39,4 @@ echo "→ Recreate API trên VPS (appsettings mount volume + .env đọc lúc t�
 ssh "$VPS_USER@$VPS_HOST" "cd $REMOTE_DIR && docker compose up -d --force-recreate api"
 
 echo "✓ Xong — .env + appsettings đã cập nhật, API restart (không rebuild)."
-echo "  Kiểm tra: curl https://api.fengdesk.io.vn/api/workspace/speech-config"
+echo "  Kiểm tra: curl https://api.fengdesk.io.vn/api/products?pageSize=1   (mong đợi 200)"

@@ -24,8 +24,31 @@ public class Delivery : BaseEntity
     /// <summary>Link theo dõi đơn của nhà vận chuyển (vd shared_link của AhaMove).</summary>
     public string? TrackingUrl { get; set; }
 
+    /// <summary>
+    /// Phí ship KHÁCH trả cho phần hàng này — cố định từ lúc đặt, không đổi theo giá nhà vận chuyển. Tổng các
+    /// delivery của một đơn = <c>Order.TotalShippingFee</c>.
+    /// </summary>
     public decimal ShippingFee { get; set; }
+
+    /// <summary>
+    /// Phí nhà vận chuyển THỰC tính khi tạo vận đơn (sàn trả, vì dùng token GHN của sàn). Null = chưa tạo vận
+    /// đơn hoặc nhà vận chuyển không báo phí. Chênh lệch với <see cref="ShippingFee"/> là lãi/lỗ ship của sàn.
+    /// </summary>
+    public decimal? CarrierShippingFee { get; set; }
+
+    /// <summary>
+    /// Phần giảm phí ship (voucher) của delivery này — sàn tài trợ, ≤ phí sàn của delivery. Khách trả cho
+    /// delivery <c>Subtotal + ShippingFee − ShippingDiscount</c> (cũng là số COD nhà vận chuyển thu hộ).
+    /// </summary>
+    public decimal ShippingDiscount { get; set; }
+
     public decimal Subtotal { get; set; }
+
+    /// <summary>
+    /// Tỉ lệ phí sàn chốt lúc tạo delivery (vd 0.08). Đổi chính sách sau đó KHÔNG ảnh hưởng đơn đã đặt.
+    /// Delivery tạo trước khi có phí sàn mang 0.
+    /// </summary>
+    public decimal CommissionRate { get; set; }
 
     /// <summary>Đơn giao hàng thay thế do đổi trả (RMA) — giá trị 0đ, gửi từ garden gốc cho khách.</summary>
     public bool IsExchange { get; set; }

@@ -620,7 +620,7 @@ public sealed record ConflictResolution(
 /// <para><b>Bất biến (khoá bằng test <c>SCORE-BD-*</c>):</b></para>
 /// <code>
 /// Σ Components[i].Contribution                            == Blended
-/// ProductVector · CombinedDirection                       ≈  Blended     (sai số chia decimal)
+/// ProductVector · CombinedDirection                       ≈  Blended     (CHỈ khi mọi trục là tích trong)
 /// Blended − UserPenalty − DirectionPenalty − VibePenalty  == RawScore
 /// round(clamp(RawScore, −1, 1), 3)                        == Score
 /// </code>
@@ -721,7 +721,19 @@ public sealed record ScoreBreakdown(
     decimal? PersonalNeedCover = null,
 
     /// <summary>v3.6 — <c>Σ_{kỵ} p</c>; <c>null</c> ở luồng phòng.</summary>
-    decimal? PersonalAvoidHit = null)
+    decimal? PersonalAvoidHit = null,
+
+    /// <summary>v3.7 — <c>Σ min(ĝ⁺, p)</c>; <c>null</c> ở nhánh Carry.</summary>
+    decimal? GapCover = null,
+
+    /// <summary>v3.7 — <c>Σ min(ĝ⁻, p)</c>; <c>null</c> ở nhánh Carry.</summary>
+    decimal? GapOverfill = null,
+
+    /// <summary>v3.7 — <c>Σ min(ô⁺, p)</c>; <c>null</c> khi trục nghề tắt.</summary>
+    decimal? OccupationCover = null,
+
+    /// <summary>v3.7 — <c>Σ min(ô⁻, p)</c>; <c>null</c> khi trục nghề tắt.</summary>
+    decimal? OccupationOverfill = null)
 {
     /// <summary>
     /// <c>normalize(max(d, 0))</c> — Σ=1, vẽ chồng được lên radar cùng thang với

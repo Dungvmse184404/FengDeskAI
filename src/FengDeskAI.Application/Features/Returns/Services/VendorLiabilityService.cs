@@ -2,6 +2,7 @@ using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Models;
 using FengDeskAI.Application.Common.Results;
+using FengDeskAI.Application.Features.Payment.Services;
 using FengDeskAI.Application.Features.Returns.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Payment;
@@ -14,15 +15,20 @@ public class VendorLiabilityService : IVendorLiabilityService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly ILedgerService _ledger;
 
-    public VendorLiabilityService(IUnitOfWork uow, IMapper mapper)
+    public VendorLiabilityService(IUnitOfWork uow, IMapper mapper, ILedgerService ledger)
     {
         _uow = uow;
         _mapper = mapper;
+        _ledger = ledger;
     }
 
     public async Task CreateForRefundAsync(ReturnRequest ticket, Refund refund, CancellationToken ct = default)
     {
+        // Tiền đã rời sàn về tay khách — ghi trước khi xét công nợ (bản thân bút toán đã idempotent theo refund).
+        await _ledger.PostRefundPaidOutAsync(refund, ticket.Delivery.GardenStoreId, ct);
+
         // Đã có công nợ cho ticket này thì bỏ qua (idempotent — tránh trùng khi webhook lặp).
         if (ticket.VendorLiability is not null) return;
 
@@ -36,6 +42,8 @@ public class VendorLiabilityService : IVendorLiabilityService
         };
         ticket.VendorLiability = liability;
         await _uow.Returns.AddVendorLiabilityAsync(liability, ct);
+        // Tỉ lệ phí sàn + mốc giữ tiền lấy từ chính delivery bị hoàn — trả lại đúng phần phí đã thu trên hàng đó.
+        await _ledger.PostLiabilityRaisedAsync(liability, ticket.Delivery, ct);
     }
 
     public async Task<IServiceResult<PagedResult<VendorLiabilityResponse>>> GetByGardenAsync(Guid gardenId, RmaActor actor, PageRequest page, CancellationToken ct = default)
@@ -85,6 +93,7 @@ public class VendorLiabilityService : IVendorLiabilityService
             if (!LiabilityStateMachine.CanTransition(liability.Status, Domain.Enums.Payment.VendorLiabilityStatus.Waived))
                 return Fail(ApiStatusCodes.Conflict, ApiStatusMessages.Returns.LiabilityNotResolvable);
             liability.Waive(actor.UserId, now);
+            await _ledger.PostLiabilityWaivedAsync(liability, ct);
         }
         else
         {

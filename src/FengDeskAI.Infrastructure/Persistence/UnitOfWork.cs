@@ -32,9 +32,13 @@ public class UnitOfWork : IUnitOfWork
         IReturnRepository returns,
         IShippingRepository shipping,
         ITransactionRepository transactions,
+        ILedgerRepository ledger,
+        IPlatformFeeRateRepository platformFeeRates,
+        IVoucherRepository vouchers,
         INotificationRepository notifications,
         IChatboxRepository chatboxes,
         IChatMessageRepository chatMessages,
+        IAiOrderDraftRepository aiOrderDrafts,
         IReviewRepository reviews,
         IRecommendationRepository recommendations,
         IScoringConfigRepository scoringConfig)
@@ -60,9 +64,13 @@ public class UnitOfWork : IUnitOfWork
         Returns = returns;
         Shipping = shipping;
         Transactions = transactions;
+        Ledger = ledger;
+        PlatformFeeRates = platformFeeRates;
+        Vouchers = vouchers;
         Notifications = notifications;
         Chatboxes = chatboxes;
         ChatMessages = chatMessages;
+        AiOrderDrafts = aiOrderDrafts;
         Reviews = reviews;
         Recommendations = recommendations;
         ScoringConfig = scoringConfig;
@@ -87,9 +95,13 @@ public class UnitOfWork : IUnitOfWork
     public IReturnRepository Returns { get; }
     public IShippingRepository Shipping { get; }
     public ITransactionRepository Transactions { get; }
+    public ILedgerRepository Ledger { get; }
+    public IPlatformFeeRateRepository PlatformFeeRates { get; }
+    public IVoucherRepository Vouchers { get; }
     public INotificationRepository Notifications { get; }
     public IChatboxRepository Chatboxes { get; }
     public IChatMessageRepository ChatMessages { get; }
+    public IAiOrderDraftRepository AiOrderDrafts { get; }
     public IReviewRepository Reviews { get; }
     public IRecommendationRepository Recommendations { get; }
     public IScoringConfigRepository ScoringConfig { get; }

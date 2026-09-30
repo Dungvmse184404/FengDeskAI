@@ -39,6 +39,13 @@ Cột giữ nullable. Bỏ trống → sàn sinh; tự nhập → `ResolveSkuAsy
 
 Một nguồn duy nhất. Ô SKU đổi từ bắt buộc thành tùy chọn, placeholder *"Để trống — hệ thống tự sinh"*.
 
+### 2.5 Điền sẵn mã sàn (28/09/2026)
+
+FE lại tự sinh mã theo tên (hai công thức cũ quay về, kèm fallback `"SKU-DEFAULT"` — sản phẩm thứ hai trùng
+unique index). Sửa: `GET /api/products/sku-suggestion` trả một mã `FD-XXXXXXXX` chưa dùng từ **chính**
+`SkuGenerator`; ô SKU (`SkuInput`) điền sẵn mã đó một lần, người bán muốn đổi thì xoá rồi gõ; để trống ⇒ BE sinh
+lúc lưu. Sửa biến thể không điền đè mã cũ. Mã gợi ý không giữ chỗ — lúc lưu kiểm trùng như mã tự nhập.
+
 ## 3. Không làm (out of scope)
 
 - **Đổi mã cho dữ liệu cũ.** SKU hiện có (gồm cả `KT-WHITE`, `LH-S`… từ `CatalogDemoSeeder`) giữ nguyên — đổi mã đã phát hành là điều ADR này chống lại.

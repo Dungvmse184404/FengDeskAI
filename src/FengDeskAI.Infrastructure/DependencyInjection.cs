@@ -1,4 +1,4 @@
-﻿using System.Diagnostics.CodeAnalysis;
+using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using FengDeskAI.Application.Features.CustomerCare;
 using FengDeskAI.Application.Features.Workspace;
@@ -170,10 +170,14 @@ public static class DependencyInjection
         services.AddScoped<IReturnRepository, ReturnRepository>();
         services.AddScoped<IShippingRepository, ShippingRepository>();
         services.AddScoped<ITransactionRepository, TransactionRepository>();
+        services.AddScoped<ILedgerRepository, LedgerRepository>();
+        services.AddScoped<IPlatformFeeRateRepository, PlatformFeeRateRepository>();
+        services.AddScoped<IVoucherRepository, VoucherRepository>();
         services.AddScoped<IReviewRepository, ReviewRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<IChatboxRepository, ChatboxRepository>();
         services.AddScoped<IChatMessageRepository, ChatMessageRepository>();
+        services.AddScoped<IAiOrderDraftRepository, AiOrderDraftRepository>();
         services.AddScoped<IRecommendationRepository, RecommendationRepository>();
         // Cấu hình chấm điểm gần như không đổi nhưng bị đọc ở mọi request chấm điểm; với DB ở Sydney
         // (~300ms/round-trip) riêng khối đó đã hơn một giây mỗi lần. Bọc một lớp cache trong bộ nhớ.
@@ -273,6 +277,7 @@ public static class DependencyInjection
         // chatbox (Ai:Chat), intake (Ai:Intake). Chat/intake dùng chung IAiChatClient = RelayChatClient.
         services.AddSettings<AiRelayOptions>(configuration);
         services.AddSettings<AiChatOptions>(configuration);
+        services.AddSettings<AiOrderDraftOptions>(configuration);
         services.AddSettings<WorkspaceIntakeOptions>(configuration);
         services.AddHttpClient(); // bật IHttpClientFactory — RelayChatClient tạo client per-provider
         services.AddSingleton<IAiChatTransport, OllamaTransport>();
@@ -316,6 +321,9 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, ProductElementInputDemoSeeder>();
         services.AddScoped<IDataSeeder, PlacementProductDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductAspirationDemoSeeder>();
+        services.AddScoped<IDataSeeder, VoucherSeeder>();
+        services.AddScoped<IDataSeeder, OrderSnapshotBackfillSeeder>();
+        services.AddScoped<IDataSeeder, LedgerBackfillSeeder>();
 
         return services;
     }

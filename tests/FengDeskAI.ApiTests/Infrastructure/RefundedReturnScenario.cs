@@ -8,7 +8,8 @@ using Xunit;
 namespace FengDeskAI.ApiTests.Infrastructure;
 
 /// <summary>Một yêu cầu trả hàng đã hoàn tiền xong, kèm khoản công nợ nhà cung cấp sinh ra theo nó.</summary>
-public sealed record RefundedReturn(Guid TicketId, Guid RefundId, Guid StoreId, Guid LiabilityId, decimal Amount);
+public sealed record RefundedReturn(
+    Guid TicketId, Guid RefundId, Guid StoreId, Guid LiabilityId, decimal Amount, Guid OrderId, Guid OrderItemId);
 
 /// <summary>
 /// Đưa một đơn đã giao đi hết vòng RMA tới khi lệnh hoàn tiền ở trạng thái Completed — đó là điều
@@ -79,7 +80,8 @@ public static class RefundedReturnScenario
         var liability = (await ApiEnvelope.DataAsync(liabilities)).GetProperty("items").EnumerateArray()
             .Single(l => l.GetProperty("returnRequestId").GetGuid() == ticketId);
 
-        return new RefundedReturn(ticketId, refundId, order.StoreId, liability.GetProperty("id").GetGuid(), amount);
+        return new RefundedReturn(ticketId, refundId, order.StoreId, liability.GetProperty("id").GetGuid(), amount,
+            order.OrderId, order.OrderItemId);
     }
 
     private static async Task CompleteRefundAsync(ApiTestFixture fixture, Guid refundId)

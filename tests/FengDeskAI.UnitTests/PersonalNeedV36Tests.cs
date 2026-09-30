@@ -164,12 +164,12 @@ public sealed class PersonalNeedV36Tests
         Assert.True(expected.Union(favorable).Count() >= 4);
     }
 
-    [Fact(DisplayName = "NEED-36-08 [Boundary] Formula stamp is 3.6 and room flow keeps ĝ·p")]
-    public void Version_And_RoomFlow_Untouched()
+    [Fact(DisplayName = "NEED-36-08 [Boundary] Room flow carries no dụng thần / kỵ thần fields")]
+    public void RoomFlow_HasNoPersonalNeedFields()
     {
-        Assert.Equal("3.6", ScoringFormulaVersions.Current);
-
-        // Luồng phòng: không có PersonalAvoid/needCover, gapScore vẫn là ĝ·p.
+        // KHÔNG neo vào một số hiệu phiên bản: bản gốc ca này khóa "Current == 3.6", nên v3.7 (đổi công
+        // thức nhánh PHÒNG, không chạm nhánh Carry) làm nó đỏ ở đúng chỗ không cần xem. Thứ ca này thật
+        // sự khai là: các trường riêng của Carry không rò sang luồng phòng, và ngược lại.
         var ctx = new ScoringContext
         {
             AdjustedIdeal = V(kim: .5m, tho: .5m),
@@ -181,7 +181,12 @@ public sealed class PersonalNeedV36Tests
         };
         var scored = new RecommendationScorer().ScoreSingle(ctx, new ProductFacts(Guid.NewGuid(), V(kim: 1m), new HashSet<string>(), ProductPlacement.Living));
         Assert.Null(scored.Breakdown!.PersonalNeedCover);
+        Assert.Null(scored.Breakdown!.PersonalAvoidHit);
         Assert.Null(scored.Breakdown!.PersonalAvoidElements);
         Assert.DoesNotContain(scored.Breakdown!.Components, c => c.Code == ScoreComponentCodes.PersonalAvoidScore);
+
+        // v3.7 — chiều ngược lại: luồng phòng PHẢI mang hai số hạng của chính nó.
+        Assert.NotNull(scored.Breakdown!.GapCover);
+        Assert.NotNull(scored.Breakdown!.GapOverfill);
     }
 }

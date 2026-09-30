@@ -25,6 +25,12 @@ public class CheckoutRequest
     /// <summary>PayOS (mặc định): thanh toán online, quá 15' không trả tiền đơn sẽ hết hạn.
     /// COD: thanh toán khi nhận hàng, delivery tạo ngay khi đặt.</summary>
     public PaymentMethod PaymentMethod { get; set; } = PaymentMethod.PayOS;
+
+    /// <summary>
+    /// Mã giảm giá khách tự nhập. Bỏ trống ⇒ BE tự áp voucher tự động có lợi nhất nếu đơn đủ điều kiện.
+    /// Có nhập mà mã không dùng được ⇒ checkout bị từ chối (422) để khách không bị tính khác số đã thấy.
+    /// </summary>
+    public string? VoucherCode { get; set; }
 }
 
 /// <summary>Kết quả xem trước phí ship (FE gọi trước khi đặt hàng) — không tạo đơn.</summary>
@@ -32,7 +38,13 @@ public class ShippingFeePreviewResponse
 {
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }
+    /// <summary>Giảm phí ship từ voucher. <c>TotalAmount = Subtotal + TotalShippingFee − ShippingDiscount</c>.</summary>
+    public decimal ShippingDiscount { get; set; }
     public decimal TotalAmount { get; set; }
+    /// <summary>Voucher sẽ được áp khi đặt (tự áp hoặc mã khách nhập hợp lệ); null = không có.</summary>
+    public FengDeskAI.Application.Features.Promotion.DTOs.AppliedVoucherResponse? AppliedVoucher { get; set; }
+    /// <summary>Lý do mã khách nhập không dùng được — preview vẫn trả phí để FE hiện giỏ.</summary>
+    public string? VoucherMessage { get; set; }
     public List<StoreShippingFeeResponse> Stores { get; set; } = new();
 }
 
@@ -42,15 +54,23 @@ public class StoreShippingFeeResponse
     public string StoreName { get; set; } = string.Empty;
     public decimal Subtotal { get; set; }
     public decimal ShippingFee { get; set; }
+    public decimal ShippingDiscount { get; set; }
 }
 
 public class OrderItemResponse
 {
     public Guid Id { get; set; }
-    public Guid ProductItemId { get; set; }
+    /// <summary>Null khi sản phẩm đã bị Manager xoá cứng.</summary>
+    public Guid? ProductItemId { get; set; }
 
     /// <summary>Id sản phẩm gốc (Product) của biến thể — FE dùng để đánh giá / mở trang sản phẩm.</summary>
-    public Guid ProductId { get; set; }
+    public Guid? ProductId { get; set; }
+
+    /// <summary>
+    /// Sản phẩm còn bán không (chưa bị xoá). false ⇒ FE hiện "Sản phẩm không còn bán", không dẫn link/mua lại —
+    /// tên, biến thể, ảnh, giá vẫn đủ nhờ các cột chụp lúc đặt.
+    /// </summary>
+    public bool ProductAvailable { get; set; }
 
     /// <summary>Null khi đơn online chưa thanh toán (delivery chưa được tạo).</summary>
     public Guid? DeliveryId { get; set; }
@@ -77,6 +97,7 @@ public class DeliveryResponse
     public string? StoreName { get; set; }
     public DeliveryStatus Status { get; set; }
     public decimal ShippingFee { get; set; }
+    public decimal ShippingDiscount { get; set; }
     public decimal Subtotal { get; set; }
     public string? TrackingCode { get; set; }
     public string? TrackingUrl { get; set; }
@@ -130,6 +151,8 @@ public class OrderDetailResponse
     public PaymentMethod PaymentMethod { get; set; }
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }
+    public decimal ShippingDiscount { get; set; }
+    public string? VoucherCode { get; set; }
     public decimal TotalAmount { get; set; }
     public string? Note { get; set; }
     public DateTime CreatedAt { get; set; }

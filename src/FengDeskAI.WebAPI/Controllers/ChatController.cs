@@ -54,8 +54,8 @@ public class ChatController : ApiControllerBase
     /// <summary>Hàng đợi phòng hỗ trợ đang mở (chưa có nhân sự nhận) — staff trở lên.</summary>
     [HttpGet("support/open")]
     [Authorize(Policy = AuthorizationPolicies.StaffOrAbove)]
-    public async Task<IActionResult> GetOpenSupport([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetOpenSupportRoomsAsync(page, ct));
+    public async Task<IActionResult> GetOpenSupport([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetOpenSupportRoomsAsync(paging, ct));
 
     // ───────────── Phòng hỗ trợ của một SHOP cụ thể (vendor: garden owner/staff) ─────────────
 
@@ -66,13 +66,13 @@ public class ChatController : ApiControllerBase
 
     /// <summary>Vendor (owner/staff store): hàng đợi phòng hỗ trợ đang mở của store mình.</summary>
     [HttpGet("support/stores/{storeId:guid}/open")]
-    public async Task<IActionResult> GetOpenStoreSupport(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetOpenStoreSupportRoomsAsync(storeId, CurrentUserId, User.CanOperateAsAdmin(), page, ct));
+    public async Task<IActionResult> GetOpenStoreSupport(Guid storeId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetOpenStoreSupportRoomsAsync(storeId, CurrentUserId, User.CanOperateAsAdmin(), paging, ct));
 
     /// <summary>Vendor: danh sách phòng của store mình đã nhận hỗ trợ.</summary>
     [HttpGet("support/stores/{storeId:guid}/mine")]
-    public async Task<IActionResult> GetMyStoreSupport(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMyStoreChatboxesAsync(storeId, CurrentUserId, User.CanOperateAsAdmin(), page, ct));
+    public async Task<IActionResult> GetMyStoreSupport(Guid storeId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetMyStoreChatboxesAsync(storeId, CurrentUserId, User.CanOperateAsAdmin(), paging, ct));
 
     /// <summary>Tạo phòng nhóm (mình là Owner).</summary>
     [HttpPost("groups")]
@@ -91,13 +91,13 @@ public class ChatController : ApiControllerBase
 
     /// <summary>Danh sách chatbox của tôi (paged).</summary>
     [HttpGet("chatboxes")]
-    public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));
+    public async Task<IActionResult> GetMine([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetMineAsync(CurrentUserId, paging, ct));
 
     /// <summary>Lấy messages trong chatbox (paged, mới nhất trước).</summary>
     [HttpGet("chatbox/{chatboxId:guid}/messages")]
-    public async Task<IActionResult> GetMessages(Guid chatboxId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMessagesAsync(CurrentUserId, chatboxId, page, ct));
+    public async Task<IActionResult> GetMessages(Guid chatboxId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetMessagesAsync(CurrentUserId, chatboxId, paging, ct));
 
     /// <summary>Gửi message (text và/hoặc link ảnh).</summary>
     [HttpPost("chatbox/{chatboxId:guid}/messages")]

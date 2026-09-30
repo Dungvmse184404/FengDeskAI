@@ -60,6 +60,12 @@ public class AppDbContext : DbContext
     public DbSet<Transaction> Transactions => Set<Transaction>();
     public DbSet<Refund> Refunds => Set<Refund>();
     public DbSet<VendorLiability> VendorLiabilities => Set<VendorLiability>();
+    public DbSet<LedgerEntry> LedgerEntries => Set<LedgerEntry>();
+    public DbSet<PlatformFeeRate> PlatformFeeRates => Set<PlatformFeeRate>();
+
+    // Promotion
+    public DbSet<Domain.Entities.Promotion.Voucher> Vouchers => Set<Domain.Entities.Promotion.Voucher>();
+    public DbSet<Domain.Entities.Promotion.VoucherRedemption> VoucherRedemptions => Set<Domain.Entities.Promotion.VoucherRedemption>();
 
     // CustomerCare
     public DbSet<Review> Reviews => Set<Review>();
@@ -82,6 +88,9 @@ public class AppDbContext : DbContext
     public DbSet<Recommendation> Recommendations => Set<Recommendation>();
     public DbSet<RecommendationItem> RecommendationItems => Set<RecommendationItem>();
     public DbSet<RecommendationLog> RecommendationLogs => Set<RecommendationLog>();
+
+    // Trợ lý AI — draft đơn hàng user đã chốt trong phòng chat riêng
+    public DbSet<AiOrderDraft> AiOrderDrafts => Set<AiOrderDraft>();
 
     // Recommendation scoring v3 (vector ngũ hành)
     public DbSet<WorkspaceTypeElement> WorkspaceTypeElements => Set<WorkspaceTypeElement>();

@@ -9,6 +9,15 @@ public interface IProductService
     Task<IServiceResult<PagedResult<ProductListItemResponse>>> SearchAsync(ProductQueryParams query, CancellationToken ct = default);
     Task<IServiceResult<ProductDetailResponse>> GetByIdAsync(Guid id, CancellationToken ct = default);
 
+    /// <summary>
+    /// Một mã SKU của sàn chưa dùng — FE điền sẵn vào ô SKU. Không giữ chỗ: lúc lưu vẫn kiểm trùng như mã tự nhập
+    /// (xác suất đụng ~0 với 32⁸ tổ hợp).
+    /// </summary>
+    Task<IServiceResult<string>> SuggestSkuAsync(CancellationToken ct = default);
+
+    /// <summary>Manager xoá VĨNH VIỄN (xoá cứng). Chặn khi còn đơn chưa đóng; đơn đã đóng giữ nguyên nhờ cột chụp.</summary>
+    Task<IServiceResult> HardDeleteAsync(Guid id, CancellationToken ct = default);
+
     Task<IServiceResult<ProductDetailResponse>> CreateAsync(Guid userId, bool isAdmin, CreateProductRequest request, CancellationToken ct = default);
     Task<IServiceResult<ProductDetailResponse>> UpdateAsync(Guid id, Guid userId, bool isAdmin, UpdateProductRequest request, CancellationToken ct = default);
     Task<IServiceResult> DeleteAsync(Guid id, Guid userId, bool isAdmin, CancellationToken ct = default);

@@ -252,8 +252,11 @@ public sealed class RecommendationScorerTests
         {
             Id = "SCORE-A3-05", Name = "[Boundary] A repeating decimal is rounded to three places",
             Product = Fx.Mix((FengShuiElement.Moc, 1m), (FengShuiElement.Thuy, 1m), (FengShuiElement.Hoa, 1m)),
-            Expected = 0.333m,
-            Why = "(0.6 + 0.4)×⅓ / 1.0 = 0.3333… ⇒ 0.333 (Math.Round 3 chữ số).",
+            Expected = 0.667m,
+            // v3.7: ĝ = Mộc +0.6 / Thủy +0.4 / Thổ −0.5 / Kim −0.5. Sản phẩm cấp ⅓ vào CẢ HAI hành
+            // đang thiếu và không cấp gì vào hai hành đang thừa — đây chính là ca tích trong cũ trả 0.333
+            // chỉ vì nó lấy trung bình (ADR workspace-gap-cover-v3.7 §1).
+            Why = "min(0.6,⅓) + min(0.4,⅓) − 0 = ⅔ = 0.6666… ⇒ 0.667 (Math.Round 3 chữ số).",
         });
 
         // ── A4. PlacementPolicy — 4 giá trị ──

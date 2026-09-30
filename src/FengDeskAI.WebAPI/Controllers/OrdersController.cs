@@ -35,14 +35,14 @@ public class OrdersController : ApiControllerBase
         => ToActionResult(await _service.PreviewShippingFeeAsync(CurrentUserId, request, ct));
 
     [HttpGet]
-    public async Task<IActionResult> GetMine([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetMineAsync(CurrentUserId, page, ct));
+    public async Task<IActionResult> GetMine([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetMineAsync(CurrentUserId, paging, ct));
 
     /// <summary>Tất cả đơn của mọi customer (paged) — Manager hoặc Admin.</summary>
     [HttpGet("all")]
     [Authorize(Policy = AuthorizationPolicies.ManagerOrAbove)]
-    public async Task<IActionResult> GetAll([FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetAllAsync(page, ct));
+    public async Task<IActionResult> GetAll([FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetAllAsync(paging, ct));
 
     [HttpGet("{id:guid}")]
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
@@ -52,10 +52,15 @@ public class OrdersController : ApiControllerBase
     public async Task<IActionResult> Cancel(Guid id, CancellationToken ct)
         => ToActionResult(await _service.CancelAsync(id, CurrentUserId, ct));
 
+    /// <summary>Khách xác nhận đã nhận các kiện đang giao (Shipped) của đơn mình → Delivered.</summary>
+    [HttpPost("{id:guid}/confirm-received")]
+    public async Task<IActionResult> ConfirmReceived(Guid id, CancellationToken ct)
+        => ToActionResult(await _service.ConfirmReceivedAsync(id, CurrentUserId, ct));
+
     /// <summary>Danh sách delivery của một store (màn vendor). Yêu cầu owner/staff store đó hoặc admin.</summary>
     [HttpGet("stores/{storeId:guid}/deliveries")]
-    public async Task<IActionResult> GetStoreDeliveries(Guid storeId, [FromQuery] PageRequest page, CancellationToken ct)
-        => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, CanOperateAsAdmin, page, ct));
+    public async Task<IActionResult> GetStoreDeliveries(Guid storeId, [FromQuery] PageRequest paging, CancellationToken ct)
+        => ToActionResult(await _service.GetStoreDeliveriesAsync(storeId, CurrentUserId, CanOperateAsAdmin, paging, ct));
 
     [HttpPatch("deliveries/{deliveryId:guid}/status")]
     [ResourceAuthorize(ResourceOperation.UpdateDelivery, "deliveryId")]

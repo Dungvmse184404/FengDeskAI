@@ -19,7 +19,8 @@ Controller: `OrdersController` · Route gốc: `/api/orders` · Mặc định `[
 | GET | `/api/orders` | Authenticated | Đơn của tôi (paged) |
 | GET | `/api/orders/all` | AdminOnly | Tất cả đơn (paged) |
 | GET | `/api/orders/{id}` | Authenticated* | Chi tiết đơn |
-| POST | `/api/orders/{id}/cancel` | Authenticated | Hủy đơn |
+| POST | `/api/orders/{id}/cancel` | Authenticated | Hủy đơn (chỉ đơn `Pending`) |
+| POST | `/api/orders/{id}/confirm-received` | Chủ đơn | Khách xác nhận đã nhận các kiện đang giao |
 | GET | `/api/orders/stores/{storeId}/deliveries` | Owner/Staff/Admin | Delivery của 1 store (paged) |
 | GET | `/api/orders/deliveries/{deliveryId}/detail` | Customer sở hữu order / Owner/assigned Staff/Admin | Chi tiết delivery, gồm delivery đổi hàng |
 | PATCH | `/api/orders/deliveries/{deliveryId}/status` | Owner/Staff/Admin | Cập nhật trạng thái delivery |
@@ -36,7 +37,8 @@ Checkout. **Request body** (`CheckoutRequest`)
   "shippingAddressId": "guid",
   "note": "Giao giờ hành chính",
   "items": [{ "productItemId": "guid", "quantity": 2 }],
-  "paymentMethod": "PayOS"
+  "paymentMethod": "PayOS",
+  "voucherCode": "FREESHIP500"
 }
 ```
 | Field | Ghi chú |
@@ -44,8 +46,33 @@ Checkout. **Request body** (`CheckoutRequest`)
 | `shippingAddressId` | Bỏ trống / `Guid.Empty` = dùng địa chỉ mặc định |
 | `items` | Bỏ trống = đặt toàn bộ giỏ; món trùng giỏ bị xóa khỏi giỏ sau khi đặt |
 | `paymentMethod` | `PayOS` (online, hết hạn sau 15') hoặc `COD` |
+| `voucherCode` | Tuỳ chọn. Bỏ trống ⇒ BE tự áp voucher tự động có lợi nhất (vd FREESHIP500). Có nhập mà không dùng được ⇒ `422` kèm lý do; lượt cuối vừa bị lấy ⇒ `409`. Xem [28-vouchers](./28-vouchers.md) |
+
+`totalAmount = subtotal + totalShippingFee − shippingDiscount`. Tiền theo từng vườn (tiền hàng, phí ship, khoản
+giảm) được chốt vào `order_store_charges` lúc đặt; đơn PayOS sinh delivery lúc webhook dùng lại đúng số đó.
 
 **Response `data`** = `OrderDetailResponse` (xem dưới).
+
+> **`deliveries[].shippingFee` = phí ship KHÁCH trả** cho phần hàng của vườn đó, cố định từ lúc đặt; Σ các delivery
+> = `totalShippingFee` (28/09/2026). Trước đây trường này bị ghi đè bằng phí nhà vận chuyển thực tính khi tạo vận
+> đơn, và bằng 0 với đơn PayOS — nay phí GHN thật nằm ở cột nội bộ `deliveries.carrier_shipping_fee` (không trả
+> ra API), còn đơn PayOS được chia `totalShippingFee` theo tỉ trọng tiền hàng. Xem
+> [`platform-fee-ledger.md`](../adr/platform-fee-ledger.md) §4.
+
+---
+
+## POST `/api/orders/{id}/confirm-received`
+
+Khách xác nhận đã nhận hàng (28/09/2026). Mọi delivery **`Shipped`** của đơn chuyển `Delivered`, đi đúng đường vendor
+cập nhật tay: `DeliveredAt`, progress log nguồn `Customer`, rollup trạng thái đơn, thông báo, **ghi sổ cái**.
+
+| Lỗi | Khi nào |
+|---|---|
+| `404` | Không phải đơn của mình (lọc theo chủ đơn ngay ở truy vấn) |
+| `409` | Không có kiện nào đang giao — hàng chưa gửi (Pending/Confirmed/Preparing) không được xác nhận, tránh khách tự mở cửa sổ hoàn tiền cho hàng chưa rời vườn |
+
+> Thay cho việc FE gọi `/api/dev/deliveries/...` trước đây. Các endpoint dev đó **chỉ mở ở Development** (trả `404`
+> ở môi trường khác); vendor đẩy trạng thái giao qua `PATCH /api/orders/deliveries/{id}/status`.
 
 ---
 
@@ -55,8 +82,10 @@ Xem trước phí ship trước khi đặt (không tạo đơn). Body = `Checkou
 **Response `data`** = `ShippingFeePreviewResponse`:
 ```json
 {
-  "subtotal": 320000, "totalShippingFee": 30000, "totalAmount": 350000,
-  "stores": [{ "storeId": "guid", "storeName": "...", "subtotal": 320000, "shippingFee": 30000 }]
+  "subtotal": 620000, "totalShippingFee": 30000, "shippingDiscount": 30000, "totalAmount": 620000,
+  "appliedVoucher": { "code": "FREESHIP500", "name": "...", "shippingDiscount": 30000 },
+  "voucherMessage": null,   // lý do khi mã khách nhập không dùng được (preview vẫn trả phí)
+  "stores": [{ "storeId": "guid", "storeName": "...", "subtotal": 620000, "shippingFee": 30000, "shippingDiscount": 30000 }]
 }
 ```
 
@@ -87,8 +116,9 @@ Paged. `data` = `PagedResult<OrderListItemResponse>`:
   "status": "Processing", "paymentMethod": "PayOS",
   "subtotal": 320000, "totalShippingFee": 30000, "totalAmount": 350000, "note": "...",
   "createdAt": "...",
-  "items": [{ "id": "guid", "productItemId": "guid", "deliveryId": "guid",
-              "productName": "...", "unitPrice": 120000, "quantity": 2, "lineTotal": 240000 }],
+  "items": [{ "id": "guid", "productItemId": "guid", "productId": "guid", "productAvailable": true,
+              "deliveryId": "guid", "productName": "...", "variantName": "Chậu sứ", "imageUrl": "...",
+              "unitPrice": 120000, "quantity": 2, "lineTotal": 240000 }],
   "deliveries": [{ "id": "guid", "gardenStoreId": "guid", "storeName": "...",
                    "status": "Shipped", "shippingFee": 30000, "subtotal": 320000,
                    "trackingCode": "...", "shippingProvider": "GHN",
@@ -96,6 +126,10 @@ Paged. `data` = `PagedResult<OrderListItemResponse>`:
   "statusLogs": [{ "fromStatus": "Pending", "toStatus": "Paid", "note": null, "changedAt": "..." }]
 }
 ```
+
+> **Món trong đơn là ảnh chụp lúc đặt** (29/09/2026): tên, biến thể, ảnh, SKU, cửa hàng lưu ngay trên `order_items`,
+> nên đơn hiển thị đủ dù sản phẩm sau đó bị xoá. `productAvailable: false` = sản phẩm đã bị xoá (mềm hoặc vĩnh viễn) —
+> FE không dẫn link / mua lại / đánh giá; xoá vĩnh viễn thì `productItemId` = `null`. Xem [ADR](../adr/product-deletion.md).
 > `items[].deliveryId` = `null` khi đơn online chưa thanh toán (delivery chưa tạo).
 
 ---

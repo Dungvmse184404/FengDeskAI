@@ -33,6 +33,13 @@ public interface IUnitOfWork
 
     // Payment
     ITransactionRepository Transactions { get; }
+    /// <summary>Sổ cái tiền nhà vườn + sàn — chỉ ghi qua <c>ILedgerService</c>.</summary>
+    ILedgerRepository Ledger { get; }
+    /// <summary>Lịch sử phí sàn — chỉ ghi qua <c>IPlatformFeeService</c>.</summary>
+    IPlatformFeeRateRepository PlatformFeeRates { get; }
+
+    // Promotion
+    IVoucherRepository Vouchers { get; }
 
     // Notification
     INotificationRepository Notifications { get; }
@@ -40,6 +47,9 @@ public interface IUnitOfWork
     // Chat
     IChatboxRepository Chatboxes { get; }
     IChatMessageRepository ChatMessages { get; }
+
+    /// <summary>Draft đơn hàng trợ lý AI (tối đa 1 draft Pending mỗi phòng chat riêng).</summary>
+    IAiOrderDraftRepository AiOrderDrafts { get; }
 
     // CustomerCare
     IReviewRepository Reviews { get; }

@@ -14,7 +14,9 @@ namespace FengDeskAI.WebAPI.Controllers;
 /// Đi qua CHÍNH OrderService.UpdateDeliveryStatusAsync theo từng bước chuyển hợp lệ
 /// (Pending→Confirmed→Shipped→Delivered) nên vẫn có đủ side effect thật:
 /// DeliveredAt, progress log, rollup trạng thái order (Completed), notification.
-/// Ngoài Development trả 404.
+/// Ngoài Development trả 404 — BẮT BUỘC: controller chỉ [Authorize] và không kiểm chủ đơn, mở ở production là ai
+/// đăng nhập cũng ép được đơn bất kỳ sang Delivered (mở cửa sổ hoàn tiền, ghi tiền vào sổ cái). Khách xác nhận
+/// đã nhận hàng đi qua <c>POST /api/orders/{id}/confirm-received</c>.
 /// </summary>
 [Route("api/dev/deliveries")]
 [Authorize]
@@ -48,7 +50,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivered")]
     public async Task<IActionResult> SimulateDelivered(Guid deliveryId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Delivered, ct));
     }
 
@@ -60,7 +62,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivery-failed")]
     public async Task<IActionResult> SimulateDeliveryFailed(Guid deliveryId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.DeliveryFailed, ct));
     }
 
@@ -71,7 +73,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/shipping/delivering")]
     public async Task<IActionResult> SimulateDelivering(Guid deliveryId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusAsync(deliveryId, DeliveryStatus.Shipped, ct));
     }
 
@@ -82,7 +84,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpGet("orders/{orderId:guid}")]
     public async Task<IActionResult> GetByOrder(Guid orderId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.GetDeliveriesByOrderAsync(orderId, ct));
     }
 
@@ -94,7 +96,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("orders/{orderId:guid}/shipping/delivered")]
     public async Task<IActionResult> SimulateOrderDelivered(Guid orderId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusForOrderAsync(orderId, DeliveryStatus.Delivered, ct));
     }
 
@@ -102,7 +104,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("orders/{orderId:guid}/shipping/delivery-failed")]
     public async Task<IActionResult> SimulateOrderDeliveryFailed(Guid orderId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return ToActionResult(await _shipping.SimulateCarrierStatusForOrderAsync(orderId, DeliveryStatus.DeliveryFailed, ct));
     }
 
@@ -110,7 +112,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("{deliveryId:guid}/delivered")]
     public async Task<IActionResult> ForceDelivered(Guid deliveryId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
         return await ForceOneAsync(deliveryId, ct);
     }
 
@@ -118,7 +120,7 @@ public sealed class DevDeliveriesController : ApiControllerBase
     [HttpPost("orders/{orderId:guid}/delivered")]
     public async Task<IActionResult> ForceOrderDelivered(Guid orderId, CancellationToken ct)
     {
-        //if (!_env.IsDevelopment()) return NotFound();
+        if (!_env.IsDevelopment()) return NotFound();
 
         var order = await _orders.GetByIdAsync(orderId, CurrentUserId, isPrivileged: true, ct);
         if (!order.IsSuccess || order.Data is null)

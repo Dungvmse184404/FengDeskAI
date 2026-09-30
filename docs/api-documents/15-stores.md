@@ -14,6 +14,7 @@ Quản lý garden store (marketplace). User đã đăng nhập tự mở store (
 |--------|------|-------|-------|
 | GET | `/api/stores` | Public | Store đang hoạt động |
 | GET | `/api/stores/mine` | Authenticated | Store tôi đồng sở hữu |
+| GET | `/api/stores/mine/balance` | Authenticated | Số dư sổ cái (có thể rút / đang giữ) các store tôi SỞ HỮU |
 | GET | `/api/stores/{id}` | Public | Chi tiết store |
 | POST | `/api/stores` | Authenticated | Tự mở store |
 | PUT | `/api/stores/{id}` | Owner/Admin | Cập nhật store |
@@ -48,9 +49,14 @@ Quản lý garden store (marketplace). User đã đăng nhập tự mở store (
   "address": { "id": "guid", "storeId": "guid", "wardId": "guid",
                "streetAddress": "...", "latitude": null, "longitude": null, "isActive": true },
   "owners": [{ "ownerUserId": "guid", "isPrimary": true, "assignedAt": "..." }],
+  "rating": { "average": 4.3, "count": 12 },
   "createdAt": "...", "updatedAt": "..."
 }
 ```
+
+> **`rating`** chỉ có ở `GET /{id}` (null ở `/` và `/mine`): trung bình sao (làm tròn 1 chữ số) + số lượt đánh giá của
+> mọi sản phẩm thuộc cửa hàng, tính theo cột chụp `reviews.garden_store_id`. `count = 0` → chưa có đánh giá. Phân bố
+> 1–5 sao: `GET /api/Review/summary?storeId=` — xem [19-reviews](./19-reviews.md).
 
 ## POST `/api/stores`
 Tự mở store; người tạo thành owner chính. **Request body** (`CreateStoreRequest`):
@@ -124,6 +130,17 @@ Lỗi: `400 StaffNotFound` (user không tồn tại), `400 IdentifierRequired` (
 
 ### Lời mời (góc nhìn người được mời)
 
+**GET `/api/stores/mine/balance`** — Authenticated (28/09/2026, menu tài khoản FE). Chỉ store user **sở hữu**
+(nhân viên nhận `stores: []`). Đọc thẳng `ledger_entries` — hai truy vấn bất kể số store:
+
+```json
+{ "available": 1200000, "pending": 300000, "balance": 1500000, "payoutHoldDays": 7,
+  "stores": [{ "storeId": "…", "storeName": "Vườn của Cat", "available": 1200000, "pending": 300000, "balance": 1500000 }] }
+```
+
+`available` = bút toán có `available_at ≤ now` (đã qua khoảng giữ sau khi giao) — cùng số với `ledgerAvailable` của
+`/statistics`; `pending` = phần còn trong khoảng giữ. Cả hai đã trừ phí sàn và công nợ hoàn hàng.
+
 **GET `/api/stores/staff/invitations/mine`** — Authenticated. `data` = mảng `InvitationResponse`:
 ```json
 [{
@@ -171,7 +188,8 @@ Mốc (nhắm 7-13 cột để biểu đồ đọc được): `week` = 7 ngày g
   "awaitingPaymentOrders": 1,       // đơn PayOS khách đã đặt nhưng CHƯA trả tiền có hàng của store
   "awaitingPaymentValue": 430000,   // tiền chưa thu: đơn PayOS chưa trả + đơn COD đang trên đường
 
-  // Sản phẩm trong đơn, gộp theo (SẢN PHẨM × TRẠNG THÁI), top 10 mỗi trạng thái theo giá trị
+  // Sản phẩm trong đơn, gộp theo (SẢN PHẨM × TRẠNG THÁI), top 10 mỗi trạng thái theo giá trị — MỖI cặp đúng một
+  // dòng: lớp "Ordered" gộp CHUNG đơn PayOS chưa trả + đơn COD đang giao (28/09/2026; trước đó ra hai dòng trùng)
   "itemsByStatus": [
     { "productId": "guid", "productName": "Vòng tay thạch anh", "status": "Ordered", "quantity": 1, "value": 300000, "orderCount": 1, "shippingFee": 0 },
     { "productId": "guid", "productName": "Tượng Tỳ Hưu đồng",  "status": "Paid",    "quantity": 2, "value": 640000, "orderCount": 2, "shippingFee": 30000 }
@@ -184,6 +202,13 @@ Mốc (nhắm 7-13 cột để biểu đồ đọc được): `week` = 7 ngày g
   "availableForPayoutValue": 900000,    // đã giao và qua hết khoảng giữ
   "pendingClearanceValue": 250000,      // đã giao nhưng chưa đủ ngày
   "outstandingLiabilityValue": 0,       // công nợ chưa miễn, trừ vào kỳ chi kế tiếp
+
+  // Sổ cái (28/09/2026 — docs/adr/platform-fee-ledger.md)
+  "commissionRate": 0.08,               // phí sàn áp cho đơn MỚI
+  "platformCommission": 72000,          // Σ phí sàn đã thu, sau khi trả lại phần của hàng bị hoàn
+  "ledgerBalance": 828000,              // THỰC NHẬN = tiền hàng đã giao − phí sàn − công nợ (+ phí trả lại)
+  "ledgerAvailable": 690000,            // phần đã qua khoảng giữ
+  "ledgerPending": 138000,              // phần còn trong khoảng giữ
 
   "productCount": 12,
   "staffCount": 1,

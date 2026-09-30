@@ -1,6 +1,7 @@
 using AutoMapper;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Domain.Entities.CustomerCare;
+using FengDeskAI.Domain.Entities.Identity;
 
 namespace FengDeskAI.Application.Features.CustomerCare.Mappings;
 
@@ -8,15 +9,10 @@ public class ReviewMappingProfile : Profile
 {
     public ReviewMappingProfile()
     {
-        CreateMap<Review, ReviewResponse>();
+        CreateMap<User, ReviewerResponse>();
 
-        CreateMap<CreateReviewRequest, Review>()
-            .ForMember(d => d.Id, opt => opt.Ignore())
-            .ForMember(d => d.User, opt => opt.Ignore())
-            .ForMember(d => d.Product, opt => opt.Ignore())
-            .ForMember(d => d.CreatedBy, opt => opt.Ignore())
-            .ForMember(d => d.UpdatedBy, opt => opt.Ignore())
-            .ForMember(d => d.IsDeleted, opt => opt.Ignore());
+        CreateMap<Review, ReviewResponse>()
+            .ForMember(d => d.VariantName, opt => opt.MapFrom(s => s.OrderItem != null ? s.OrderItem.VariantName : null));
 
         CreateMap<Review, CreateReviewRespond>();
 
