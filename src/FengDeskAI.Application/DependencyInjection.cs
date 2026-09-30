@@ -58,6 +58,7 @@ public static class DependencyInjection
         services.AddSingleton<IAiTextSanitizer, AiTextSanitizer>();
 
         services.AddScoped<IAuthService, AuthService>();
+        services.AddScoped<IAuthSessionIssuer, AuthSessionIssuer>();
         services.AddScoped<IRegistrationFlowService, RegistrationFlowService>();
         services.AddScoped<IPasswordResetService, PasswordResetService>();
         services.AddScoped<IUserService, UserService>();

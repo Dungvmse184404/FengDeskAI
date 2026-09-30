@@ -55,7 +55,7 @@ qua `TestSecrets` — không có secret nào nằm trong mã nguồn.
 
 ## Đang phủ những gì
 
-**450 test**, chia hai tầng. Tầng 1 khẳng định **"không nổ"**; tầng 2 khẳng định **nghiệp vụ đúng**.
+**458 test**, chia hai tầng. Tầng 1 khẳng định **"không nổ"**; tầng 2 khẳng định **nghiệp vụ đúng**.
 
 ### Tầng 0-1 — hạ tầng & bề mặt
 

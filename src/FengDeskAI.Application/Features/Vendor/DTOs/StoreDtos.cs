@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Features.Identity.DTOs;
 using FengDeskAI.Domain.Enums.Vendor;
 
 namespace FengDeskAI.Application.Features.Vendor.DTOs;
@@ -33,6 +34,16 @@ public class StoreResponse
     public StoreRatingResponse? Rating { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
+}
+
+/// <summary>
+/// Kết quả tự mở cửa hàng = cửa hàng vừa tạo + phiên đăng nhập MỚI. <see cref="Session"/> chỉ có khi lần này
+/// mới cấp role GardenOwner (TokenVersion tăng ⇒ access/refresh token cũ đã chết); null khi user vốn đã là chủ
+/// vườn (mở thêm cửa hàng thứ hai) — token cũ vẫn dùng tiếp.
+/// </summary>
+public class CreateStoreResponse : StoreResponse
+{
+    public AuthResponse? Session { get; set; }
 }
 
 /// <summary>Trung bình sao (làm tròn 1 chữ số) + số lượt đánh giá của cửa hàng.</summary>

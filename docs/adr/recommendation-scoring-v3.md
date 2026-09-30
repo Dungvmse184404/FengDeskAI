@@ -9,7 +9,22 @@
 > - [`product-placement-personal-recommendation.md`](./product-placement-personal-recommendation.md) — `ProductPlacement` + `PlacementPolicy`: `ScoreOne` nay đọc bảng luật theo placement, và có luồng thứ hai chấm theo dụng thần cá nhân.
 > - [`vibe-soft-scoring.md`](./vibe-soft-scoring.md) — bước 2a "Intent filter (hard)" đã mềm hóa thành `VIBE_MISMATCH_PENALTY` / `VIBE_UNKNOWN_PENALTY`, kèm lưới an toàn `MIN_SCORE_THRESHOLD`.
 >
-> Mô tả engine **hiện tại** gom ở [`ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md).
+> Mô tả engine **hiện tại** gom ở [`ard/bounded-contexts/customer-care.md`](../ard/bounded-contexts/customer-care.md).>
+> ⚠️ **PHÉP ĐO ĐÃ ĐỔI TỪ v3.6/v3.7 — mọi công thức `x·p` trong tài liệu này là bản CŨ.**
+> Ba trục mục tiêu đều có `Σ (phần dương) = 1`, mà `Σp = 1`, nên tích trong `x·p` **là** một phép
+> trung bình có trọng số ⇒ trần của mỗi sản phẩm bằng chính `max p[e]` của nó ⇒ engine thưởng cho việc
+> khai thiếu hành. Hiện hành:
+>
+> | Trục | Nay | ADR |
+> |---|---|---|
+> | dụng thần (Carry) | `Σ min(n̂,p) − Σ_{kỵ} p` | [`personal-need-v3.6.md`](./personal-need-v3.6.md) |
+> | phòng (Desk/Living) | `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` | [`workspace-gap-cover-v3.7.md`](./workspace-gap-cover-v3.7.md) |
+> | nghề | `Σ min(ô⁺,p) − Σ min(ô⁻,p)` | ↑ §2.3 |
+> | **bản mệnh** | `r·p` — **vẫn là tích trong**, có chủ ý | ↑ §2.4 |
+>
+> Hệ quả kéo theo: `score = p·d` **không còn đúng** (`d` giờ chỉ là vector radar). Sản phẩm **thuần một
+> hành** ra điểm y hệt bản cũ, nên mọi ví dụ một-hành trong tài liệu này vẫn đọc được.
+> Ký hiệu (`p`, `ĝ`, `n̂`, `ô`, `r`, `d`, `v⁺`/`v⁻`…): [`glossary-scoring.md`](../glossary-scoring.md) §0.
 
 ## 1. Ý tưởng cốt lõi
 

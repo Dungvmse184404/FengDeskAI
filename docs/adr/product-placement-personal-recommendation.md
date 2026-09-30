@@ -17,7 +17,7 @@
 
 | Trụ cột | Nguồn |
 |---|---|
-| Điểm chính | `gap = AdjustedIdeal(phòng) − Current(phòng)`, `score = gap · productVector / ‖gap‖₁` |
+| Điểm chính | `gap = AdjustedIdeal(phòng) − Current(phòng)`, `score = gap · productVector / ‖gap‖₁` *(bản 08/2026; từ v3.7 là `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` — xem [`workspace-gap-cover-v3.7.md`](./workspace-gap-cover-v3.7.md))* |
 | Lọc intent | `TargetVibe(WorkPurpose)` của phòng |
 | Directional Validation | hướng cửa/WC/góc tối của phòng |
 

@@ -1,6 +1,7 @@
 using FengDeskAI.Application.Features.Sales.DTOs;
 using FengDeskAI.Application.Features.Sales.Services;
 using FengDeskAI.Application.Features.Shipping.Services;
+using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Enums.Sales;
 using FengDeskAI.WebAPI.Common;
 using Microsoft.AspNetCore.Authorization;
@@ -32,12 +33,15 @@ public sealed class DevDeliveriesController : ApiControllerBase
 
     private readonly IOrderService _orders;
     private readonly IShippingService _shipping;
+    private readonly IUnitOfWork _uow;
     private readonly IWebHostEnvironment _env;
 
-    public DevDeliveriesController(IOrderService orders, IShippingService shipping, IWebHostEnvironment env)
+    public DevDeliveriesController(
+        IOrderService orders, IShippingService shipping, IUnitOfWork uow, IWebHostEnvironment env)
     {
         _orders = orders;
         _shipping = shipping;
+        _uow = uow;
         _env = env;
     }
 
@@ -162,6 +166,44 @@ public sealed class DevDeliveriesController : ApiControllerBase
     /// (đã qua giai đoạn đó) thì bỏ qua; chỉ coi là lỗi nếu bước cuối (Delivered) không thành công
     /// mà delivery cũng chưa ở Delivered (vd: Cancelled/Returned không ép được).
     /// </summary>
+    /// <summary>
+    /// [DEV] Gỡ khoảng giữ tiền của một delivery để tiền hiện sang <b>"có thể rút"</b> ngay, phục vụ demo
+    /// màn doanh thu người bán. Bình thường tiền chỉ sạch sau <c>PayoutPolicy.HoldDays</c> (7 ngày) kể từ
+    /// lúc giao — endpoint này chỉ kéo <c>AvailableAt</c> của bút toán SỔ NHÀ VƯỜN về hiện tại.
+    ///
+    /// <para>
+    /// CỐ Ý không cộng vào <c>users.balance</c>: <c>PayoutPolicy.CreditToBalanceEnabled</c> đang tắt vì luồng
+    /// đó còn sai (tiền hiện hai nơi, công nợ hoàn hàng không bị trừ, chạy nhiều instance cộng đôi). Số
+    /// "chờ đối soát / có thể rút" ở API vẫn tính từ sổ cái nên demo vẫn ra đúng con số.
+    /// </para>
+    ///
+    /// Delivery phải đã <c>Delivered</c> (đã có bút toán trong sổ). Chưa giao thì gọi force-delivered trước.
+    /// </summary>
+    [HttpPost("{deliveryId:guid}/clear-payout-hold")]
+    public async Task<IActionResult> ClearPayoutHold(Guid deliveryId, CancellationToken ct)
+    {
+        if (!_env.IsDevelopment()) return NotFound();
+
+        var cleared = await _uow.Ledger.ClearGardenHoldForDeliveryAsync(deliveryId, DateTime.UtcNow, ct);
+        if (cleared == 0)
+        {
+            return Ok(new
+            {
+                deliveryId,
+                cleared,
+                message = "Không có bút toán nào đang bị giữ. Delivery chưa giao xong, hoặc tiền đã có thể rút rồi.",
+            });
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        return Ok(new
+        {
+            deliveryId,
+            cleared,
+            message = $"Đã gỡ giữ {cleared} bút toán — tiền của đơn này giờ nằm ở mục \"có thể rút\".",
+        });
+    }
+
     private async Task<(string? status, string? message)> ForceOneCoreAsync(Guid deliveryId, CancellationToken ct)
     {
         DeliveryResponse? last = null;

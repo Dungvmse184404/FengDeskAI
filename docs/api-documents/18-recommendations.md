@@ -49,8 +49,13 @@ Mệnh của **phòng**, của **người** và của **sản phẩm** đều qu
 5. **Trộn theo `WorkspaceScope`**:
 
 ```
-d     = (1 − Wp)·ĝ + Wp·r          // vector hướng tổng hợp, mỗi trục ∈ [−1, +1]
-score = clamp( productVector · d − userPenalty − dirPenalty − vibePenalty , −1, 1 )
+// Wg = 1 − Wp − Wo. Từ v3.7 CHỈ trục bản mệnh còn là tích trong (xem §Điểm khớp phòng ở trên).
+blended = Wg·gapScore + Wp·(r·p) + Wo·occupationScore
+score   = clamp( blended − userPenalty − dirPenalty − vibePenalty , −1, 1 )
+
+// `d = Wg·ĝ + Wp·r + Wo·ô` vẫn trả ở `breakdown.vectors.combinedDirection` để VẼ radar,
+// nhưng `productVector · d` KHÔNG còn bằng `blended` — muốn dựng lại điểm thì cộng
+// `breakdown.components[].contribution`.
 ```
 
 | `WorkspaceScope` | `Wp` (`PERSONAL_WEIGHT_*`) — seed v3.5 | v3.1–v3.4 |
@@ -115,7 +120,7 @@ Vector mục tiêu là **thứ NGƯỜI đang cần**, không phải phòng:
 
 ```jsonc
 "breakdown": {
-  "formulaVersion": "3.2", "target": "WorkspaceGap", "placement": "Living", "displayPercent": 90,
+  "formulaVersion": "3.7", "target": "WorkspaceGap", "placement": "Living", "displayPercent": 90,
   "components": [
     { "code": "GAP_SCORE",      "labelVi": "Hợp nhu cầu của phòng", "value": 0.600, "weight": 0.50, "contribution": 0.300, "reasonVi": "…" },
     { "code": "PERSONAL_SCORE", "labelVi": "Hợp bản mệnh của bạn",   "value": 1.000, "weight": 0.50, "contribution": 0.500, "reasonVi": "…" }
@@ -177,7 +182,8 @@ chúng, còn `/recommendations` và `/recommendations/fit` thì không — cùng
 
 ⚠️ `formulaVersion` của phiên mới là **`"3.7"`** (3.5 = trần phiếu tag `TAG_VOTES_CAP` trong `current`, thêm
 `tagVotesScale`; 3.6 = luồng Carry đo `Σ min(n̂,p) − Σ_{kỵ} p` thay `n̂·p`, thêm `personalAvoidElements` và dòng
-`PERSONAL_AVOID_SCORE`; **3.7** = luồng phòng đo `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` thay `ĝ·p`). Điểm của hai phiên bản
+`PERSONAL_AVOID_SCORE`; **3.7** = luồng phòng đo `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` thay `ĝ·p` VÀ trục nghề đo
+`Σ min(ô⁺,p) − Σ min(ô⁻,p)` thay `ô·p`). Điểm của hai phiên bản
 công thức KHÔNG so sánh trực tiếp được với nhau.
 
 ⚠️ `breakdown.vectors.combinedDirection` vẫn là vector **radar** (đang ưu tiên bù hành nào), nhưng từ v3.7
@@ -199,7 +205,7 @@ Khi trục nghề bật, `components[]` có thêm dòng và breakdown trả thê
   { "code": "GAP_SCORE",        "labelVi": "Hợp nhu cầu của phòng", "value": 0.60, "weight": 0.30, "contribution": 0.18, "reasonVi": "…" },
   { "code": "PERSONAL_SCORE",   "labelVi": "Hợp bản mệnh của bạn",   "value": 1.00, "weight": 0.50, "contribution": 0.50, "reasonVi": "…" },
   { "code": "OCCUPATION_SCORE", "labelVi": "Hợp nghề Tài chính / Kế toán", "value": 0.75, "weight": 0.20, "contribution": 0.15,
-    "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề bạn cần." }
+    "reasonVi": "Đáp ứng Kim 0.75/0.75 phần nghề Tài chính / Kế toán đang cần; nghề Tài chính / Kế toán còn cần thêm Thủy 0.25." }
 ],
 "occupation": {
   "code": "FINANCE", "nameVi": "Tài chính / Kế toán",
@@ -230,11 +236,11 @@ lấy đúng một nghề (không phân biệt hoa/thường; không có → 404
 
 ```json
 {
-  "productId": "…", "formulaVersion": "3.5", "placement": "Carry",
+  "productId": "…", "formulaVersion": "3.7", "placement": "Carry",
   "productVector": [ { "element": "Kim", "value": 1.0 }, … ],
   "fits": [
     { "code": "FINANCE", "nameVi": "Tài chính / Kế toán", "score": 0.750, "displayPercent": 88, "tierVi": "Rất hợp",
-      "direction": [ … ], "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề Tài chính / Kế toán cần." },
+      "direction": [ … ], "reasonVi": "Đáp ứng Kim 0.75/0.75 phần nghề Tài chính / Kế toán đang cần; nghề Tài chính / Kế toán còn cần thêm Thủy 0.25." },
     { "code": "SALES", "score": 0.400, "displayPercent": 70, "tierVi": "Phù hợp", … }
   ],
   "noteVi": null

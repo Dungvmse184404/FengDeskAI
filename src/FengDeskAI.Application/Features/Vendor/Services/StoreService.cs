@@ -4,6 +4,7 @@ using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Common.Validation;
 using FengDeskAI.Application.Features.Announcement.DTOs;
 using FengDeskAI.Application.Features.Announcement.Services;
+using FengDeskAI.Application.Features.Identity.Services;
 using FengDeskAI.Application.Features.Shipping.Services;
 using FengDeskAI.Application.Features.Vendor.DTOs;
 using FengDeskAI.Application.Interfaces.Repositories;
@@ -23,11 +24,13 @@ public class StoreService : IStoreService
     private readonly INotificationService _notifications;
     private readonly IStoreShopProvisioner _shopProvisioner;
     private readonly IPlatformFeeService _platformFee;
+    private readonly IAuthSessionIssuer _sessionIssuer;
 
     public StoreService(IUnitOfWork uow, IMapper mapper, INotificationService notifications,
-        IStoreShopProvisioner shopProvisioner, IPlatformFeeService platformFee)
+        IStoreShopProvisioner shopProvisioner, IPlatformFeeService platformFee, IAuthSessionIssuer sessionIssuer)
     {
         _platformFee = platformFee;
+        _sessionIssuer = sessionIssuer;
         _uow = uow;
         _mapper = mapper;
         _notifications = notifications;
@@ -50,14 +53,14 @@ public class StoreService : IStoreService
         return ServiceResult<StoreResponse>.Success(response);
     }
 
-    public async Task<IServiceResult<StoreResponse>> CreateAsync(Guid actorUserId, CreateStoreRequest request, CancellationToken ct = default)
+    public async Task<IServiceResult<CreateStoreResponse>> CreateAsync(Guid actorUserId, CreateStoreRequest request, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(request.Name))
-            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.NameRequired);
+            return ServiceResult<CreateStoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.NameRequired);
         if (string.IsNullOrWhiteSpace(request.Hotline))
-            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineRequired);
+            return ServiceResult<CreateStoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineRequired);
         if (!VietnamPhone.IsContactValid(request.Hotline))
-            return ServiceResult<StoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineInvalid);
+            return ServiceResult<CreateStoreResponse>.Failure(ApiStatusCodes.BadRequest, ApiStatusMessages.Store.HotlineInvalid);
 
         var entity = _mapper.Map<GardenStore>(request);
         entity.Name = request.Name.Trim();
@@ -72,11 +75,17 @@ public class StoreService : IStoreService
         });
 
         await _uow.Stores.AddAsync(entity, ct);
-        await GrantGardenOwnerRoleAsync(actorUserId, ct);
+        var promotedUser = await GrantGardenOwnerRoleAsync(actorUserId, ct);
+
+        var response = _mapper.Map<CreateStoreResponse>(entity);
+        // Vừa được cấp role → phiên cũ đã bị thu hồi. Cấp phiên mới theo role mới ngay trong cùng SaveChanges
+        // (refresh token mới thêm SAU lượt thu hồi nên không bị thu hồi theo).
+        if (promotedUser is not null)
+            response.Session = await _sessionIssuer.IssueAsync(promotedUser, ct);
+
         await _uow.SaveChangesAsync(ct);
 
-        return ServiceResult<StoreResponse>.Success(
-            _mapper.Map<StoreResponse>(entity), ApiStatusMessages.Store.Created, ApiStatusCodes.Created);
+        return ServiceResult<CreateStoreResponse>.Success(response, ApiStatusMessages.Store.Created, ApiStatusCodes.Created);
     }
 
     public async Task<IServiceResult<StoreResponse>> UpdateAsync(Guid id, Guid actorUserId, bool isAdmin, UpdateStoreRequest request, CancellationToken ct = default)
@@ -634,17 +643,20 @@ public class StoreService : IStoreService
             address.SenderPhone = VietnamPhone.Normalize(senderPhone);
     }
 
-    /// <summary>Cấp flag <see cref="UserRole.GardenOwner"/> cho user nếu chưa có (không SaveChanges).</summary>
-    private async Task GrantGardenOwnerRoleAsync(Guid userId, CancellationToken ct)
+    /// <summary>
+    /// Cấp flag <see cref="UserRole.GardenOwner"/> cho user nếu chưa có (không SaveChanges). Trả về user khi VỪA
+    /// được cấp (phiên cũ đã bị thu hồi), null khi user không tồn tại hoặc vốn đã là chủ vườn.
+    /// </summary>
+    private async Task<User?> GrantGardenOwnerRoleAsync(Guid userId, CancellationToken ct)
     {
         var user = await _uow.Users.GetByIdAsync(userId, ct);
-        if (user is not null && !user.Role.Has(UserRole.GardenOwner))
-        {
-            user.Role = user.Role.Add(UserRole.GardenOwner);
-            user.TokenVersion++;
-            await _uow.RefreshTokens.RevokeAllActiveForUserAsync(user.Id, ct);
-            _uow.Users.Update(user);
-        }
+        if (user is null || user.Role.Has(UserRole.GardenOwner)) return null;
+
+        user.Role = user.Role.Add(UserRole.GardenOwner);
+        user.TokenVersion++;
+        await _uow.RefreshTokens.RevokeAllActiveForUserAsync(user.Id, ct);
+        _uow.Users.Update(user);
+        return user;
     }
 
     private Task AddAuditAsync(Guid actorId, string action, string resourceType, Guid resourceId,

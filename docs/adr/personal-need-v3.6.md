@@ -36,7 +36,7 @@ còn lại nhàn. Ít thông tin hơn nên ít hành bị trừ hơn — đúng 
 needCover = Σ_e min(n̂[e], p[e])          ∈ [0, 1]   — phần nhu cầu được sản phẩm phủ (= 1 − |n̂ − p|₁/2 nếu p ⊆ dụng)
 avoidHit  = Σ_{e ∈ Kỵ} p[e]              ∈ [0, 1]   — phần sản phẩm rơi vào kỵ thần
 personal  = needCover − avoidHit          ∈ [−1, 1]
-blended   = (1 − Wo)·personal + Wo·(ô·p)                                       (trục nghề không đổi)
+blended   = (1 − Wo)·personal + Wo·(ô·p)                                       (trục nghề không đổi Ở v3.6)
 score     = clamp(blended − USER_CONFLICT − MINOR_CLASH(chỉ hành khắc mệnh ∉ Kỵ) , −1, 1)
 ```
 
@@ -84,3 +84,7 @@ vật Kim/Thổ lên "Rất hợp". Với fallback Nạp Âm (kỵ chỉ có H�
 | Docs | glossary §1/§5/§7, api 18/25, ARD, README ADR |
 
 Không đổi: luồng phòng, trục nghề, `PlacementPolicy`, golden set phòng (byte-identical).
+
+> **Cập nhật v3.7 (30/09/2026):** luồng phòng và trục nghề sau đó cũng bỏ tích trong, theo đúng hình dạng
+> của §2.2 này — `Wo·(ô·p)` ở trên nay là `Wo·(Σ min(ô⁺,p) − Σ min(ô⁻,p))`. Nhánh Carry (`needCover`,
+> `avoidHit`) **không** bị chạm lại. Xem [`workspace-gap-cover-v3.7.md`](./workspace-gap-cover-v3.7.md).

@@ -160,8 +160,8 @@ dotnet test FengDeskAI.slnx
 
 Connection string tìm theo thứ tự: biến môi trường `ConnectionStrings__DefaultConnection` (CI dùng, luôn ưu tiên) → `appsettings.Testing.json` (gitignore, mỗi máy một file) → không có thì dừng kèm hướng dẫn. **Không có giá trị mặc định trong code.**
 
-- `tests/FengDeskAI.UnitTests` — unit test thuần (xunit + Moq). **469 test.**
-- `tests/FengDeskAI.ApiTests` — integration test in-process qua `WebApplicationFactory`. **455 test.** Tầng 1 phủ **toàn bộ** endpoint ở mức smoke + ma trận phân quyền, tự sinh từ routing table nên endpoint mới được phủ ngay; tầng 2 phủ nghiệp vụ theo bounded context (Identity, Sales, Returns/RMA + SLA + công nợ, Catalog + model 3D, Vendor, quản trị + tham số chấm điểm, Workspace, gợi ý, đánh giá, giao hàng, địa chỉ, bảng tra cứu). Xem [`tests/FengDeskAI.ApiTests/README.md`](tests/FengDeskAI.ApiTests/README.md) và [`docs/adr/api-integration-testing.md`](docs/adr/api-integration-testing.md).
+- `tests/FengDeskAI.UnitTests` — unit test thuần (xunit + Moq). **487 test.**
+- `tests/FengDeskAI.ApiTests` — integration test in-process qua `WebApplicationFactory`. **458 test.** Tầng 1 phủ **toàn bộ** endpoint ở mức smoke + ma trận phân quyền, tự sinh từ routing table nên endpoint mới được phủ ngay; tầng 2 phủ nghiệp vụ theo bounded context (Identity, Sales, Returns/RMA + SLA + công nợ, Catalog + model 3D, Vendor, quản trị + tham số chấm điểm, Workspace, gợi ý, đánh giá, giao hàng, địa chỉ, bảng tra cứu). Xem [`tests/FengDeskAI.ApiTests/README.md`](tests/FengDeskAI.ApiTests/README.md) và [`docs/adr/api-integration-testing.md`](docs/adr/api-integration-testing.md).
 - **Ca test có tác dụng phụ lên phiên đăng nhập** (thứ làm đổi `TokenVersion`: tạo cửa hàng, khóa user, đổi role, thu hồi phiên) phải dùng `ScenarioUsers.CreateAsync` — nhắm vào user mẫu dùng chung sẽ làm token của role đó chết và kéo mọi ca chạy sau đỏ theo.
 - `TestDatabaseGuard` chặn cứng việc chạy test vào DB từ xa (Supabase/Railway). **Đừng gỡ.**
 - Thêm tích hợp ngoài mới → phải thêm fake trong `ApiTestFactory`, không thì test gọi ra dịch vụ thật.

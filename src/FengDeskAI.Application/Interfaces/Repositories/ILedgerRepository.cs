@@ -17,6 +17,13 @@ public interface ILedgerRepository : IGenericRepository<LedgerEntry>
     /// <summary>Bút toán theo khoá — dùng khi cần đảo đúng số tiền đã ghi trước đó.</summary>
     Task<LedgerEntry?> GetByKeyAsync(string idempotencyKey, CancellationToken ct = default);
 
+    /// <summary>
+    /// [DEV] Gỡ khoảng giữ tiền của một delivery: đẩy <c>AvailableAt</c> của các bút toán SỔ NHÀ VƯỜN về
+    /// <paramref name="nowUtc"/> để tiền chuyển từ "chờ đối soát" sang "có thể rút" ngay. Trả số dòng đã đổi.
+    /// Chỉ dùng cho demo — không đụng <c>users.balance</c> (xem PayoutPolicy.CreditToBalanceEnabled).
+    /// </summary>
+    Task<int> ClearGardenHoldForDeliveryAsync(Guid deliveryId, DateTime nowUtc, CancellationToken ct = default);
+
     Task<GardenLedgerSummary> GetGardenSummaryAsync(Guid gardenStoreId, DateTime nowUtc, CancellationToken ct = default);
 
     /// <summary>Như <see cref="GetGardenSummaryAsync"/> cho nhiều vườn trong MỘT truy vấn. Vườn chưa có bút toán ⇒ số 0.</summary>

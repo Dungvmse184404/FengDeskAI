@@ -56,6 +56,16 @@ public class LedgerRepository : GenericRepository<LedgerEntry>, ILedgerRepositor
         });
     }
 
+    public async Task<int> ClearGardenHoldForDeliveryAsync(
+        Guid deliveryId, DateTime nowUtc, CancellationToken ct = default)
+    {
+        var entries = await _set
+            .Where(e => e.DeliveryId == deliveryId && e.Account == LedgerAccount.GardenStore && e.AvailableAt > nowUtc)
+            .ToListAsync(ct);
+        foreach (var entry in entries) entry.AvailableAt = nowUtc;
+        return entries.Count;
+    }
+
     public async Task<GardenLedgerSummary> GetGardenSummaryAsync(Guid gardenStoreId, DateTime nowUtc, CancellationToken ct = default)
     {
         // Một lượt đi về DB: gộp theo (đã khả dụng?, là phí sàn?) rồi cộng trong C#.
