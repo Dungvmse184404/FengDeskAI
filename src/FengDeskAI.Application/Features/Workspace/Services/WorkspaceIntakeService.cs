@@ -158,6 +158,17 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
         }
     }
 
+    /// <summary>
+    /// Đánh dấu job hỏng + báo về FE. Chỉ worker gọi, trong khối catch bao quanh <see cref="RunJobAsync"/>.
+    /// Ghi cache TRƯỚC rồi mới publish: publish hỏng thì poll vẫn đọc ra "failed", còn ngược lại thì
+    /// không — cache là đường chắc chắn, realtime chỉ là đường nhanh.
+    /// </summary>
+    public async Task FailJobAsync(string operationId, string message, CancellationToken ct = default)
+    {
+        _cache.Set(JobKey(operationId), WorkspaceIntakeJobStatusResponse.Failed(message), JobResultTtl);
+        await _notifier.PublishFailedAsync(operationId, message, ct);
+    }
+
     /// <summary>Trạng thái job từ cache (fallback khi FE lỡ mất event realtime). NotFound nếu không tồn tại/hết hạn.</summary>
     public IServiceResult<WorkspaceIntakeJobStatusResponse> GetJobStatus(string operationId)
     {
@@ -344,8 +355,11 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             "- Không đoán. Field không được nhắc TƯỜNG MINH → null. \"cạnh cửa sổ\" KHÔNG cho biết hướng; " +
             "chỉ điền hướng khi user nói rõ (\"hướng đông\", \"bàn quay về tây\").\n" +
             imageRule +
-            "- inputs là NGOẠI LỆ của luật trên: liệt kê CÀNG NHIỀU tín hiệu nhận ra càng tốt, không giới hạn " +
-            "1 cái mỗi loại (\"bàn gỗ, ghế da, bể cá, cây xanh\" → đủ 4 mục). Thà dư còn hơn sót - user sửa lại được.\n" +
+            "- inputs là NGOẠI LỆ của luật \"không đoán\": cứ liệt kê mọi tín hiệu NHÌN/ĐỌC ra được, nhiều hơn " +
+            "1 cái mỗi loại (\"bàn gỗ, ghế da, bể cá, cây xanh\" → đủ 4 mục).\n" +
+            "- NHƯNG CÓ TRẦN mỗi loại, xếp theo mức nổi bật GIẢM DẦN rồi dừng: " +
+            $"Color tối đa {ElementInputLimits.ColorMaxPerKind}, Material/Shape/DecorItem tối đa " +
+            $"{ElementInputLimits.DefaultMaxPerKind}. Chọn thứ CHỦ ĐẠO nhất, bỏ chi tiết vụn.\n" +
             "- mentionedFields: những field-key user CÓ nhắc, kể cả khi không map ra giá trị hợp lệ.\n" +
             "- hasDesk: true nếu có nhắc bàn làm việc (loại bàn / hướng bàn / workspaceType kiểu bàn-văn phòng); " +
             "false nếu rõ ràng là loại phòng không có bàn (bếp, phòng khách, phòng ngủ, phòng ăn, ban công, phòng tập) " +
@@ -383,6 +397,7 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
             "{\"kind\":\"DecorItem\",\"code\":\"Painting\"},{\"kind\":\"DecorItem\",\"code\":\"Plant\"}]," +
             "\"mentionedFields\":[\"locationType\",\"workspaceType\",\"lighting\",\"hasDesk\",\"workPurpose\",\"inputs\"]}\n\n" +
             "\"Phòng tôi khá đẹp\" → mọi field null, \"inputs\":[], \"mentionedFields\":[].\n\n" +
+            "Nếu nhận ra nhiều hơn trần, CHỈ trả những cái chủ đạo nhất cho đủ trần - đừng trả dư.\n\n" +
 
             "Chỉ trả JSON.";
     }
@@ -563,7 +578,12 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
                 unrecognized.Add(rawInput.Code);
             }
         }
-        draft.Inputs = draft.Inputs.DistinctBy(i => (i.InputKind, i.InputCode)).ToList();
+        // Trần mỗi nhóm. Model trả dư là chuyện thường và KHÔNG phải lỗi: cắt im lặng, giữ phần đầu
+        // (thứ tự model trả = thứ tự nổi bật nó tự xếp), rồi đi tiếp. Tuyệt đối không fail cả lượt
+        // intake chỉ vì model hào phóng — user mất trắng kết quả phân tích vì một chuyện tự xử được.
+        // Phần bị cắt KHÔNG đẩy vào `unrecognized`: nó nhận ra đúng, chỉ là không còn chỗ.
+        draft.Inputs = ElementInputLimits.TrimPerKind(
+            draft.Inputs.DistinctBy(i => (i.InputKind, i.InputCode)), i => i.InputKind);
         resolved["inputs"] = draft.Inputs.Count > 0;
 
         draft.Unrecognized = unrecognized;

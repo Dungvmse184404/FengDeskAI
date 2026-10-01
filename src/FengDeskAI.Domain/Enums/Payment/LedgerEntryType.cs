@@ -18,6 +18,15 @@ public enum LedgerEntryType
     /// <summary>Khoản giảm phí ship từ voucher sàn tài trợ — sàn −. Không đụng sổ nhà vườn.</summary>
     ShippingVoucherSubsidy,
 
+    /// <summary>Khoản giảm TIỀN HÀNG từ voucher sàn tài trợ — sàn −. Không đụng sổ nhà vườn.</summary>
+    ItemVoucherSubsidy,
+
+    /// <summary>
+    /// Khoản giảm TIỀN HÀNG từ voucher do CHÍNH NHÀ VƯỜN tài trợ — nhà vườn −. Sàn không ghi gì
+    /// (hoa hồng vẫn tính trên tiền hàng gốc).
+    /// </summary>
+    SellerVoucherDiscount,
+
     /// <summary>Phí nhà vận chuyển thực tính cho delivery (sàn ký hợp đồng GHN) — sàn −.</summary>
     CarrierShippingCost,
 

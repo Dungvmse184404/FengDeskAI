@@ -1,4 +1,4 @@
-﻿# 01 — Authentication
+# 01 — Authentication
 
 [← Mục lục](./README.md)
 

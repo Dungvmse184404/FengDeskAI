@@ -27,6 +27,13 @@ public interface IWorkspaceIntakeService
     /// <summary>Trạng thái job (pending/done/failed) từ cache — null nếu operationId không tồn tại/đã hết hạn.</summary>
     IServiceResult<WorkspaceIntakeJobStatusResponse> GetJobStatus(string operationId);
 
+    /// <summary>
+    /// Đánh dấu job hỏng + báo về FE. Dành cho trường hợp <see cref="RunJobAsync"/> NÉM ra ngoài: khi đó
+    /// nó chưa kịp ghi gì vào cache, job đứng nguyên ở "pending" tới hết TTL và FE quay spinner vô tận.
+    /// Worker gọi hàm này trong khối catch của mình.
+    /// </summary>
+    Task FailJobAsync(string operationId, string message, CancellationToken ct = default);
+
     /// <summary>Tải 1 ảnh không gian lên storage (KHÔNG gắn với entity nào — chỉ để feed AI phân tích).</summary>
     Task<IServiceResult<string>> UploadImageAsync(
         Guid userId, Stream content, string fileName, string contentType, CancellationToken ct = default);

@@ -51,6 +51,26 @@ public sealed class WorkspaceIntakeWorker : BackgroundService
             {
                 _logger.LogError(ex,
                     "[WorkspaceIntake] Luồng {Worker} xử lý job {OperationId} lỗi.", workerIndex, job.OperationId);
+
+                // Ghi "failed" vào cache + bắn realtime. Thiếu đoạn này thì job NÉM ra khỏi RunJobAsync
+                // sẽ nằm mãi ở trạng thái "pending" cho tới hết TTL 30': FE poll 5s/lần đọc "pending",
+                // spinner quay vô tận, không toast, không form được điền — đúng triệu chứng "AI chạy
+                // xong mà intake trống trơn". Log một dòng rồi nuốt là bỏ rơi người dùng ở đầu kia.
+                try
+                {
+                    using var scope = _scopeFactory.CreateScope();
+                    await scope.ServiceProvider
+                        .GetRequiredService<IWorkspaceIntakeService>()
+                        .FailJobAsync(job.OperationId,
+                            "Trợ lý gặp sự cố giữa chừng - bạn có thể bấm phân tích lại hoặc điền form thủ công.",
+                            CancellationToken.None);
+                }
+                catch (Exception notifyEx)
+                {
+                    // Cùng lắm là mất đường báo; không được để vòng tiêu thụ chết theo.
+                    _logger.LogError(notifyEx,
+                        "[WorkspaceIntake] Không báo được lỗi job {OperationId} về FE.", job.OperationId);
+                }
             }
         }
     }

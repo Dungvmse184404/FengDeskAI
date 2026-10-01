@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Common.Sanitization;
@@ -876,10 +876,10 @@ public sealed class AiChatService : IAiChatService
         }
 
         model = requested.Trim();
-        if (_options.AllowedModels.Count > 0
-            && !_options.AllowedModels.Contains(model, StringComparer.OrdinalIgnoreCase))
+        var allowed = _options.EffectiveAllowedModels;
+        if (allowed.Count > 0 && !allowed.Contains(model, StringComparer.OrdinalIgnoreCase))
         {
-            error = $"Model '{model}' không được hỗ trợ. Cho phép: {string.Join(", ", _options.AllowedModels)}.";
+            error = $"Model '{model}' không được hỗ trợ. Cho phép: {string.Join(", ", allowed)}.";
             return false;
         }
 

@@ -16,7 +16,9 @@ namespace FengDeskAI.Application.Features.Promotion.Services;
 public sealed record VoucherSelection(Voucher? Voucher, VoucherQuote? Quote, string? Error)
 {
     public static readonly VoucherSelection None = new(null, null, null);
-    public decimal DiscountFor(Guid storeId) => Quote?.DiscountByStore.GetValueOrDefault(storeId) ?? 0m;
+    /// <summary>Khoản giảm của một vườn, tách theo nơi bị trừ (ship / sàn / người bán).</summary>
+    public StoreDiscount DiscountFor(Guid storeId)
+        => Quote?.DiscountByStore.GetValueOrDefault(storeId) ?? StoreDiscount.Zero;
     public decimal TotalDiscount => Quote?.TotalDiscount ?? 0m;
 }
 
@@ -146,8 +148,15 @@ public partial class VoucherService : IVoucherService
             Code = code,
             Name = request.Name!.Trim(),
             Description = request.Description?.Trim(),
-            Type = VoucherType.FreeShipping,
-            FundedBy = VoucherFundingSource.Platform,
+            // Bỏ trống Type ⇒ FreeShipping như trước khi có nhiều loại, để client cũ không vỡ.
+            // Bỏ trống FundedBy ⇒ suy từ Type: chỉ SellerDiscount là người bán chịu, DemoFlatTotal chia cả hai.
+            Type = request.Type ?? VoucherType.FreeShipping,
+            FundedBy = request.FundedBy ?? (request.Type switch
+            {
+                VoucherType.SellerDiscount => VoucherFundingSource.Seller,
+                VoucherType.DemoFlatTotal => VoucherFundingSource.Mixed,
+                _ => VoucherFundingSource.Platform,
+            }),
             MinOrderSubtotal = request.MinOrderSubtotal,
             MaxDiscountAmount = request.MaxDiscountAmount,
             ProvinceId = request.ProvinceId,

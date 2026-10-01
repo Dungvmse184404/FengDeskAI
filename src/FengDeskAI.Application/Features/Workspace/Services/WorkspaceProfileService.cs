@@ -535,9 +535,16 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             .Select(m => (m.InputKind, m.InputCode))
             .ToHashSet();
 
-        return inputs
-            .Where(i => validCodes.Contains((i.InputKind, i.InputCode)))
-            .DistinctBy(i => (i.InputKind, i.InputCode))
+        // Lọc code lạ → bỏ qua, trùng → giữ một, vượt trần nhóm → cắt phần đuôi. Cả ba đều IM LẶNG,
+        // không ném lỗi: đây là chốt chặn cuối (FE sửa được, AI trả dư được), mà một hồ sơ hợp lệ 90%
+        // vẫn đáng lưu hơn là chặn người dùng lại vì một tag thừa. Trần: ElementInputLimits.
+        var trimmed = ElementInputLimits.TrimPerKind(
+            inputs
+                .Where(i => validCodes.Contains((i.InputKind, i.InputCode)))
+                .DistinctBy(i => (i.InputKind, i.InputCode)),
+            i => i.InputKind);
+
+        return trimmed
             .Select(i => new WorkspaceProfileInput { InputKind = i.InputKind, InputCode = i.InputCode })
             .ToList();
     }
