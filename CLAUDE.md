@@ -96,9 +96,11 @@ trỏ tới **ba** đại lượng khác nhau (`current` / `d` / `T`) — đọc
 đọc tỉ lệ một lần, chốt vào `orders.commission_rate` rồi `deliveries.commission_rate`. **Chỉ `ILedgerService` được ghi
 `ledger_entries`**, luôn trong cùng transaction với đổi trạng thái; mỗi bút toán có `idempotency_key` UNIQUE.
 `deliveries.shipping_fee` = phí KHÁCH trả (đừng ghi đè bằng phí GHN — phí thật ở `carrier_shipping_fee`).
-Voucher ([`docs/adr/voucher-freeship.md`](docs/adr/voucher-freeship.md)): sàn tài trợ, giảm mỗi delivery ≤ min(phí
-ship, phí sàn); preview và checkout PHẢI đi qua cùng `VoucherService.SelectAsync`; tổng đơn =
-`subtotal + total_shipping_fee − shipping_discount` (cũng là số COD).
+Voucher ([`docs/adr/voucher-freeship.md`](docs/adr/voucher-freeship.md)): **trần giảm phụ thuộc `VoucherType`** —
+`FreeShipping` trừ phí ship (sàn chịu, ≤ min(phí ship, phí sàn)); `PlatformDiscount` trừ tiền hàng (sàn chịu, ≤ phí
+sàn); `SellerDiscount` trừ tiền hàng (NGƯỜI BÁN chịu, hoa hồng vẫn tính trên tiền hàng gốc); `DemoFlatTotal` chỉ để
+trình bày, kéo tổng đơn về 10.000đ. Preview và checkout PHẢI đi qua cùng `VoucherService.SelectAsync`; tổng đơn =
+`subtotal + total_shipping_fee − shipping_discount − platform_item_discount − seller_item_discount` (cũng là số COD).
 
 ### Background workers
 `WebAPI/Workers/`: `AiBotWorker` (+ `AiBotQueue`), `Model3DPollingWorker` (poll Meshy), `OrderExpirationWorker` (hết hạn đơn online chưa thanh toán), `AiOrderDraftCleanupWorker` (xóa draft đơn hàng AI hết hạn / kẹt Confirming).

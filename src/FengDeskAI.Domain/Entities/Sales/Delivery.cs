@@ -42,6 +42,12 @@ public class Delivery : BaseEntity
     /// </summary>
     public decimal ShippingDiscount { get; set; }
 
+    /// <summary>Giảm TIỀN HÀNG do SÀN tài trợ (trừ vào hoa hồng sàn, nhà vườn vẫn nhận đủ).</summary>
+    public decimal PlatformItemDiscount { get; set; }
+
+    /// <summary>Giảm TIỀN HÀNG do NHÀ VƯỜN tài trợ (trừ thẳng vào tiền họ nhận, hoa hồng sàn giữ nguyên).</summary>
+    public decimal SellerItemDiscount { get; set; }
+
     public decimal Subtotal { get; set; }
 
     /// <summary>

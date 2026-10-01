@@ -1,6 +1,39 @@
-# ADR — Voucher miễn phí vận chuyển (giai đoạn 2)
+# ADR — Voucher giảm giá
 
-**Trạng thái:** ĐÃ LÀM (28/09/2026) · **Dựa trên:** [`platform-fee-ledger.md`](./platform-fee-ledger.md)
+**Trạng thái:** ĐÃ LÀM (28/09/2026) · **Mở rộng:** 01/10/2026 — thêm 3 loại voucher
+· **Dựa trên:** [`platform-fee-ledger.md`](./platform-fee-ledger.md)
+
+> Tên file giữ nguyên `voucher-freeship.md` vì nhiều chỗ đã link tới; nội dung nay bao cả các loại giảm
+> giá khác chứ không riêng miễn phí vận chuyển.
+
+## 0. Mở rộng 01/10/2026 — trần giảm theo `VoucherType`
+
+Ban đầu chỉ có một loại (`FreeShipping`, sàn tài trợ). Nay mỗi loại trừ vào một chỗ khác nhau và có trần riêng,
+tính ở `ShippingVoucherCalculator`:
+
+| `VoucherType` | Trừ vào | Ai chịu | Trần mỗi vườn |
+|---|---|---|---|
+| `FreeShipping` | phí vận chuyển | sàn | `min(phí ship, phí sàn)` |
+| `PlatformDiscount` | tiền hàng | sàn | `min(tiền hàng, phí sàn)` |
+| `SellerDiscount` | tiền hàng | **người bán** | tiền hàng của vườn |
+| `DemoFlatTotal` | cả ba, theo thứ tự ship → hoa hồng → người bán | cả hai | kéo tổng đơn về `DemoFlatTotalTargetVnd` (10.000đ) |
+
+**Thay đổi bất biến tiền tệ.** Quy tắc #1 bên dưới nói *"nhà vườn luôn nhận đủ `tiền hàng − phí sàn`"* — điều đó
+vẫn đúng với `FreeShipping` và `PlatformDiscount`, nhưng **`SellerDiscount` cố ý phá nó**: khoản giảm trừ thẳng
+vào tiền người bán nhận. Hoa hồng sàn vẫn tính trên **tiền hàng gốc** (người bán tự chịu khuyến mãi của mình,
+sàn không gánh hộ và cũng không giảm phần mình thu).
+
+Hệ quả ở schema và sổ cái:
+
+- `orders` / `order_store_charges` / `deliveries` có thêm `platform_item_discount` và `seller_item_discount`
+  (migration `AddVoucherItemDiscountBuckets`, thuần cộng thêm).
+- Tổng đơn = `subtotal + total_shipping_fee − shipping_discount − platform_item_discount − seller_item_discount`.
+- Bút toán mới: `ItemVoucherSubsidy` (sàn −, cho `PlatformDiscount`) và `SellerVoucherDiscount`
+  (nhà vườn −, cho `SellerDiscount`).
+
+`DemoFlatTotal` **chỉ để trình bày**, không phải nghiệp vụ thật — nó có thể kéo tiền người bán xuống gần 0.
+Đừng bật mã loại này trên môi trường thật.
+
 
 ## 1. Bối cảnh
 

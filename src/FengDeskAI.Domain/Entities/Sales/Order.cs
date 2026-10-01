@@ -23,8 +23,17 @@ public class Order : BaseEntity
     public decimal Subtotal { get; set; }
     public decimal TotalShippingFee { get; set; }
 
-    /// <summary>Tổng giảm phí ship từ voucher. Khách trả <c>TotalAmount = Subtotal + TotalShippingFee − ShippingDiscount</c>.</summary>
+    /// <summary>
+    /// Tổng giảm phí ship từ voucher. Khách trả
+    /// <c>TotalAmount = Subtotal + TotalShippingFee − ShippingDiscount − PlatformItemDiscount − SellerItemDiscount</c>.
+    /// </summary>
     public decimal ShippingDiscount { get; set; }
+
+    /// <summary>Giảm TIỀN HÀNG do SÀN tài trợ (trừ vào hoa hồng sàn, nhà vườn vẫn nhận đủ).</summary>
+    public decimal PlatformItemDiscount { get; set; }
+
+    /// <summary>Giảm TIỀN HÀNG do NHÀ VƯỜN tài trợ (trừ thẳng vào tiền họ nhận, hoa hồng sàn giữ nguyên).</summary>
+    public decimal SellerItemDiscount { get; set; }
 
     /// <summary>Mã voucher đã áp (chụp lại để hiển thị); chi tiết lượt dùng ở <c>voucher_redemptions</c>.</summary>
     public string? VoucherCode { get; set; }

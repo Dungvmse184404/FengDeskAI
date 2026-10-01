@@ -28,6 +28,9 @@ public sealed class DemoVoucherSeeder : IDataSeeder
     public const string FreeShipCapped20KCode = "DEMOSHIP20K";
     public const string FreeShipBigOrderCode = "DEMOSHIP1M";
     public const string FreeShipManualCode = "DEMOSHIPCODE";
+    public const string PlatformDiscountCode = "DEMOSALEPLATFORM";
+    public const string SellerDiscountCode = "DEMOSALESHOP";
+    public const string FlatTotal10KCode = "DEMO10K";
 
     private readonly AppDbContext _context;
     private readonly ILogger<DemoVoucherSeeder> _logger;
@@ -40,7 +43,7 @@ public sealed class DemoVoucherSeeder : IDataSeeder
 
     // Sau VoucherSeeder (30) để mã mặc định luôn vào trước.
     public int Order => 31;
-    public string Name => "Voucher demo (DEMOSHIP*)";
+    public string Name => "Voucher demo (DEMOSHIP* / DEMOSALE* / DEMO10K)";
 
     public async Task SeedAsync(CancellationToken ct = default)
     {
@@ -69,12 +72,14 @@ public sealed class DemoVoucherSeeder : IDataSeeder
         {
             Code = FreeShipAllCode,
             Name = "[DEMO] Miễn phí vận chuyển cho đơn từ 200.000đ",
-            Description = "Mã demo. Tự áp khi tổng tiền hàng từ 200.000đ. Mức giảm mỗi cửa hàng không vượt "
+            Description = "Mã demo, nhập tay. Áp cho đơn từ 200.000đ. Mức giảm mỗi cửa hàng không vượt "
                           + "phí vận chuyển và cũng không vượt phí sàn thu trên cửa hàng đó.",
             Type = VoucherType.FreeShipping,
             FundedBy = VoucherFundingSource.Platform,
             MinOrderSubtotal = 200_000m,
-            IsAutoApply = true,
+            // CỐ Ý không tự áp: mã demo được bật tự áp sẽ tự nhảy vào MỌI đơn đủ ngưỡng, đổi hành vi
+            // mặc định của sàn và làm đỏ test VOUCHER-02. Mã demo luôn phải để khách nhập tay.
+            IsAutoApply = false,
             IsActive = true,
         },
 
@@ -119,6 +124,50 @@ public sealed class DemoVoucherSeeder : IDataSeeder
             MinOrderSubtotal = 150_000m,
             UsageLimit = 50,
             UsageLimitPerUser = 1,
+            IsAutoApply = false,
+            IsActive = true,
+        },
+
+        // Giảm TIỀN HÀNG do sàn chịu — trần = phí sàn của vườn, nhà vườn vẫn nhận đủ tiền hàng − phí sàn.
+        new Voucher
+        {
+            Code = PlatformDiscountCode,
+            Name = "[DEMO] Sàn giảm giá tiền hàng",
+            Description = "Mã demo do SÀN tài trợ: trừ thẳng vào tiền hàng, mức giảm mỗi cửa hàng không vượt "
+                          + "phí sàn thu trên cửa hàng đó. Doanh thu nhà vườn KHÔNG đổi.",
+            Type = VoucherType.PlatformDiscount,
+            FundedBy = VoucherFundingSource.Platform,
+            MinOrderSubtotal = 100_000m,
+            IsAutoApply = false,
+            IsActive = true,
+        },
+
+        // Giảm TIỀN HÀNG do chính nhà vườn chịu — hoa hồng sàn vẫn tính trên tiền hàng GỐC.
+        new Voucher
+        {
+            Code = SellerDiscountCode,
+            Name = "[DEMO] Cửa hàng giảm giá, tối đa 50.000đ",
+            Description = "Mã demo do NHÀ VƯỜN tài trợ: trừ thẳng vào tiền người bán nhận, hoa hồng sàn vẫn "
+                          + "tính trên tiền hàng gốc. Dùng để thấy doanh thu người bán giảm đúng phần khuyến mãi.",
+            Type = VoucherType.SellerDiscount,
+            FundedBy = VoucherFundingSource.Seller,
+            MinOrderSubtotal = 100_000m,
+            MaxDiscountAmount = 50_000m,
+            IsAutoApply = false,
+            IsActive = true,
+        },
+
+        // Mã trình bày: kéo tổng đơn về đúng 10.000đ, trừ lần lượt ship → hoa hồng sàn → tiền người bán.
+        new Voucher
+        {
+            Code = FlatTotal10KCode,
+            Name = "[DEMO] Tổng đơn còn 10.000đ",
+            Description = "Mã CHỈ ĐỂ TRÌNH BÀY: kéo tổng tiền khách phải trả về đúng 10.000đ. Trừ lần lượt phí "
+                          + "vận chuyển, rồi hoa hồng sàn, hết mới tới tiền người bán — xem được cả ba khoản "
+                          + "cùng lúc trên một đơn.",
+            Type = VoucherType.DemoFlatTotal,
+            FundedBy = VoucherFundingSource.Mixed,
+            MinOrderSubtotal = 0m,
             IsAutoApply = false,
             IsActive = true,
         },

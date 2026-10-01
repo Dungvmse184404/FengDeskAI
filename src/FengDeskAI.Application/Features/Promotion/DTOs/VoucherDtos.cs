@@ -36,6 +36,12 @@ public class CreateVoucherRequest
     public int? UsageLimit { get; set; }
     public int? UsageLimitPerUser { get; set; }
     public bool IsAutoApply { get; set; }
+
+    /// <summary>Loại giảm giá — quyết định khoản giảm trừ vào đâu. Bỏ trống = <c>FreeShipping</c> (hành vi cũ).</summary>
+    public VoucherType? Type { get; set; }
+
+    /// <summary>Ai tài trợ. Bỏ trống = suy ra từ <see cref="Type"/>.</summary>
+    public VoucherFundingSource? FundedBy { get; set; }
 }
 
 public class SetVoucherActiveRequest

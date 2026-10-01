@@ -25,6 +25,8 @@ public class DeliveryConfiguration : IEntityTypeConfiguration<Delivery>
         builder.Property(d => d.ShippingFee).HasColumnName("shipping_fee").HasPrecision(12, 2);
         builder.Property(d => d.CarrierShippingFee).HasColumnName("carrier_shipping_fee").HasPrecision(12, 2);
         builder.Property(d => d.ShippingDiscount).HasColumnName("shipping_discount").HasPrecision(12, 2).HasDefaultValue(0m);
+        builder.Property(d => d.PlatformItemDiscount).HasColumnName("platform_item_discount").HasPrecision(12, 2).HasDefaultValue(0m);
+        builder.Property(d => d.SellerItemDiscount).HasColumnName("seller_item_discount").HasPrecision(12, 2).HasDefaultValue(0m);
         builder.Property(d => d.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2);
         builder.Property(d => d.CommissionRate).HasColumnName("commission_rate").HasPrecision(5, 4).HasDefaultValue(0m);
         builder.Property(d => d.IsExchange).HasColumnName("is_exchange").HasDefaultValue(false);

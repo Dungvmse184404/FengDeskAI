@@ -25,6 +25,8 @@ public class OrderConfiguration : IEntityTypeConfiguration<Order>
         builder.Property(o => o.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2);
         builder.Property(o => o.TotalShippingFee).HasColumnName("total_shipping_fee").HasPrecision(12, 2);
         builder.Property(o => o.ShippingDiscount).HasColumnName("shipping_discount").HasPrecision(12, 2).HasDefaultValue(0m);
+        builder.Property(o => o.PlatformItemDiscount).HasColumnName("platform_item_discount").HasPrecision(12, 2).HasDefaultValue(0m);
+        builder.Property(o => o.SellerItemDiscount).HasColumnName("seller_item_discount").HasPrecision(12, 2).HasDefaultValue(0m);
         builder.Property(o => o.VoucherCode).HasColumnName("voucher_code").HasMaxLength(50);
         // KHÔNG HasDefaultValue: EF sẽ bỏ qua giá trị 0 (phí sàn 0% hợp lệ) và để DB tự điền mặc định.
         builder.Property(o => o.CommissionRate).HasColumnName("commission_rate").HasPrecision(5, 4);

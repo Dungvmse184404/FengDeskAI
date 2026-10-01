@@ -78,6 +78,8 @@ public static class OrderWorkflow
             if (!byStore.TryGetValue(delivery.GardenStoreId, out var charge)) continue;
             delivery.ShippingFee = charge.ShippingFee;
             delivery.ShippingDiscount = charge.ShippingDiscount;
+            delivery.PlatformItemDiscount = charge.PlatformItemDiscount;
+            delivery.SellerItemDiscount = charge.SellerItemDiscount;
         }
     }
 
