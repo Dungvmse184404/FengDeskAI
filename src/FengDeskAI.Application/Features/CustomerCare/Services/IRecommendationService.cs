@@ -32,6 +32,13 @@ public interface IRecommendationService
         Guid productId, Guid workspaceProfileId, Guid userId, CancellationToken ct = default);
 
     /// <summary>
+    /// Xem trước gộp: phòng sau khi đặt thêm CẢ nhóm sản phẩm (kèm số lượng) — cùng công thức phiếu với
+    /// <see cref="GetProductFitAsync"/>, chỉ khác là cộng nhiều món một lúc. Không chấm điểm từng món.
+    /// </summary>
+    Task<IServiceResult<BundlePreviewResponse>> GetBundlePreviewAsync(
+        Guid userId, BundlePreviewRequest request, CancellationToken ct = default);
+
+    /// <summary>
     /// Độ phù hợp của 1 sản phẩm với BẢN MỆNH user — không cần workspace (v3.2 §10.6 · R3).
     /// Dành cho trang chi tiết vật phẩm <see cref="Domain.Enums.Catalog.ProductPlacement.Carry"/>, nơi
     /// <c>GetProductFitAsync</c> không dùng được vì nó bắt buộc <c>workspaceProfileId</c> và chấm theo gap

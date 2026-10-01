@@ -154,6 +154,16 @@ public class ProductRepository : GenericRepository<Product>, IProductRepository
             .ToListAsync(ct);
     }
 
+    public Task<List<Product>> GetScorableByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default)
+    {
+        var list = ids.ToList();
+        return _set.AsNoTracking()
+            .Where(p => list.Contains(p.Id) && p.IsActive && p.Elements.Any())
+            .Include(p => p.Elements)
+            .Include(p => p.Vibes)
+            .ToListAsync(ct);
+    }
+
     public Task<bool> SkuExistsAsync(string sku, Guid? excludeItemId, CancellationToken ct = default)
         => _context.Set<ProductItem>()
             .AsNoTracking()

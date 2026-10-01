@@ -19,6 +19,9 @@ public class WorkspaceProfileResponse
     public FengShuiElement? FengShuiElement { get; set; }
     public int? DeskArea { get; set; }
     public bool IsDefault { get; set; }
+
+    /// <summary>Ảnh không gian theo thứ tự trình chiếu (nền phần tổng quan). Rỗng = chưa có.</summary>
+    public List<WorkspaceProfileImageResponse> Images { get; set; } = new();
     public DateTime CreatedAt { get; set; }
     public DateTime UpdatedAt { get; set; }
 
@@ -29,4 +32,12 @@ public class WorkspaceProfileResponse
 
     /// <summary>Màu/vật liệu/hình khối hiện trạng phòng đã lưu — FE prefill tag picker khi sửa.</summary>
     public List<WorkspaceProfileInputDto> Inputs { get; set; } = new();
+}
+
+/// <summary>Một ảnh không gian của workspace.</summary>
+public class WorkspaceProfileImageResponse
+{
+    public Guid Id { get; set; }
+    public string Url { get; set; } = null!;
+    public int SortOrder { get; set; }
 }

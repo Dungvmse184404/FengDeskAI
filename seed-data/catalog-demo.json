@@ -34,7 +34,7 @@
       "placement": "Living",
       "primaryElement": "Moc",
       "secondaryElements": ["Tho"],
-      "vibes": ["Focus"],
+      "vibes": ["Focus", "Relax", "Creative"],
       "styles": ["Scandinavian"],
       "elementInputs": [
         { "kind": "Material", "code": "Wood" },
@@ -54,7 +54,7 @@
       "placement": "Living",
       "primaryElement": "Moc",
       "secondaryElements": ["Tho", "Hoa"],
-      "vibes": ["Calm"],
+      "vibes": ["Calm", "Focus", "Relax"],
       "styles": ["Minimal"],
       "elementInputs": [
         { "kind": "Material", "code": "Wood" },
@@ -73,7 +73,7 @@
       "placement": "Desk",
       "primaryElement": "Tho",
       "secondaryElements": ["Hoa", "Kim"],
-      "vibes": ["Calm"],
+      "vibes": ["Calm", "Creative", "Focus"],
       "styles": ["Modern"],
       "elementInputs": [
         { "kind": "Material", "code": "Stone" },
@@ -92,7 +92,7 @@
       "placement": "Desk",
       "primaryElement": "Kim",
       "secondaryElements": ["Tho", "Hoa"],
-      "vibes": ["Focus"],
+      "vibes": ["Focus", "Energize"],
       "styles": ["Classic"],
       "elementInputs": [
         { "kind": "Material", "code": "Brass" },
@@ -110,7 +110,7 @@
       "placement": "Desk",
       "primaryElement": "Hoa",
       "secondaryElements": ["Tho", "Kim"],
-      "vibes": ["Relax"],
+      "vibes": ["Relax", "Calm", "Energize"],
       "styles": ["Bohemian"],
       "elementInputs": [
         { "kind": "Material", "code": "SaltRock" },

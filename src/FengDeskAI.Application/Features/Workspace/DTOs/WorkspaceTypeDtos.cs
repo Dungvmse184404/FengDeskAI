@@ -4,6 +4,9 @@ public class WorkspaceTypeResponse
 {
     public Guid Id { get; set; }
     public string Name { get; set; } = null!;
+
+    /// <summary>Tên tiếng Việt để hiển thị; null (loại user tự tạo) → FE dùng <see cref="Name"/>.</summary>
+    public string? NameVi { get; set; }
     public string? Description { get; set; }
     public bool IsPublic { get; set; }
     public decimal PersonalWeight { get; set; }

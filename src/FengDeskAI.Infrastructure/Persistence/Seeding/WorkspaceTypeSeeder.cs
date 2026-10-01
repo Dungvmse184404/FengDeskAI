@@ -30,6 +30,7 @@ public class WorkspaceTypeSeeder : IDataSeeder
     public sealed class Row
     {
         public string Name { get; set; } = "";
+        public string? NameVi { get; set; }
         public bool IsPublic { get; set; }
         public decimal PersonalWeight { get; set; }
         public WorkspaceScope Scope { get; set; }
@@ -60,7 +61,7 @@ public class WorkspaceTypeSeeder : IDataSeeder
         //
         // Chỉ đụng row IsSystemSeeded — loại do user tự tạo không bị chạm tới. Không cần guard
         // UpdatedBy như các seeder khác vì không có API nào ghi vào hai cột này để mà bảo vệ.
-        int rescoped = 0, redescribed = 0;
+        int rescoped = 0, redescribed = 0, renamed = 0;
         foreach (var row in file.Rows)
         {
             if (!existingByName.TryGetValue(row.Name, out var current)) continue;
@@ -78,10 +79,17 @@ public class WorkspaceTypeSeeder : IDataSeeder
                 current.Description = row.Description;
                 redescribed++;
             }
+
+            // Tên tiếng Việt cũng là chữ hiển thị, không API nào sửa được → đồng bộ như Description.
+            if (current.NameVi != row.NameVi)
+            {
+                current.NameVi = row.NameVi;
+                renamed++;
+            }
         }
 
         var toAdd = file.Rows.Where(t => !existingByName.ContainsKey(t.Name)).ToList();
-        if (toAdd.Count == 0 && rescoped == 0 && redescribed == 0)
+        if (toAdd.Count == 0 && rescoped == 0 && redescribed == 0 && renamed == 0)
         {
             _logger.LogInformation("Workspace types hệ thống đã đầy đủ — bỏ qua seeding.");
             return;
@@ -90,6 +98,7 @@ public class WorkspaceTypeSeeder : IDataSeeder
         var entities = toAdd.Select(t => new WorkspaceType
         {
             Name = t.Name,
+            NameVi = t.NameVi,
             Description = t.Description,
             IsPublic = t.IsPublic,
             PersonalWeight = t.PersonalWeight * scale,
@@ -102,7 +111,7 @@ public class WorkspaceTypeSeeder : IDataSeeder
 
         _logger.LogInformation(
             "Seed {Count} workspace types hệ thống mới (scale {Scale}); "
-            + "đồng bộ scope cho {Rescoped} loại, mô tả cho {Redescribed} loại đã có.",
-            toAdd.Count, scale, rescoped, redescribed);
+            + "đồng bộ scope cho {Rescoped} loại, mô tả cho {Redescribed} loại, tên tiếng Việt cho {Renamed} loại đã có.",
+            toAdd.Count, scale, rescoped, redescribed, renamed);
     }
 }

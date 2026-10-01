@@ -1,4 +1,5 @@
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.Workspace.DTOs;
 using FengDeskAI.Application.Features.Workspace.Services;
@@ -26,6 +27,9 @@ public class WorkspaceProfilesController : ApiControllerBase
     private readonly IWorkspaceElementInputClassifierService _classifier;
     private readonly ISpeechToTextService _speechToText;
     private readonly SpeechSettings _speechSettings;
+
+    /// <summary>FE đã nén ảnh trước khi gửi; trần này chỉ chặn file bất thường.</summary>
+    private const long MaxWorkspaceImageBytes = 10 * 1024 * 1024;
 
     public WorkspaceProfilesController(
         IWorkspaceProfileService service,
@@ -170,6 +174,33 @@ public class WorkspaceProfilesController : ApiControllerBase
         => ToActionResult(await _service.UpdateAsync(id, CurrentUserId, request, ct));
 
     /// <summary>Đặt profile làm default. Tự động bỏ default của các profile khác cùng user.</summary>
+    /// <summary>Thêm ảnh không gian (multipart, field "files" — một hoặc nhiều ảnh).</summary>
+    [HttpPost("{id:guid}/images")]
+    public async Task<IActionResult> AddImages(Guid id, [FromForm] List<IFormFile> files, CancellationToken ct = default)
+    {
+        if (files is null || files.Count == 0 || files.Any(f => f.Length == 0))
+            return ToActionResult(ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.ImageRequired));
+        if (files.Any(f => f.Length > MaxWorkspaceImageBytes))
+            return ToActionResult(ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.ImageTooLarge));
+
+        var streams = files.Select(f => f.OpenReadStream()).ToList();
+        try
+        {
+            var images = files.Select((f, i) => new UploadedImage(streams[i], f.FileName, f.ContentType)).ToList();
+            return ToActionResult(await _service.AddImagesAsync(id, CurrentUserId, images, ct));
+        }
+        finally
+        {
+            foreach (var stream in streams) await stream.DisposeAsync();
+        }
+    }
+
+    [HttpDelete("{id:guid}/images/{imageId:guid}")]
+    public async Task<IActionResult> RemoveImage(Guid id, Guid imageId, CancellationToken ct)
+        => ToActionResult(await _service.RemoveImageAsync(id, CurrentUserId, imageId, ct));
+
     [HttpPatch("{id:guid}/set-default")]
     public async Task<IActionResult> SetDefault(Guid id, CancellationToken ct)
         => ToActionResult(await _service.SetDefaultAsync(id, CurrentUserId, ct));

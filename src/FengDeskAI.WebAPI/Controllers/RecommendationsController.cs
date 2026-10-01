@@ -50,6 +50,14 @@ public class RecommendationsController : ApiControllerBase
     public async Task<IActionResult> GetById(Guid id, CancellationToken ct)
         => ToActionResult(await _service.GetByIdAsync(id, CurrentUserId, ct));
 
+    /// <summary>
+    /// Xem trước gộp nhiều sản phẩm (kèm số lượng) trên radar của một workspace. Chỉ đọc — POST vì body là
+    /// danh sách.
+    /// </summary>
+    [HttpPost("fit/bundle")]
+    public async Task<IActionResult> GetBundlePreview([FromBody] BundlePreviewRequest request, CancellationToken ct)
+        => ToActionResult(await _service.GetBundlePreviewAsync(CurrentUserId, request, ct));
+
     /// <summary>Độ phù hợp của 1 sản phẩm với 1 workspace — không loại sản phẩm, cho trang chi tiết sản phẩm.</summary>
     [HttpGet("fit")]
     public async Task<IActionResult> GetProductFit(

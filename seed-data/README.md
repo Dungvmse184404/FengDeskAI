@@ -44,9 +44,14 @@ Nay tên sản phẩm khai **đúng một chỗ**, các seeder khớp bằng **t
 #### Phong thủy của sản phẩm demo: file là nguồn sự thật, và không vật nào một hành thuần
 
 Với sản phẩm **có tên trong** `catalog-demo.json` / `carry-products-demo.json`, seeder 21/22/23 **đồng bộ**
-hành chính/phụ + `elementInputs` + vector cache về đúng file mỗi lần khởi động
+hành chính/phụ + `vibes` (chỉ `catalog-demo.json`) + `elementInputs` + vector cache về đúng file mỗi lần chạy seed
 (`DemoProductFengShuiSync`), không còn "đã có thì bỏ qua" — sửa file là DB dev/test đổi theo. Giá, tồn
 kho, ảnh không bị đụng; sản phẩm đã `IsVectorOverridden` cũng không.
+
+**`vibes` phải phủ đủ 5 cảm hứng** (Focus/Calm/Creative/Energize/Relax), mỗi cảm hứng ≥ 2 món đặt phòng.
+Lý do: `VIBE_FILTER_HARD = 1` loại cứng mọi sản phẩm không khai đúng vibe của mục đích phòng (Học tập/Văn
+phòng → Focus, Đọc sách/Ngủ/Trẻ nhỏ → Calm, Sáng tạo → Creative, Game/Nấu ăn/Tập → Energize, Ăn uống/Thư
+giãn → Relax) — thiếu một vibe là mọi phòng mục đích đó ra danh sách đề xuất rỗng.
 
 Luật khai (seeder **cảnh báo** khi vi phạm, không chặn):
 
