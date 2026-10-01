@@ -29,6 +29,7 @@ Có **hai luồng gợi ý** tách biệt, chọn theo `ProductPlacement` của 
 | GET | `/api/recommendations/preview` | Authenticated | Gợi ý cho một workspace **không AI, không lưu phiên** (trang hồ sơ không gian) |
 | GET | `/api/recommendations/{id}` | Authenticated | Lấy lại phiên gợi ý đã lưu (cả hai loại) |
 | GET | `/api/recommendations/fit` | Authenticated | Độ phù hợp của 1 sản phẩm × 1 workspace (trang chi tiết sản phẩm) |
+| POST | `/api/recommendations/fit/bundle` | Authenticated | Xem trước **gộp nhiều sản phẩm (kèm số lượng)** trên radar một workspace |
 | GET | `/api/recommendations/fit/personal` | Authenticated | Độ phù hợp của 1 sản phẩm với **bản mệnh** user — không cần workspace (vật mang theo người) |
 
 ---
@@ -404,6 +405,48 @@ Lấy lại phiên đã lưu, **cả hai loại** (`gap` = null khi đọc lại
 | `contributions` | Nguồn nào tạo ra `current` của phòng và chiếm bao nhiêu % — **cùng dữ liệu tooltip của [element-analysis](./16-workspace-profiles.md)**, mang sang đây để trả lời *"vì sao phòng được cho là thiếu hành đó"* chứ không chỉ *"phòng thiếu hành đó"*. KHÔNG tính sản phẩm đang xem (ảnh hưởng của nó nằm ở `previewCurrent`) |
 | `evidenceCount` | Số bằng chứng THẬT (tag user khai + sản phẩm đã đặt). `0` = hiện trạng hoàn toàn suy ra từ loại phòng |
 | `confidence` | `0..1` — tỉ lệ `current` đến từ dữ liệu user khai thay vì nền phòng. Thấp thì FE nên mời user khai thêm tag thay vì để họ tin vào một con số chưa có bằng chứng |
+
+---
+
+## POST `/api/recommendations/fit/bundle`
+
+"Phòng sẽ ra sao nếu đặt **tất cả** các món này" — trang hồ sơ không gian gọi khi user chọn nhiều sản
+phẩm đề xuất để mua cùng lúc. Chỉ đọc, không lưu, không chấm điểm từng món; dùng POST vì body là danh sách.
+
+**Request body** (`BundlePreviewRequest`):
+```json
+{
+  "workspaceProfileId": "guid",
+  "items": [
+    { "productId": "guid-a", "quantity": 2 },
+    { "productId": "guid-b", "quantity": 1 }
+  ]
+}
+```
+| Field | Ghi chú |
+|---|---|
+| `items` | 1–30 sản phẩm khác nhau (`400` nếu rỗng/vượt). Cùng `productId` lặp lại → **cộng dồn** số lượng |
+| `quantity` | Kẹp về `[1, 99]` |
+
+**Response `data`** = `BundlePreviewResponse`:
+```json
+{
+  "workspaceProfileId": "guid",
+  "gap": [
+    { "element": "Thuy", "ideal": 0.20, "adjustedIdeal": 0.30, "current": 0.12, "gap": 0.18,
+      "previewCurrent": 0.21, "previewGap": 0.09 }
+  ],
+  "skippedProductIds": []
+}
+```
+| Field | Ghi chú |
+|---|---|
+| `gap` | Cùng shape `gap` của `GET /fit`. `current` = phòng như đang có; `previewCurrent`/`previewGap` = sau khi thêm cả nhóm |
+| `skippedProductIds` | Sản phẩm không tính (không tồn tại / ngừng bán / chưa gắn ngũ hành) |
+
+Công thức giống `GET /fit` ([§19](#current-dùng-để-chấm-điểm-v32-19)): `BuildCurrentBreakdown(đã đặt ∪ nhóm, chủ nhân)`,
+mỗi món góp `voteWeight(1 món) × quantity` phiếu, cộng thô rồi chuẩn hoá **một lần** — nên các món bù/khử
+nhau đúng như khi đặt thật, không phải cộng các lớp xem trước từng món.
 
 ---
 

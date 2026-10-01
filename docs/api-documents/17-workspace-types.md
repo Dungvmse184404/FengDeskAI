@@ -24,9 +24,14 @@ Loại không gian làm việc. User thấy loại hệ thống + loại mình t
 ## GET `/api/workspace-types`
 `data` = mảng `WorkspaceTypeResponse`:
 ```json
-[{ "id": "guid", "name": "Personal Desk", "description": "...",
+[{ "id": "guid", "name": "Personal Desk", "nameVi": "Bàn làm việc cá nhân", "description": "...",
    "isPublic": true, "personalWeight": 1.0, "isSystemSeeded": true }]
 ```
+
+| Field | Ghi chú |
+|---|---|
+| `name` | Tên gốc tiếng Anh — khoá seed (`seed-data/workspace-types.json`) và từ vựng của AI intake, **không đổi** |
+| `nameVi` | Tên tiếng Việt để hiển thị. Chỉ loại hệ thống có (seeder đồng bộ theo `name`); loại user tự tạo = `null` → FE hiển thị `name`. Câu "Đặc tính không gian" của `element-analysis` cũng dùng `nameVi ?? name` |
 
 ## POST `/api/workspace-types`
 **Request body** (`CreateWorkspaceTypeRequest`)

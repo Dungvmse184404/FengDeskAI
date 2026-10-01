@@ -200,6 +200,45 @@ public sealed class PlacedProductCurrentTests
         Assert.Equal(1.0m, rows.Single().VoteWeight);   // không gắn DecorItem ⇒ 1 phiếu, ngang một tag
     }
 
+    /// <summary>
+    /// Placement gắn với cả dòng đơn hàng: dòng ×3 là 3 món trong phòng, phải nặng gấp 3 một món —
+    /// trước đây số lượng bị bỏ qua nên mua 3 chậu cây và 1 chậu kéo radar y hệt nhau.
+    /// </summary>
+    [Theory(DisplayName = "SCORE-PP-06 [Normal] Placed order-item quantity multiplies its votes")]
+    [InlineData(3, 3.0)]
+    [InlineData(1, 1.0)]
+    [InlineData(0, 1.0)] // dữ liệu thiếu số lượng vẫn tính như 1 món, không biến mất khỏi phòng
+    public void Builder_MultipliesVotesByQuantity(int quantity, double expectedVotes)
+    {
+        var productId = Guid.NewGuid();
+        var placement = new WorkspaceProductPlacement
+        {
+            Id = Guid.NewGuid(),
+            OrderItemId = Guid.NewGuid(),
+            ProductId = productId,
+            OrderItem = new OrderItem
+            {
+                ProductName = "Cây tùng thơm",
+                Quantity = quantity,
+                Delivery = new Delivery { Status = DeliveryStatus.Delivered },
+            },
+            Product = new Product
+            {
+                Id = productId,
+                IsVectorOverridden = true,
+                ElementTho = 0m, ElementKim = 0m, ElementThuy = 0m, ElementMoc = 1m, ElementHoa = 0m,
+            },
+        };
+
+        var rows = PlacedProductVectorBuilder.Build(
+            new[] { placement },
+            new Dictionary<Guid, IReadOnlyCollection<ProductElementInput>>(),
+            new ElementInputResolver(Array.Empty<ElementInputMap>()),
+            ScoringParameters.Default);
+
+        Assert.Equal((decimal)expectedVotes, rows.Single().VoteWeight);
+    }
+
     // ===================== C. Phiên bản công thức =====================
 
     /// <summary>
