@@ -51,4 +51,7 @@ public class WorkspaceProfile : BaseEntity
 
     public User User { get; set; } = null!;
     public WorkspaceType? WorkspaceType { get; set; }
+
+    /// <summary>Ảnh chụp không gian (nền phần tổng quan, trình chiếu khi nhiều ảnh) — theo <c>SortOrder</c>.</summary>
+    public ICollection<WorkspaceProfileImage> Images { get; set; } = new List<WorkspaceProfileImage>();
 }

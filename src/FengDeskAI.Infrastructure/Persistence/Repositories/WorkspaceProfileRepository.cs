@@ -17,16 +17,18 @@ public class WorkspaceProfileRepository : GenericRepository<WorkspaceProfile>, I
     /// </summary>
     public Task<WorkspaceProfile?> GetByIdForUserAsync(Guid id, Guid userId, CancellationToken ct = default)
         => _set.Include(w => w.WorkspaceType)
+               .Include(w => w.Images)
                .FirstOrDefaultAsync(w => w.Id == id && w.UserId == userId, ct);
 
     public Task<List<WorkspaceProfile>> GetByUserIdAsync(Guid userId, CancellationToken ct = default)
-        => _set.Where(w => w.UserId == userId)
+        => _set.Include(w => w.Images)
+               .Where(w => w.UserId == userId)
                .OrderByDescending(w => w.IsDefault)
                .ThenByDescending(w => w.UpdatedAt)
                .ToListAsync(ct);
 
     public Task<WorkspaceProfile?> GetDefaultByUserIdAsync(Guid userId, CancellationToken ct = default)
-        => _set.FirstOrDefaultAsync(w => w.UserId == userId && w.IsDefault, ct);
+        => _set.Include(w => w.Images).FirstOrDefaultAsync(w => w.UserId == userId && w.IsDefault, ct);
 
     public Task ClearDefaultsForUserAsync(Guid userId, CancellationToken ct = default)
         => _set.Where(w => w.UserId == userId && w.IsDefault)

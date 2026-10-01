@@ -87,6 +87,86 @@ public sealed class StoreFlowTests
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
     }
 
+    [Fact(DisplayName = "STORE-02A [Normal] Creating the first store returns a fresh session carrying the garden-owner role")]
+    public async Task CreateStore_FirstStore_ReturnsSessionWithGardenOwnerRole()
+    {
+        var user = await ScenarioUsers.CreateAsync(_fixture);
+
+        var response = await ScenarioUsers.ClientFor(_fixture, user).PostAsJsonAsync("/api/stores", new
+        {
+            name = $"Vườn {Guid.NewGuid():N}"[..18],
+            hotline = ValidHotline,
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var session = (await ApiEnvelope.DataAsync(response)).GetProperty("session");
+        var newAccessToken = session.GetProperty("accessToken").GetString()!;
+        var newRefreshToken = session.GetProperty("refreshToken").GetString()!;
+
+        // Token mới dùng được ngay cho endpoint chỉ dành cho GardenOwner trở lên — không cần đăng nhập lại.
+        var promoted = user with { AccessToken = newAccessToken };
+        var ownerOnly = await ScenarioUsers.ClientFor(_fixture, promoted)
+            .PostAsJsonAsync("/api/tags", new { name = $"tag-{Guid.NewGuid():N}"[..14] });
+        Assert.Equal(HttpStatusCode.Created, ownerOnly.StatusCode);
+
+        // Token cũ vẫn phải chết cùng TokenVersion (role đổi thì phiên cũ không được sống tiếp).
+        var withOldToken = await ScenarioUsers.ClientFor(_fixture, user).GetAsync("/api/stores/mine");
+        Assert.Equal(HttpStatusCode.Unauthorized, withOldToken.StatusCode);
+
+        // Refresh token mới KHÔNG bị lượt thu hồi phiên cũ cuốn theo.
+        var refresh = await _fixture.Client.PostAsJsonAsync("/api/Auth/refresh", new { refreshToken = newRefreshToken });
+        Assert.Equal(HttpStatusCode.OK, refresh.StatusCode);
+    }
+
+    [Fact(DisplayName = "STORE-02B [Normal] Opening a second store keeps the current session")]
+    public async Task CreateStore_SecondStore_KeepsCurrentSession()
+    {
+        var user = await ScenarioUsers.CreateAsync(_fixture);
+        await CreateStoreAsync(user);
+        var owner = user with { AccessToken = await ScenarioUsers.LoginAsync(_fixture, user) };
+
+        var response = await ScenarioUsers.ClientFor(_fixture, owner).PostAsJsonAsync("/api/stores", new
+        {
+            name = $"Vườn {Guid.NewGuid():N}"[..18],
+            hotline = ValidHotline,
+        });
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        Assert.Equal(JsonValueKind.Null, (await ApiEnvelope.DataAsync(response)).GetProperty("session").ValueKind);
+        var stillValid = await ScenarioUsers.ClientFor(_fixture, owner).GetAsync("/api/stores/mine");
+        Assert.Equal(HttpStatusCode.OK, stillValid.StatusCode);
+    }
+
+    [Fact(DisplayName = "STORE-02C [Normal] Revoking the garden-owner role cuts store access, granting it back restores it")]
+    public async Task RevokeGardenOwnerRole_CutsStoreAccess_GrantBackRestoresIt()
+    {
+        var user = await ScenarioUsers.CreateAsync(_fixture);
+        var storeId = await CreateStoreAsync(user);
+        var admin = _fixture.ClientFor(TestRole.Admin);
+
+        var demote = await admin.PutAsJsonAsync($"/api/admin/users/{user.Id}/roles",
+            new { roles = new[] { "Customer" }, reason = "Thu quyền bán." });
+        Assert.Equal(HttpStatusCode.OK, demote.StatusCode);
+
+        // Dòng sở hữu vẫn còn, nhưng mất role là mất quyền chủ: khu người bán trống, thao tác chủ bị chặn.
+        var customer = user with { AccessToken = await ScenarioUsers.LoginAsync(_fixture, user) };
+        var mine = await ScenarioUsers.ClientFor(_fixture, customer).GetAsync("/api/stores/mine");
+        Assert.Equal(HttpStatusCode.OK, mine.StatusCode);
+        Assert.Empty((await ApiEnvelope.DataAsync(mine)).EnumerateArray());
+        var stats = await ScenarioUsers.ClientFor(_fixture, customer).GetAsync($"/api/stores/{storeId}/statistics");
+        Assert.Equal(HttpStatusCode.Forbidden, stats.StatusCode);
+
+        // Cấp lại role → cửa hàng cũ quay về, không phải tạo lại.
+        var promote = await admin.PutAsJsonAsync($"/api/admin/users/{user.Id}/roles",
+            new { roles = new[] { "Customer", "GardenOwner" }, reason = "Trả quyền bán." });
+        Assert.Equal(HttpStatusCode.OK, promote.StatusCode);
+        var owner = user with { AccessToken = await ScenarioUsers.LoginAsync(_fixture, user) };
+        var mineAgain = await ScenarioUsers.ClientFor(_fixture, owner).GetAsync("/api/stores/mine");
+        var store = Assert.Single((await ApiEnvelope.DataAsync(mineAgain)).EnumerateArray());
+        Assert.Equal(storeId, store.GetProperty("id").GetGuid());
+        Assert.True(store.GetProperty("isOwner").GetBoolean());
+    }
+
     [Fact(DisplayName = "STORE-03 [Abnormal] A store with an invalid hotline is rejected")]
     public async Task CreateStore_InvalidHotline_IsRejected()
     {

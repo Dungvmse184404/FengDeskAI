@@ -39,6 +39,11 @@ Quản lý garden store (marketplace). User đã đăng nhập tự mở store (
 
 ## GET `/api/stores` · `/mine` · `/{id}`
 
+> **Role `GardenOwner` là công tắc quyền chủ.** Dòng `garden_store_owners` chỉ có hiệu lực khi user còn role đó (đọc
+> từ DB, không từ claim): gỡ role → mất quyền chủ **ngay** (`/mine` không còn store, thao tác chủ → `403`) nhưng dòng
+> sở hữu được GIỮ — cấp lại role là có lại cửa hàng. Nhân viên (staff `Accepted`) không có role riêng nên không bị ảnh
+> hưởng. Chốt ở `StoreRepository.ActiveOwners()` — đừng kiểm tra sở hữu bằng `garden_store_owners` trần ở chỗ khác.
+
 > **`/mine`** trả store mà user là **owner HOẶC garden staff đã `Accepted`** (nguồn sự thật cho quyền vào khu người bán). Mỗi item có thêm `isOwner`: `true` = owner, `false` = chỉ là nhân viên (dùng để FE ẩn nút owner-only). `/` và `/{id}` không set `isOwner`.
 
 `data` = `StoreResponse` (hoặc mảng):
@@ -63,6 +68,22 @@ Tự mở store; người tạo thành owner chính. **Request body** (`CreateSt
 ```json
 { "name": "Vườn Xanh", "description": "...", "hotline": "1900xxxx", "openingHours": "8:00-21:00" }
 ```
+
+`data` = `CreateStoreResponse` = mọi trường của `StoreResponse` + `session`:
+```json
+{
+  "id": "guid", "name": "Vườn Xanh", "...": "...",
+  "session": {
+    "accessToken": "...", "accessTokenExpiresAt": "...",
+    "refreshToken": "...", "refreshTokenExpiresAt": "...",
+    "user": { "id": "guid", "roles": ["Customer", "GardenOwner"], "...": "..." }
+  }
+}
+```
+> Người tạo chưa có role `GardenOwner` thì được cấp role, `TokenVersion` tăng và **mọi phiên cũ bị thu hồi**
+> (access token đang cầm → `401` ngay). `session` là phiên MỚI mang role người bán (cùng shape với response
+> đăng nhập) — FE lưu ngay, **trước** mọi request kế tiếp (vd tạo địa chỉ store), không phải đăng nhập lại.
+> `session = null` khi người tạo vốn đã là chủ vườn (mở cửa hàng thứ hai) — token cũ vẫn dùng tiếp.
 
 ## PUT `/api/stores/{id}`
 **Request body** (`UpdateStoreRequest`)

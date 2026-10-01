@@ -3,6 +3,7 @@ using FengDeskAI.Application.Features.Vendor.Services;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Identity;
 using FengDeskAI.Domain.Entities.Vendor;
+using FengDeskAI.Domain.Enums;
 using FengDeskAI.Domain.Enums.Vendor;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
@@ -59,9 +60,18 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
             .AnyAsync(a => a.GardenStoreId == storeId && a.StaffId == userId && a.Status == InvitationStatus.Accepted, ct);
     }
 
+    /// <summary>
+    /// Role GardenOwner là CÔNG TẮC quyền chủ cửa hàng: dòng sở hữu chỉ có hiệu lực khi user còn role đó trong DB.
+    /// Gỡ role → mất quyền ngay nhưng GIỮ dòng sở hữu (cấp lại role là có lại cửa hàng). Đọc role từ DB chứ không
+    /// từ claim: sửa role thẳng dưới DB không tăng TokenVersion, token cũ vẫn mang claim cũ.
+    /// Chỉ áp cho quyền CHỦ; nhân viên (staff Accepted) không có role riêng nên không bị ảnh hưởng.
+    /// </summary>
+    private IQueryable<GardenStoreOwner> ActiveOwners()
+        => _context.Set<GardenStoreOwner>().Where(o => _context.Set<User>().Any(u =>
+            u.Id == o.OwnerUserId && (u.Role & UserRole.GardenOwner) == UserRole.GardenOwner));
+
     public Task<bool> IsOwnerAsync(Guid storeId, Guid userId, CancellationToken ct = default)
-        => _context.Set<GardenStoreOwner>()
-            .AnyAsync(o => o.GardenStoreId == storeId && o.OwnerUserId == userId, ct);
+        => ActiveOwners().AnyAsync(o => o.GardenStoreId == storeId && o.OwnerUserId == userId, ct);
 
     public Task<bool> IsAcceptedStaffAsync(Guid storeId, Guid userId, CancellationToken ct = default)
         => _context.Set<GardenStaffAssignment>()
@@ -518,7 +528,7 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
 
     public Task<List<GardenStore>> GetByOwnerAsync(Guid ownerUserId, CancellationToken ct = default)
         => _set.AsNoTracking()
-            .Where(s => s.Owners.Any(o => o.OwnerUserId == ownerUserId))
+            .Where(s => ActiveOwners().Any(o => o.GardenStoreId == s.Id && o.OwnerUserId == ownerUserId))
             .Include(s => s.Address).ThenInclude(a => a!.Ward)
             .Include(s => s.Owners)
             .OrderByDescending(s => s.CreatedAt)
@@ -526,21 +536,24 @@ public class StoreRepository : GenericRepository<GardenStore>, IStoreRepository
 
     public Task<List<OwnedStoreRow>> GetOwnedStoreRowsAsync(Guid ownerUserId, CancellationToken ct = default)
         => _set.AsNoTracking()
-            .Where(s => s.Owners.Any(o => o.OwnerUserId == ownerUserId))
+            .Where(s => ActiveOwners().Any(o => o.GardenStoreId == s.Id && o.OwnerUserId == ownerUserId))
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => new OwnedStoreRow(s.Id, s.Name))
             .ToListAsync(ct);
 
     public Task<List<GardenStore>> GetForUserAsync(Guid userId, CancellationToken ct = default)
         => _set.AsNoTracking()
-            // Owner (mọi quan hệ sở hữu) HOẶC nhân viên đã Accepted — Pending/Rejected/Revoked KHÔNG được vào seller.
-            .Where(s => s.Owners.Any(o => o.OwnerUserId == userId)
+            // Owner còn role GardenOwner HOẶC nhân viên đã Accepted — Pending/Rejected/Revoked KHÔNG được vào seller.
+            .Where(s => ActiveOwners().Any(o => o.GardenStoreId == s.Id && o.OwnerUserId == userId)
                 || _context.Set<GardenStaffAssignment>().Any(a =>
                        a.GardenStoreId == s.Id
                        && a.StaffId == userId
                        && a.Status == InvitationStatus.Accepted))
             .Include(s => s.Address).ThenInclude(a => a!.Ward)
-            .Include(s => s.Owners)
+            // Chỉ nạp owner còn hiệu lực → cờ IsOwner ở GetMineAsync tính đúng cho người vừa bị gỡ role
+            // nhưng vẫn là nhân viên của cửa hàng đó.
+            .Include(s => s.Owners.Where(o => _context.Set<User>().Any(u =>
+                u.Id == o.OwnerUserId && (u.Role & UserRole.GardenOwner) == UserRole.GardenOwner)))
             .OrderByDescending(s => s.CreatedAt)
             .ToListAsync(ct);
 

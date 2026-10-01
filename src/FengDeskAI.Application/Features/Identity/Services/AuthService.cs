@@ -18,7 +18,7 @@ public class AuthService : IAuthService
 
     private readonly IUnitOfWork _uow;
     private readonly IPasswordService _passwordService;
-    private readonly ITokenService _tokenService;
+    private readonly IAuthSessionIssuer _sessionIssuer;
     private readonly IGoogleTokenValidator _googleTokenValidator;
     private readonly IOtpService _otpService;
     private readonly IChangeEmailTokenService _changeEmailTokens;
@@ -28,7 +28,7 @@ public class AuthService : IAuthService
     public AuthService(
         IUnitOfWork uow,
         IPasswordService passwordService,
-        ITokenService tokenService,
+        IAuthSessionIssuer sessionIssuer,
         IGoogleTokenValidator googleTokenValidator,
         IOtpService otpService,
         IChangeEmailTokenService changeEmailTokens,
@@ -37,7 +37,7 @@ public class AuthService : IAuthService
     {
         _uow = uow;
         _passwordService = passwordService;
-        _tokenService = tokenService;
+        _sessionIssuer = sessionIssuer;
         _googleTokenValidator = googleTokenValidator;
         _otpService = otpService;
         _changeEmailTokens = changeEmailTokens;
@@ -344,28 +344,6 @@ public class AuthService : IAuthService
         }
     }
 
-    private async Task<AuthResponse> IssueTokensAsync(User user, CancellationToken ct, RefreshToken? replacedFromToken = null)
-    {
-        var (access, accessExp) = _tokenService.GenerateAccessToken(user);
-        var (refresh, refreshExp) = _tokenService.GenerateRefreshToken();
-
-        await _uow.RefreshTokens.AddAsync(new RefreshToken
-        {
-            UserId = user.Id,
-            Token = refresh,
-            ExpiresAt = refreshExp,
-        }, ct);
-
-        if (replacedFromToken is not null)
-            replacedFromToken.ReplacedByToken = refresh;
-
-        return new AuthResponse
-        {
-            AccessToken = access,
-            AccessTokenExpiresAt = accessExp,
-            RefreshToken = refresh,
-            RefreshTokenExpiresAt = refreshExp,
-            User = _mapper.Map<UserSummary>(user),
-        };
-    }
+    private Task<AuthResponse> IssueTokensAsync(User user, CancellationToken ct, RefreshToken? replacedFromToken = null)
+        => _sessionIssuer.IssueAsync(user, ct, replacedFromToken);
 }

@@ -1,9 +1,11 @@
-﻿using AutoMapper;
+using AutoMapper;
 using FengDeskAI.Application.Common.Constants;
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.CustomerCare.Engine;
 using FengDeskAI.Application.Features.Workspace.DTOs;
+using FengDeskAI.Application.Interfaces.External;
 using FengDeskAI.Application.Interfaces.Repositories;
 using FengDeskAI.Domain.Entities.Recommendation;
 using FengDeskAI.Domain.Enums.Workspace;
@@ -15,12 +17,15 @@ public class WorkspaceProfileService : IWorkspaceProfileService
 {
     private readonly IUnitOfWork _uow;
     private readonly IMapper _mapper;
+    private readonly IFileStorage _storage;
     private readonly ILogger<WorkspaceProfileService> _logger;
 
-    public WorkspaceProfileService(IUnitOfWork uow, IMapper mapper, ILogger<WorkspaceProfileService> logger)
+    public WorkspaceProfileService(
+        IUnitOfWork uow, IMapper mapper, IFileStorage storage, ILogger<WorkspaceProfileService> logger)
     {
         _uow = uow;
         _mapper = mapper;
+        _storage = storage;
         _logger = logger;
     }
 
@@ -246,7 +251,8 @@ public class WorkspaceProfileService : IWorkspaceProfileService
 
         if (profile.WorkspaceTypeId is { } typeId && loadedType is { } workspaceType)
         {
-            typeName = workspaceType.Name;
+            // Tên này vào câu nhận định hiển thị cho user → ưu tiên tiếng Việt.
+            typeName = workspaceType.NameVi ?? workspaceType.Name;
             scope = workspaceType.Scope;
             typeElements = await _uow.ScoringConfig.GetWorkspaceTypeElementsAsync(typeId, ct);
         }
@@ -425,6 +431,71 @@ public class WorkspaceProfileService : IWorkspaceProfileService
         return ServiceResult.Success(ApiStatusMessages.WorkspaceProfile.Deleted);
     }
 
+    /// <summary>Trần số ảnh mỗi phòng — đủ cho trình chiếu, không biến hồ sơ phòng thành album.</summary>
+    public const int MaxImagesPerWorkspace = 8;
+
+    public async Task<IServiceResult<WorkspaceProfileResponse>> AddImagesAsync(
+        Guid id, Guid userId, IReadOnlyList<UploadedImage> images, CancellationToken ct = default)
+    {
+        if (images.Count == 0)
+            return ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.ImageRequired);
+        if (images.Any(i => !ImageUpload.IsAllowed(i.ContentType)))
+            return ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.UnprocessableEntity, ApiStatusMessages.WorkspaceProfile.ImageTypeInvalid);
+
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
+        if (profile is null)
+            return ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
+        if (profile.Images.Count + images.Count > MaxImagesPerWorkspace)
+            return ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.BadRequest, ApiStatusMessages.WorkspaceProfile.ImageLimitReached);
+
+        // Upload TUẦN TỰ: vài ảnh đã nén ~100–200KB, còn song song thì lỗi giữa chừng khó biết ảnh nào đã lên.
+        int nextOrder = profile.Images.Count == 0 ? 0 : profile.Images.Max(i => i.SortOrder) + 1;
+        foreach (var image in images)
+        {
+            var ext = Path.GetExtension(image.FileName);
+            if (string.IsNullOrWhiteSpace(ext)) ext = ImageUpload.ExtensionFor(image.ContentType);
+            var stored = await _storage.UploadAsync(
+                $"Workspace_images/{userId}/{profile.Id}/{Guid.NewGuid():N}{ext}", image.Content, image.ContentType, ct);
+            profile.Images.Add(new Domain.Entities.Workspace.WorkspaceProfileImage
+            {
+                WorkspaceProfileId = profile.Id,
+                Url = stored.Url,
+                SortOrder = nextOrder++,
+            });
+        }
+
+        await _uow.SaveChangesAsync(ct);
+        return ServiceResult<WorkspaceProfileResponse>.Success(
+            await ToResponseAsync(profile, ct), ApiStatusMessages.WorkspaceProfile.ImagesAdded);
+    }
+
+    public async Task<IServiceResult<WorkspaceProfileResponse>> RemoveImageAsync(
+        Guid id, Guid userId, Guid imageId, CancellationToken ct = default)
+    {
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(id, userId, ct);
+        if (profile is null)
+            return ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.NotFound);
+
+        var image = profile.Images.FirstOrDefault(i => i.Id == imageId);
+        if (image is null)
+            return ServiceResult<WorkspaceProfileResponse>.Failure(
+                ApiStatusCodes.NotFound, ApiStatusMessages.WorkspaceProfile.ImageNotFound);
+
+        // Gỡ khỏi collection → EF đánh dấu Deleted → SaveChanges chuyển thành xoá mềm.
+        profile.Images.Remove(image);
+        await _uow.SaveChangesAsync(ct);
+        // Xoá file best-effort SAU khi DB đã commit (cùng cách ProductService).
+        await _storage.DeleteByUrlAsync(image.Url, ct);
+
+        return ServiceResult<WorkspaceProfileResponse>.Success(
+            await ToResponseAsync(profile, ct), ApiStatusMessages.WorkspaceProfile.ImageRemoved);
+    }
+
     public async Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(
         Guid userId, CancellationToken ct = default)
     {
@@ -464,9 +535,16 @@ public class WorkspaceProfileService : IWorkspaceProfileService
             .Select(m => (m.InputKind, m.InputCode))
             .ToHashSet();
 
-        return inputs
-            .Where(i => validCodes.Contains((i.InputKind, i.InputCode)))
-            .DistinctBy(i => (i.InputKind, i.InputCode))
+        // Lọc code lạ → bỏ qua, trùng → giữ một, vượt trần nhóm → cắt phần đuôi. Cả ba đều IM LẶNG,
+        // không ném lỗi: đây là chốt chặn cuối (FE sửa được, AI trả dư được), mà một hồ sơ hợp lệ 90%
+        // vẫn đáng lưu hơn là chặn người dùng lại vì một tag thừa. Trần: ElementInputLimits.
+        var trimmed = ElementInputLimits.TrimPerKind(
+            inputs
+                .Where(i => validCodes.Contains((i.InputKind, i.InputCode)))
+                .DistinctBy(i => (i.InputKind, i.InputCode)),
+            i => i.InputKind);
+
+        return trimmed
             .Select(i => new WorkspaceProfileInput { InputKind = i.InputKind, InputCode = i.InputCode })
             .ToList();
     }

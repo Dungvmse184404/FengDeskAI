@@ -1,3 +1,4 @@
+using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Results;
 using FengDeskAI.Application.Features.CustomerCare.DTOs;
 using FengDeskAI.Application.Features.Workspace.DTOs;
@@ -16,6 +17,14 @@ public interface IWorkspaceProfileService
     Task<IServiceResult<WorkspaceProfileResponse>> UpdateAsync(Guid id, Guid userId, UpdateWorkspaceProfileRequest request, CancellationToken ct = default);
     Task<IServiceResult<WorkspaceProfileResponse>> SetDefaultAsync(Guid id, Guid userId, CancellationToken ct = default);
     Task<IServiceResult> DeleteAsync(Guid id, Guid userId, CancellationToken ct = default);
+
+    /// <summary>Thêm một hoặc nhiều ảnh không gian (nối vào cuối trình chiếu, tối đa 8 ảnh/phòng).</summary>
+    Task<IServiceResult<WorkspaceProfileResponse>> AddImagesAsync(
+        Guid id, Guid userId, IReadOnlyList<UploadedImage> images, CancellationToken ct = default);
+
+    /// <summary>Gỡ một ảnh không gian (xoá mềm + xoá file trên storage).</summary>
+    Task<IServiceResult<WorkspaceProfileResponse>> RemoveImageAsync(
+        Guid id, Guid userId, Guid imageId, CancellationToken ct = default);
 
     /// <summary>Từ vựng màu/vật liệu/hình khối hợp lệ — cho FE dựng tag picker "hiện trạng phòng hiện tại".</summary>
     Task<IServiceResult<ElementInputVocabularyResponse>> GetElementInputVocabularyAsync(Guid userId, CancellationToken ct = default);

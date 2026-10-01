@@ -50,7 +50,7 @@ public class ShippingVoucherCalculatorTests
         var quote = ShippingVoucherCalculator.Quote(FreeShip500(), [store], null, Now, Rate);
 
         Assert.True(quote.IsEligible);
-        Assert.Equal(30_000m, quote.DiscountByStore[store.StoreId]); // 8% × 500k = 40k ≥ 30k
+        Assert.Equal(30_000m, quote.DiscountByStore[store.StoreId].Shipping); // 8% × 500k = 40k ≥ 30k
     }
 
     [Fact]
@@ -62,8 +62,8 @@ public class ShippingVoucherCalculatorTests
 
         var quote = ShippingVoucherCalculator.Quote(FreeShip500(), [big, small], null, Now, Rate);
 
-        Assert.Equal(30_000m, quote.DiscountByStore[big.StoreId]);
-        Assert.Equal(4_800m, quote.DiscountByStore[small.StoreId]);
+        Assert.Equal(30_000m, quote.DiscountByStore[big.StoreId].Shipping);
+        Assert.Equal(4_800m, quote.DiscountByStore[small.StoreId].Shipping);
         Assert.Equal(34_800m, quote.TotalDiscount);
     }
 
@@ -76,7 +76,7 @@ public class ShippingVoucherCalculatorTests
         var store = Store(subtotal, fee);
         var quote = ShippingVoucherCalculator.Quote(FreeShip500(v => v.MinOrderSubtotal = 0), [store], null, Now, Rate);
 
-        var discount = quote.DiscountByStore[store.StoreId];
+        var discount = quote.DiscountByStore[store.StoreId].Shipping;
         Assert.True(discount <= fee);
         Assert.True(discount <= Math.Round(subtotal * Rate, 0, MidpointRounding.AwayFromZero));
     }
@@ -90,8 +90,8 @@ public class ShippingVoucherCalculatorTests
         var quote = ShippingVoucherCalculator.Quote(FreeShip500(v => v.MaxDiscountAmount = 40_000m), [a, b], null, Now, Rate);
 
         Assert.Equal(40_000m, quote.TotalDiscount);
-        Assert.Equal(30_000m, quote.DiscountByStore[a.StoreId]); // vườn tiền hàng lớn được chia trước
-        Assert.Equal(10_000m, quote.DiscountByStore[b.StoreId]);
+        Assert.Equal(30_000m, quote.DiscountByStore[a.StoreId].Shipping); // vườn tiền hàng lớn được chia trước
+        Assert.Equal(10_000m, quote.DiscountByStore[b.StoreId].Shipping);
     }
 
     [Fact]
@@ -179,6 +179,86 @@ public class ShippingVoucherCalculatorTests
         var uow = new Mock<IUnitOfWork>();
         uow.SetupGet(u => u.Vouchers).Returns(repo);
         return uow.Object;
+    }
+
+    // ─────────── Loại voucher mới: trần giảm phụ thuộc VoucherType ───────────
+
+    private static Voucher OfType(VoucherType type, VoucherFundingSource funded, Action<Voucher>? tweak = null)
+    {
+        var v = new Voucher
+        {
+            Code = type.ToString().ToUpperInvariant(),
+            Name = type.ToString(),
+            Type = type,
+            FundedBy = funded,
+            MinOrderSubtotal = 0m,
+            IsActive = true,
+        };
+        tweak?.Invoke(v);
+        return v;
+    }
+
+    [Fact]
+    public void Quote_PlatformDiscount_IsCappedByCommissionAndLeavesSellerUntouched()
+    {
+        var store = Store(500_000m, 30_000m); // phí sàn 8% = 40.000đ
+        var quote = ShippingVoucherCalculator.Quote(
+            OfType(VoucherType.PlatformDiscount, VoucherFundingSource.Platform), [store], null, Now, Rate);
+
+        var discount = quote.DiscountByStore[store.StoreId];
+        Assert.Equal(40_000m, discount.PlatformItem);
+        Assert.Equal(0m, discount.SellerItem); // sàn chịu ⇒ người bán không mất đồng nào
+        Assert.Equal(0m, discount.Shipping);
+    }
+
+    [Fact]
+    public void Quote_SellerDiscount_ComesOutOfSellerAndNotCommission()
+    {
+        var store = Store(500_000m, 30_000m);
+        var quote = ShippingVoucherCalculator.Quote(
+            OfType(VoucherType.SellerDiscount, VoucherFundingSource.Seller, v => v.MaxDiscountAmount = 50_000m),
+            [store], null, Now, Rate);
+
+        var discount = quote.DiscountByStore[store.StoreId];
+        Assert.Equal(50_000m, discount.SellerItem);
+        Assert.Equal(0m, discount.PlatformItem); // hoa hồng vẫn tính trên tiền hàng gốc
+        Assert.Equal(0m, discount.Shipping);
+    }
+
+    [Fact]
+    public void Quote_SellerDiscount_NeverExceedsStoreSubtotal()
+    {
+        var store = Store(40_000m, 30_000m);
+        var quote = ShippingVoucherCalculator.Quote(
+            OfType(VoucherType.SellerDiscount, VoucherFundingSource.Seller, v => v.MaxDiscountAmount = 999_000m),
+            [store], null, Now, Rate);
+
+        Assert.Equal(40_000m, quote.DiscountByStore[store.StoreId].SellerItem);
+    }
+
+    [Fact]
+    public void Quote_DemoFlatTotal_BringsOrderDownToTargetAndSpendsShippingFirst()
+    {
+        var store = Store(500_000m, 30_000m); // khách phải trả 530.000đ, mục tiêu còn 10.000đ
+        var quote = ShippingVoucherCalculator.Quote(
+            OfType(VoucherType.DemoFlatTotal, VoucherFundingSource.Mixed), [store], null, Now, Rate);
+
+        var discount = quote.DiscountByStore[store.StoreId];
+        Assert.Equal(520_000m, quote.TotalDiscount);
+        Assert.Equal(30_000m, discount.Shipping);      // trừ hết phí ship trước
+        Assert.Equal(40_000m, discount.PlatformItem);  // rồi tới hoa hồng sàn (8% × 500k)
+        Assert.Equal(450_000m, discount.SellerItem);   // phần còn lại người bán chịu
+    }
+
+    [Fact]
+    public void Quote_DemoFlatTotal_OrderAlreadyUnderTarget_IsRejected()
+    {
+        var store = Store(5_000m, 0m); // đã dưới 10.000đ ⇒ không còn gì để trừ
+        var quote = ShippingVoucherCalculator.Quote(
+            OfType(VoucherType.DemoFlatTotal, VoucherFundingSource.Mixed), [store], null, Now, Rate);
+
+        Assert.False(quote.IsEligible);
+        Assert.Equal(0m, quote.TotalDiscount);
     }
 }
 

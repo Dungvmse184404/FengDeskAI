@@ -322,6 +322,7 @@ public static class DependencyInjection
         services.AddScoped<IDataSeeder, PlacementProductDemoSeeder>();
         services.AddScoped<IDataSeeder, ProductAspirationDemoSeeder>();
         services.AddScoped<IDataSeeder, VoucherSeeder>();
+        services.AddScoped<IDataSeeder, DemoVoucherSeeder>();
         services.AddScoped<IDataSeeder, OrderSnapshotBackfillSeeder>();
         services.AddScoped<IDataSeeder, LedgerBackfillSeeder>();
 

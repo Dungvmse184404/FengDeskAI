@@ -7,7 +7,12 @@ public interface IStoreService
 {
     Task<IServiceResult<List<StoreResponse>>> GetActiveAsync(CancellationToken ct = default);
     Task<IServiceResult<StoreResponse>> GetByIdAsync(Guid id, CancellationToken ct = default);
-    Task<IServiceResult<StoreResponse>> CreateAsync(Guid actorUserId, CreateStoreRequest request, CancellationToken ct = default);
+    /// <summary>
+    /// Tự mở cửa hàng. Lần đầu (user chưa có role GardenOwner) thì phiên cũ bị thu hồi vì role đổi — response kèm
+    /// <see cref="CreateStoreResponse.Session"/> là phiên MỚI mang role người bán, FE thay token ngay, không phải
+    /// đăng nhập lại.
+    /// </summary>
+    Task<IServiceResult<CreateStoreResponse>> CreateAsync(Guid actorUserId, CreateStoreRequest request, CancellationToken ct = default);
     Task<IServiceResult<StoreResponse>> UpdateAsync(Guid id, Guid actorUserId, bool isAdmin, UpdateStoreRequest request, CancellationToken ct = default);
 
     /// <summary>Soft-delete store (owner hoặc admin). Đồng thời soft-delete địa chỉ kèm theo.</summary>

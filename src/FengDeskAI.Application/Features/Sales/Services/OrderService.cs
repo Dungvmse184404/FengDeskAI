@@ -119,28 +119,41 @@ public class OrderService : IOrderService
                 OrderWorkflow.GroupItemsIntoDeliveries(order);
                 foreach (var delivery in order.Deliveries)
                 {
+                    var deliveryDiscount = voucher.DiscountFor(delivery.GardenStoreId);
                     delivery.ShippingFee = feeByStore.GetValueOrDefault(delivery.GardenStoreId);
-                    delivery.ShippingDiscount = voucher.DiscountFor(delivery.GardenStoreId);
+                    delivery.ShippingDiscount = deliveryDiscount.Shipping;
+                    delivery.PlatformItemDiscount = deliveryDiscount.PlatformItem;
+                    delivery.SellerItemDiscount = deliveryDiscount.SellerItem;
                 }
             }
 
             // Chốt tiền theo từng vườn — đơn online sinh delivery lúc webhook sẽ đọc lại đúng số này.
             foreach (var fee in storeFees)
+            {
+                var chargeDiscount = voucher.DiscountFor(fee.StoreId);
                 order.StoreCharges.Add(new OrderStoreCharge
                 {
                     OrderId = order.Id,
                     GardenStoreId = fee.StoreId,
                     Subtotal = fee.Subtotal,
                     ShippingFee = fee.ShippingFee,
-                    ShippingDiscount = voucher.DiscountFor(fee.StoreId),
+                    ShippingDiscount = chargeDiscount.Shipping,
+                    PlatformItemDiscount = chargeDiscount.PlatformItem,
+                    SellerItemDiscount = chargeDiscount.SellerItem,
                 });
+            }
 
             order.Subtotal = order.Items.Sum(i => i.UnitPrice * i.Quantity);
             // Tổng phí ship lấy từ ước tính theo store (đúng cho cả COD lẫn online — online chưa tạo delivery).
             order.TotalShippingFee = feeByStore.Values.Sum();
-            order.ShippingDiscount = voucher.TotalDiscount;
+            // Tách theo ngăn: ShippingDiscount chỉ còn là phần trừ vào PHÍ SHIP, hai cột mới giữ phần
+            // trừ vào tiền hàng. Tổng khách trả vẫn là tiền hàng + ship − toàn bộ khoản giảm.
+            order.ShippingDiscount = order.StoreCharges.Sum(c => c.ShippingDiscount);
+            order.PlatformItemDiscount = order.StoreCharges.Sum(c => c.PlatformItemDiscount);
+            order.SellerItemDiscount = order.StoreCharges.Sum(c => c.SellerItemDiscount);
             order.VoucherCode = voucher.TotalDiscount > 0 ? voucher.Voucher?.Code : null;
-            order.TotalAmount = order.Subtotal + order.TotalShippingFee - order.ShippingDiscount;
+            order.TotalAmount = order.Subtotal + order.TotalShippingFee
+                - order.ShippingDiscount - order.PlatformItemDiscount - order.SellerItemDiscount;
             order.StatusLogs.Add(new OrderStatusLog
             {
                 ToStatus = OrderStatus.Pending.ToString(),
@@ -651,7 +664,7 @@ public class OrderService : IOrderService
                 StoreName = s.StoreName,
                 Subtotal = s.Subtotal,
                 ShippingFee = s.ShippingFee,
-                ShippingDiscount = voucher.DiscountFor(s.StoreId),
+                ShippingDiscount = voucher.DiscountFor(s.StoreId).Total,
             }).ToList(),
         });
     }

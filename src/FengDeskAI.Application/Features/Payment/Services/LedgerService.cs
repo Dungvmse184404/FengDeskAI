@@ -57,6 +57,11 @@ public class LedgerService : ILedgerService
             Platform(LedgerEntryType.ShippingCollected, delivery.ShippingFee, deliveredAt, source, "delivery", delivery.Id),
             // Voucher sàn tài trợ: sàn chịu, sổ vườn không đổi (≤ phí sàn của delivery — ShippingVoucherCalculator).
             Platform(LedgerEntryType.ShippingVoucherSubsidy, -delivery.ShippingDiscount, deliveredAt, source, "delivery", delivery.Id),
+            Platform(LedgerEntryType.ItemVoucherSubsidy, -delivery.PlatformItemDiscount, deliveredAt, source, "delivery", delivery.Id),
+            // Voucher do CHÍNH nhà vườn tài trợ: trừ vào tiền họ nhận. Hoa hồng ở trên vẫn tính trên
+            // Subtotal GỐC — người bán tự chịu phần khuyến mãi của mình, sàn không gánh hộ.
+            Garden(delivery.GardenStoreId, LedgerEntryType.SellerVoucherDiscount, -delivery.SellerItemDiscount,
+                clearsAt, source, "delivery", delivery.Id),
         };
         if (delivery.CarrierShippingFee is { } carrierFee)
             entries.Add(Platform(LedgerEntryType.CarrierShippingCost, -carrierFee, deliveredAt, source, "delivery", delivery.Id));

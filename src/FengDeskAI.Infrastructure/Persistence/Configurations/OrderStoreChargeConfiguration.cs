@@ -17,6 +17,8 @@ public class OrderStoreChargeConfiguration : IEntityTypeConfiguration<OrderStore
         builder.Property(c => c.Subtotal).HasColumnName("subtotal").HasPrecision(12, 2);
         builder.Property(c => c.ShippingFee).HasColumnName("shipping_fee").HasPrecision(12, 2);
         builder.Property(c => c.ShippingDiscount).HasColumnName("shipping_discount").HasPrecision(12, 2);
+        builder.Property(c => c.PlatformItemDiscount).HasColumnName("platform_item_discount").HasPrecision(12, 2).HasDefaultValue(0m);
+        builder.Property(c => c.SellerItemDiscount).HasColumnName("seller_item_discount").HasPrecision(12, 2).HasDefaultValue(0m);
 
         builder.Property(c => c.CreatedAt).HasColumnName("created_at");
         builder.Property(c => c.UpdatedAt).HasColumnName("updated_at");

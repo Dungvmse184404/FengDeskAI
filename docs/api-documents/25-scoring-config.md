@@ -162,7 +162,9 @@ d  = (1 − Wo)·n̂ + Wo·ô                (Carry)
 ```
 
 Ví dụ: Tài chính = Kim 0.5 · Thủy 0.3 · Thổ 0.1 · Hỏa 0.05 · Mộc 0.05 ⇒ `ô` = Kim **+0.75**, Thủy +0.25,
-Thổ −0.25, Hỏa/Mộc −0.375. Sản phẩm 100% Kim ⇒ `ô·p = 0.75` ⇒ **88%**.
+Thổ −0.25, Hỏa/Mộc −0.375. Sản phẩm 100% Kim ⇒ **0.75** ⇒ **88%**.
+*(Từ v3.7 phép đo là `Σ min(ô⁺,p) − Σ min(ô⁻,p)` chứ không phải `ô·p`; sản phẩm thuần một hành như ví dụ
+này ra **đúng con số cũ** — xem [`workspace-gap-cover-v3.7.md`](../adr/workspace-gap-cover-v3.7.md) §2.1a.)
 
 ⚠️ **Nghề không đổi được bản mệnh.** Hành `BiKhac` bị chặn về ≤ 0 trong `ô`, và mọi penalty
 (`USER_CONFLICT_PENALTY`, `MINOR_CLASH_PENALTY`…) đi đường `GetRelation`/`personalVector`, không đọc `ô`.

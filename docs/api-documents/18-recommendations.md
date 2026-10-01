@@ -29,6 +29,7 @@ Có **hai luồng gợi ý** tách biệt, chọn theo `ProductPlacement` của 
 | GET | `/api/recommendations/preview` | Authenticated | Gợi ý cho một workspace **không AI, không lưu phiên** (trang hồ sơ không gian) |
 | GET | `/api/recommendations/{id}` | Authenticated | Lấy lại phiên gợi ý đã lưu (cả hai loại) |
 | GET | `/api/recommendations/fit` | Authenticated | Độ phù hợp của 1 sản phẩm × 1 workspace (trang chi tiết sản phẩm) |
+| POST | `/api/recommendations/fit/bundle` | Authenticated | Xem trước **gộp nhiều sản phẩm (kèm số lượng)** trên radar một workspace |
 | GET | `/api/recommendations/fit/personal` | Authenticated | Độ phù hợp của 1 sản phẩm với **bản mệnh** user — không cần workspace (vật mang theo người) |
 
 ---
@@ -49,8 +50,13 @@ Mệnh của **phòng**, của **người** và của **sản phẩm** đều qu
 5. **Trộn theo `WorkspaceScope`**:
 
 ```
-d     = (1 − Wp)·ĝ + Wp·r          // vector hướng tổng hợp, mỗi trục ∈ [−1, +1]
-score = clamp( productVector · d − userPenalty − dirPenalty − vibePenalty , −1, 1 )
+// Wg = 1 − Wp − Wo. Từ v3.7 CHỈ trục bản mệnh còn là tích trong (xem §Điểm khớp phòng ở trên).
+blended = Wg·gapScore + Wp·(r·p) + Wo·occupationScore
+score   = clamp( blended − userPenalty − dirPenalty − vibePenalty , −1, 1 )
+
+// `d = Wg·ĝ + Wp·r + Wo·ô` vẫn trả ở `breakdown.vectors.combinedDirection` để VẼ radar,
+// nhưng `productVector · d` KHÔNG còn bằng `blended` — muốn dựng lại điểm thì cộng
+// `breakdown.components[].contribution`.
 ```
 
 | `WorkspaceScope` | `Wp` (`PERSONAL_WEIGHT_*`) — seed v3.5 | v3.1–v3.4 |
@@ -115,7 +121,7 @@ Vector mục tiêu là **thứ NGƯỜI đang cần**, không phải phòng:
 
 ```jsonc
 "breakdown": {
-  "formulaVersion": "3.2", "target": "WorkspaceGap", "placement": "Living", "displayPercent": 90,
+  "formulaVersion": "3.7", "target": "WorkspaceGap", "placement": "Living", "displayPercent": 90,
   "components": [
     { "code": "GAP_SCORE",      "labelVi": "Hợp nhu cầu của phòng", "value": 0.600, "weight": 0.50, "contribution": 0.300, "reasonVi": "…" },
     { "code": "PERSONAL_SCORE", "labelVi": "Hợp bản mệnh của bạn",   "value": 1.000, "weight": 0.50, "contribution": 0.500, "reasonVi": "…" }
@@ -177,7 +183,8 @@ chúng, còn `/recommendations` và `/recommendations/fit` thì không — cùng
 
 ⚠️ `formulaVersion` của phiên mới là **`"3.7"`** (3.5 = trần phiếu tag `TAG_VOTES_CAP` trong `current`, thêm
 `tagVotesScale`; 3.6 = luồng Carry đo `Σ min(n̂,p) − Σ_{kỵ} p` thay `n̂·p`, thêm `personalAvoidElements` và dòng
-`PERSONAL_AVOID_SCORE`; **3.7** = luồng phòng đo `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` thay `ĝ·p`). Điểm của hai phiên bản
+`PERSONAL_AVOID_SCORE`; **3.7** = luồng phòng đo `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` thay `ĝ·p` VÀ trục nghề đo
+`Σ min(ô⁺,p) − Σ min(ô⁻,p)` thay `ô·p`). Điểm của hai phiên bản
 công thức KHÔNG so sánh trực tiếp được với nhau.
 
 ⚠️ `breakdown.vectors.combinedDirection` vẫn là vector **radar** (đang ưu tiên bù hành nào), nhưng từ v3.7
@@ -199,7 +206,7 @@ Khi trục nghề bật, `components[]` có thêm dòng và breakdown trả thê
   { "code": "GAP_SCORE",        "labelVi": "Hợp nhu cầu của phòng", "value": 0.60, "weight": 0.30, "contribution": 0.18, "reasonVi": "…" },
   { "code": "PERSONAL_SCORE",   "labelVi": "Hợp bản mệnh của bạn",   "value": 1.00, "weight": 0.50, "contribution": 0.50, "reasonVi": "…" },
   { "code": "OCCUPATION_SCORE", "labelVi": "Hợp nghề Tài chính / Kế toán", "value": 0.75, "weight": 0.20, "contribution": 0.15,
-    "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề bạn cần." }
+    "reasonVi": "Đáp ứng Kim 0.75/0.75 phần nghề Tài chính / Kế toán đang cần; nghề Tài chính / Kế toán còn cần thêm Thủy 0.25." }
 ],
 "occupation": {
   "code": "FINANCE", "nameVi": "Tài chính / Kế toán",
@@ -230,11 +237,11 @@ lấy đúng một nghề (không phân biệt hoa/thường; không có → 404
 
 ```json
 {
-  "productId": "…", "formulaVersion": "3.5", "placement": "Carry",
+  "productId": "…", "formulaVersion": "3.7", "placement": "Carry",
   "productVector": [ { "element": "Kim", "value": 1.0 }, … ],
   "fits": [
     { "code": "FINANCE", "nameVi": "Tài chính / Kế toán", "score": 0.750, "displayPercent": 88, "tierVi": "Rất hợp",
-      "direction": [ … ], "reasonVi": "Sản phẩm cấp Kim (+0.75) - đúng hành nghề Tài chính / Kế toán cần." },
+      "direction": [ … ], "reasonVi": "Đáp ứng Kim 0.75/0.75 phần nghề Tài chính / Kế toán đang cần; nghề Tài chính / Kế toán còn cần thêm Thủy 0.25." },
     { "code": "SALES", "score": 0.400, "displayPercent": 70, "tierVi": "Phù hợp", … }
   ],
   "noteVi": null
@@ -398,6 +405,48 @@ Lấy lại phiên đã lưu, **cả hai loại** (`gap` = null khi đọc lại
 | `contributions` | Nguồn nào tạo ra `current` của phòng và chiếm bao nhiêu % — **cùng dữ liệu tooltip của [element-analysis](./16-workspace-profiles.md)**, mang sang đây để trả lời *"vì sao phòng được cho là thiếu hành đó"* chứ không chỉ *"phòng thiếu hành đó"*. KHÔNG tính sản phẩm đang xem (ảnh hưởng của nó nằm ở `previewCurrent`) |
 | `evidenceCount` | Số bằng chứng THẬT (tag user khai + sản phẩm đã đặt). `0` = hiện trạng hoàn toàn suy ra từ loại phòng |
 | `confidence` | `0..1` — tỉ lệ `current` đến từ dữ liệu user khai thay vì nền phòng. Thấp thì FE nên mời user khai thêm tag thay vì để họ tin vào một con số chưa có bằng chứng |
+
+---
+
+## POST `/api/recommendations/fit/bundle`
+
+"Phòng sẽ ra sao nếu đặt **tất cả** các món này" — trang hồ sơ không gian gọi khi user chọn nhiều sản
+phẩm đề xuất để mua cùng lúc. Chỉ đọc, không lưu, không chấm điểm từng món; dùng POST vì body là danh sách.
+
+**Request body** (`BundlePreviewRequest`):
+```json
+{
+  "workspaceProfileId": "guid",
+  "items": [
+    { "productId": "guid-a", "quantity": 2 },
+    { "productId": "guid-b", "quantity": 1 }
+  ]
+}
+```
+| Field | Ghi chú |
+|---|---|
+| `items` | 1–30 sản phẩm khác nhau (`400` nếu rỗng/vượt). Cùng `productId` lặp lại → **cộng dồn** số lượng |
+| `quantity` | Kẹp về `[1, 99]` |
+
+**Response `data`** = `BundlePreviewResponse`:
+```json
+{
+  "workspaceProfileId": "guid",
+  "gap": [
+    { "element": "Thuy", "ideal": 0.20, "adjustedIdeal": 0.30, "current": 0.12, "gap": 0.18,
+      "previewCurrent": 0.21, "previewGap": 0.09 }
+  ],
+  "skippedProductIds": []
+}
+```
+| Field | Ghi chú |
+|---|---|
+| `gap` | Cùng shape `gap` của `GET /fit`. `current` = phòng như đang có; `previewCurrent`/`previewGap` = sau khi thêm cả nhóm |
+| `skippedProductIds` | Sản phẩm không tính (không tồn tại / ngừng bán / chưa gắn ngũ hành) |
+
+Công thức giống `GET /fit` ([§19](#current-dùng-để-chấm-điểm-v32-19)): `BuildCurrentBreakdown(đã đặt ∪ nhóm, chủ nhân)`,
+mỗi món góp `voteWeight(1 món) × quantity` phiếu, cộng thô rồi chuẩn hoá **một lần** — nên các món bù/khử
+nhau đúng như khi đặt thật, không phải cộng các lớp xem trước từng món.
 
 ---
 

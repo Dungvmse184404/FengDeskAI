@@ -48,6 +48,7 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
         var d = file.Defaults;
 
         await SyncDemoElementsAsync(byName, ct);
+        await SyncDemoVibesAsync(byName, ct);
 
         var products = await _context.Set<Product>()
             .Include(p => p.Elements)
@@ -140,6 +141,49 @@ public class ProductFengShuiDemoSeeder : IDataSeeder
         {
             await _context.SaveChangesAsync(ct);
             _logger.LogInformation("Đồng bộ hành chính/phụ theo {File} cho {Count} product demo.", FileName, synced);
+        }
+    }
+
+    /// <summary>
+    /// Vibe của sản phẩm demo đã seed trước đó → kéo về đúng file (thêm thiếu, bỏ thừa). Trước đây vibe
+    /// chỉ gắn lúc backfill (sản phẩm chưa có hành), nên sửa `vibes` trong file không tới được DB đã seed —
+    /// và với `VIBE_FILTER_HARD = 1`, thiếu đúng vibe của một mục đích là mọi phòng mục đích đó ra rỗng.
+    /// <para>Chỉ đụng sản phẩm ĐÃ có hành: sản phẩm chưa có hành do backfill phía dưới gắn vibe, hai tập
+    /// tách rời nên không trùng khoá (ProductId, VibeCode).</para>
+    /// </summary>
+    private async Task SyncDemoVibesAsync(
+        IReadOnlyDictionary<string, CatalogDemoFile.ProductRow> byName, CancellationToken ct)
+    {
+        var knownVibes = (await _context.Set<Vibe>().Select(v => v.Code).ToListAsync(ct))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var names = byName.Where(kv => kv.Value.Vibes.Count > 0).Select(kv => kv.Key).ToList();
+        var demoProducts = await _context.Set<Product>()
+            .Include(p => p.Vibes)
+            .Where(p => names.Contains(p.Name) && p.Elements.Any())
+            .ToListAsync(ct);
+
+        int synced = 0;
+        foreach (var p in demoProducts)
+        {
+            var desired = byName[p.Name].Vibes
+                .Where(knownVibes.Contains)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var stale = p.Vibes.Where(v => !desired.Contains(v.VibeCode)).ToList();
+            var missing = desired
+                .Where(code => !p.Vibes.Any(v => string.Equals(v.VibeCode, code, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+            if (stale.Count == 0 && missing.Count == 0) continue;
+
+            _context.Set<ProductVibe>().RemoveRange(stale);
+            foreach (var code in missing)
+                await _context.Set<ProductVibe>().AddAsync(new ProductVibe { ProductId = p.Id, VibeCode = code }, ct);
+            synced++;
+        }
+
+        if (synced > 0)
+        {
+            await _context.SaveChangesAsync(ct);
+            _logger.LogInformation("Đồng bộ vibe theo {File} cho {Count} product demo.", FileName, synced);
         }
     }
 

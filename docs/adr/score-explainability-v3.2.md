@@ -3,7 +3,22 @@
 > **Trạng thái:** **ACCEPTED** rev.5 — 13/13 quyết định đã chốt 08/09/2026 (bảng ở PHẦN E)
 > **Đã xong:** 12 doc liên quan + bộ test `RecommendationScorerTests.cs`. **Chưa xong:** code engine (P1).
 > **Vị trí đề xuất:** `docs/adr/score-explainability-v3.2.md`
-> **Tiền đề:** [`docs/adr/personalized-recommendation-v3.1.md`](./personalized-recommendation-v3.1.md) · [`docs/adr/recommendation-scoring-v3.md`](./recommendation-scoring-v3.md) · [`docs/adr/vibe-soft-scoring.md`](./vibe-soft-scoring.md)
+> **Tiền đề:** [`docs/adr/personalized-recommendation-v3.1.md`](./personalized-recommendation-v3.1.md) · [`docs/adr/recommendation-scoring-v3.md`](./recommendation-scoring-v3.md) · [`docs/adr/vibe-soft-scoring.md`](./vibe-soft-scoring.md)>
+> ⚠️ **PHÉP ĐO ĐÃ ĐỔI TỪ v3.6/v3.7 — mọi công thức `x·p` trong tài liệu này là bản CŨ.**
+> Ba trục mục tiêu đều có `Σ (phần dương) = 1`, mà `Σp = 1`, nên tích trong `x·p` **là** một phép
+> trung bình có trọng số ⇒ trần của mỗi sản phẩm bằng chính `max p[e]` của nó ⇒ engine thưởng cho việc
+> khai thiếu hành. Hiện hành:
+>
+> | Trục | Nay | ADR |
+> |---|---|---|
+> | dụng thần (Carry) | `Σ min(n̂,p) − Σ_{kỵ} p` | [`personal-need-v3.6.md`](./personal-need-v3.6.md) |
+> | phòng (Desk/Living) | `Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)` | [`workspace-gap-cover-v3.7.md`](./workspace-gap-cover-v3.7.md) |
+> | nghề | `Σ min(ô⁺,p) − Σ min(ô⁻,p)` | ↑ §2.3 |
+> | **bản mệnh** | `r·p` — **vẫn là tích trong**, có chủ ý | ↑ §2.4 |
+>
+> Hệ quả kéo theo: `score = p·d` **không còn đúng** (`d` giờ chỉ là vector radar). Sản phẩm **thuần một
+> hành** ra điểm y hệt bản cũ, nên mọi ví dụ một-hành trong tài liệu này vẫn đọc được.
+> Ký hiệu (`p`, `ĝ`, `n̂`, `ô`, `r`, `d`, `v⁺`/`v⁻`…): [`glossary-scoring.md`](../glossary-scoring.md) §0.
 
 ---
 

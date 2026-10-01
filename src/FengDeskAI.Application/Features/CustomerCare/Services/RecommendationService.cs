@@ -482,11 +482,7 @@ public sealed class RecommendationService : IRecommendationService
         var productElementInputs = productInputs.TryGetValue(productId, out var pin)
             ? pin
             : (IReadOnlyCollection<ProductElementInput>)Array.Empty<ProductElementInput>();
-        var decorCodes = productElementInputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
-        var voteWeight = decorCodes.Count > 0
-            ? decorCodes.Sum(c => wctx.Resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
-            : 1.0m;
-        if (voteWeight < 0m) voteWeight = 0m;
+        var voteWeight = PlacedProductVectorBuilder.UnitVoteWeight(productElementInputs, wctx.Resolver);
 
         // Chủ nhân phòng cũng là một nguồn ngũ hành — phải có mặt ở CẢ current lẫn preview, nếu không
         // hai lớp radar lệch thang và "xem trước" trông như đã gỡ chủ nhân ra khỏi phòng.
@@ -548,6 +544,89 @@ public sealed class RecommendationService : IRecommendationService
         };
 
         return ServiceResult<ProductFitResponse>.Success(response);
+    }
+
+    private const int MaxBundleProducts = 30;
+    private const int MaxBundleQuantity = 99;
+
+    public async Task<IServiceResult<BundlePreviewResponse>> GetBundlePreviewAsync(
+        Guid userId, BundlePreviewRequest request, CancellationToken ct = default)
+    {
+        // Cùng productId lặp lại = cộng dồn số lượng (bấm chọn 2 lần một món = đặt 2 món).
+        var lines = (request.Items ?? new List<BundlePreviewItemRequest>())
+            .Where(i => i.ProductId != Guid.Empty)
+            .GroupBy(i => i.ProductId)
+            .Select(g => (ProductId: g.Key, Quantity: Math.Clamp(g.Sum(i => Math.Max(0, i.Quantity)), 1, MaxBundleQuantity)))
+            .ToList();
+        if (lines.Count == 0)
+            return ServiceResult<BundlePreviewResponse>.Failure(ApiStatusCodes.BadRequest, "Chưa chọn sản phẩm nào để xem trước.");
+        if (lines.Count > MaxBundleProducts)
+            return ServiceResult<BundlePreviewResponse>.Failure(
+                ApiStatusCodes.BadRequest, $"Xem trước tối đa {MaxBundleProducts} sản phẩm một lần.");
+
+        var profile = await _uow.WorkspaceProfiles.GetByIdForUserAsync(request.WorkspaceProfileId, userId, ct);
+        if (profile is null)
+            return ServiceResult<BundlePreviewResponse>.Failure(ApiStatusCodes.NotFound, "Không tìm thấy hồ sơ không gian.");
+
+        var user = await _uow.Users.GetByIdAsync(userId, ct);
+        var p = ScoringParameters.FromRows(await _uow.ScoringConfig.GetScoringParamsAsync(ct));
+        var wctx = await BuildWorkspaceContextAsync(profile, p, user?.DateOfBirth, ct);
+
+        var ids = lines.Select(l => l.ProductId).ToList();
+        var productById = (await _uow.Products.GetScorableByIdsAsync(ids, ct)).ToDictionary(x => x.Id);
+        var productInputs = (await _uow.ScoringConfig.GetProductElementInputsAsync(ids, ct))
+            .GroupBy(i => i.ProductId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyCollection<ProductElementInput>)g.ToList());
+
+        var added = new List<ProductContribution>();
+        var skipped = new List<Guid>();
+        foreach (var (productId, quantity) in lines)
+        {
+            if (!productById.TryGetValue(productId, out var product))
+            {
+                skipped.Add(productId);
+                continue;
+            }
+
+            var facts = ToFacts(product, productInputs, wctx.Resolver, p);
+            if (facts.Vector.L1() <= 0m)
+            {
+                skipped.Add(productId);
+                continue;
+            }
+
+            var inputs = productInputs.TryGetValue(productId, out var pin)
+                ? pin
+                : (IReadOnlyCollection<ProductElementInput>)Array.Empty<ProductElementInput>();
+            var votes = PlacedProductVectorBuilder.UnitVoteWeight(inputs, wctx.Resolver) * quantity;
+            added.Add(new ProductContribution(productId, product.Name, facts.Vector, votes));
+        }
+
+        // Giống GetProductFitAsync: "xem trước" = phòng NHƯ ĐANG CÓ (kể cả đồ đã đặt + chủ nhân) cộng thêm
+        // cả nhóm — cộng phiếu rồi chuẩn hoá MỘT lần, nên nhiều món bù/khử nhau đúng như khi đặt thật.
+        var person = PersonPresenceBuilder.Build(user?.DateOfBirth, wctx.Scope, p);
+        var previewCurrent = WorkspaceVectorBuilder.BuildCurrentBreakdown(
+                wctx.ProfileInputs, wctx.Resolver, wctx.TypeElements,
+                wctx.PlacedProducts.Concat(added).ToList(),
+                person, p.InteriorPriorVotes, p.EvidenceSaturationAlpha, p.TagVotesCap)
+            .Current;
+        var previewGapVec = wctx.Analysis.AdjustedIdeal.Subtract(previewCurrent);
+
+        return ServiceResult<BundlePreviewResponse>.Success(new BundlePreviewResponse
+        {
+            WorkspaceProfileId = profile.Id,
+            Gap = wctx.Analysis.Ideal.Enumerate().Select(x => new ElementAnalysisRow
+            {
+                Element = x.Element.ToString(),
+                Ideal = Math.Round(x.Value, 3),
+                AdjustedIdeal = Math.Round(wctx.Analysis.AdjustedIdeal[x.Element], 3),
+                Current = Math.Round(wctx.Analysis.Current[x.Element], 3),
+                Gap = Math.Round(wctx.Analysis.Gap[x.Element], 3),
+                PreviewCurrent = Math.Round(previewCurrent[x.Element], 3),
+                PreviewGap = Math.Round(previewGapVec[x.Element], 3),
+            }).ToList(),
+            SkippedProductIds = skipped,
+        });
     }
 
     public async Task<IServiceResult<PersonalFitResponse>> GetPersonalFitAsync(

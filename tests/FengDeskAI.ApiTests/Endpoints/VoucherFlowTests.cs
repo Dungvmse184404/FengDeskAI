@@ -3,8 +3,10 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FengDeskAI.ApiTests.Infrastructure;
 using FengDeskAI.Application.Features.Vendor.Services;
+using FengDeskAI.Application.Features.Promotion.Services;
 using FengDeskAI.Domain.Entities.Payment;
 using FengDeskAI.Domain.Entities.Promotion;
+using FengDeskAI.Domain.Entities.Sales;
 using FengDeskAI.Domain.Enums.Payment;
 using FengDeskAI.Domain.Enums.Promotion;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
@@ -272,5 +274,182 @@ public sealed class VoucherFlowTests
         T result = default!;
         await _fixture.WithScopeAsync(async sp => result = await query(sp.GetRequiredService<AppDbContext>()));
         return result;
+    }
+
+    // ─────────── Loại voucher mới (01/10/2026): giảm tiền hàng do sàn / người bán chịu ───────────
+    // Ba vùng dễ vỡ nhất khi thêm loại: (1) đặt hàng chốt đúng số, (2) delivery mang đúng 3 khoản,
+    // (3) sổ cái + thống kê không lệch. Mỗi vùng ít nhất một ca cho mỗi loại.
+
+    private const decimal UnitPrice = 150_000m;   // giá sản phẩm của SalesScenario
+
+    private static decimal Commission(decimal subtotal)
+        => PlatformFeePolicy.ComputeCommission(subtotal, PlatformFeePolicy.DefaultCommissionRate);
+
+    private Task<string> CreateTypedVoucherAsync(VoucherType type, decimal? maxDiscount = null) =>
+        CreateVoucherAsync(new { minOrderSubtotal = 0m, maxDiscountAmount = maxDiscount, type = (int)type });
+
+    private Task<Order> OrderRowAsync(Guid orderId) => QueryAsync(db =>
+        db.Set<Order>().AsNoTracking().SingleAsync(o => o.Id == orderId));
+
+    private Task<List<Delivery>> DeliveryRowsAsync(Guid orderId) => QueryAsync(db =>
+        db.Set<Delivery>().AsNoTracking().Where(d => d.OrderId == orderId).ToListAsync());
+
+    private async Task DeliverAsync(Guid deliveryId)
+    {
+        var owner = _fixture.ClientFor(TestRole.GardenOwner);
+        foreach (var status in new[] { "Confirmed", "Preparing", "Shipped", "Delivered" })
+        {
+            var r = await owner.PatchAsJsonAsync($"/api/orders/deliveries/{deliveryId}/status", new { status });
+            Assert.True(r.IsSuccessStatusCode, await ApiEnvelope.DescribeAsync(r, $"delivery -> {status}"));
+        }
+    }
+
+    [Fact(DisplayName = "VOUCHER-11 [Normal] A platform item discount comes out of commission and leaves the seller whole")]
+    public async Task Checkout_PlatformDiscount_CappedByCommission_SellerUntouched()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.PlatformDiscount);
+        var subtotal = UnitPrice * 4;
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var row = await OrderRowAsync(order.GetProperty("id").GetGuid());
+
+        Assert.Equal(Commission(subtotal), row.PlatformItemDiscount);  // trần = phí sàn của vườn
+        Assert.Equal(0m, row.SellerItemDiscount);                      // người bán không mất đồng nào
+        Assert.Equal(0m, row.ShippingDiscount);                        // không đụng phí ship
+        Assert.Equal(subtotal + row.TotalShippingFee - row.PlatformItemDiscount, row.TotalAmount);
+    }
+
+    [Fact(DisplayName = "VOUCHER-12 [Normal] A seller item discount comes out of the seller and never touches commission")]
+    public async Task Checkout_SellerDiscount_ReducesSellerShareOnly()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.SellerDiscount, maxDiscount: 50_000m);
+        var subtotal = UnitPrice * 4;
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var row = await OrderRowAsync(order.GetProperty("id").GetGuid());
+
+        Assert.Equal(50_000m, row.SellerItemDiscount);
+        Assert.Equal(0m, row.PlatformItemDiscount);
+        Assert.Equal(subtotal + row.TotalShippingFee - 50_000m, row.TotalAmount);
+    }
+
+    [Fact(DisplayName = "VOUCHER-13 [Boundary] The demo voucher lands the order on exactly the flat target")]
+    public async Task Checkout_DemoFlatTotal_LandsOnTarget()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.DemoFlatTotal);
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var row = await OrderRowAsync(order.GetProperty("id").GetGuid());
+
+        Assert.Equal(ShippingVoucherCalculator.DemoFlatTotalTargetVnd, row.TotalAmount);
+        // Tiêu phí ship trước, rồi hoa hồng sàn, hết mới tới tiền người bán.
+        Assert.Equal(row.TotalShippingFee, row.ShippingDiscount);
+        Assert.Equal(Commission(UnitPrice * 4), row.PlatformItemDiscount);
+        Assert.True(row.SellerItemDiscount > 0m, "phần còn lại phải do người bán chịu");
+    }
+
+    [Fact(DisplayName = "VOUCHER-14 [Normal] COD deliveries carry every discount bucket, not just shipping")]
+    public async Task Cod_Delivery_CarriesAllBuckets()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.SellerDiscount, maxDiscount: 40_000m);
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var orderId = order.GetProperty("id").GetGuid();
+        var row = await OrderRowAsync(orderId);
+        var deliveries = await DeliveryRowsAsync(orderId);
+
+        Assert.Equal(row.SellerItemDiscount, deliveries.Sum(d => d.SellerItemDiscount));
+        Assert.Equal(row.PlatformItemDiscount, deliveries.Sum(d => d.PlatformItemDiscount));
+        Assert.Equal(row.ShippingDiscount, deliveries.Sum(d => d.ShippingDiscount));
+    }
+
+    [Fact(DisplayName = "VOUCHER-15 [Normal] Deliveries born at the PayOS webhook inherit the locked discount buckets")]
+    public async Task PayOs_Paid_DeliveriesInheritBuckets()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.PlatformDiscount);
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "PayOS", code,
+            (data.StoreA.ProductItemId, 4), (data.StoreB.ProductItemId, 1));
+        var orderId = order.GetProperty("id").GetGuid();
+
+        await _fixture.WithScopeAsync(async sp =>
+        {
+            var result = await sp.GetRequiredService<Application.Features.Payment.Services.IPaymentService>()
+                .SimulatePaidAsync(orderId);
+            Assert.True(result.IsSuccess, result.Message);
+        });
+
+        var row = await OrderRowAsync(orderId);
+        var deliveries = await DeliveryRowsAsync(orderId);
+        Assert.NotEmpty(deliveries);
+        // Delivery sinh ở webhook phải đọc lại ĐÚNG số đã chốt lúc checkout (qua order_store_charges).
+        Assert.Equal(row.PlatformItemDiscount, deliveries.Sum(d => d.PlatformItemDiscount));
+        Assert.Equal(row.SellerItemDiscount, deliveries.Sum(d => d.SellerItemDiscount));
+    }
+
+    [Fact(DisplayName = "VOUCHER-16 [Normal] A seller-funded discount is booked against the garden and keeps money conserved")]
+    public async Task Delivered_SellerDiscount_GardenBearsItAndMoneyIsConserved()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.SellerDiscount, maxDiscount: 30_000m);
+        var subtotal = UnitPrice * 4;
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var deliveryId = order.GetProperty("deliveries")[0].GetProperty("id").GetGuid();
+        await DeliverAsync(deliveryId);
+
+        var entries = await LedgerAsync(deliveryId);
+        Assert.Equal(-30_000m, entries.Single(e => e.Type == LedgerEntryType.SellerVoucherDiscount).Amount);
+        // Hoa hồng vẫn tính trên tiền hàng GỐC — người bán tự chịu khuyến mãi, sàn không giảm phần mình thu.
+        Assert.Equal(-Commission(subtotal), entries.Single(e =>
+            e.Type == LedgerEntryType.Commission && e.Account == LedgerAccount.GardenStore).Amount);
+        Assert.Equal(subtotal - Commission(subtotal) - 30_000m,
+            entries.Where(e => e.Account == LedgerAccount.GardenStore).Sum(e => e.Amount));
+        Assert.Equal(order.GetProperty("totalAmount").GetDecimal(), entries.Sum(e => e.Amount));
+    }
+
+    [Fact(DisplayName = "VOUCHER-17 [Normal] A platform-funded item discount is booked against the platform only")]
+    public async Task Delivered_PlatformDiscount_PlatformBearsItAlone()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.PlatformDiscount);
+        var subtotal = UnitPrice * 4;
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var deliveryId = order.GetProperty("deliveries")[0].GetProperty("id").GetGuid();
+        await DeliverAsync(deliveryId);
+
+        var entries = await LedgerAsync(deliveryId);
+        Assert.Equal(-Commission(subtotal), entries.Single(e => e.Type == LedgerEntryType.ItemVoucherSubsidy).Amount);
+        Assert.Empty(entries.Where(e => e.Type == LedgerEntryType.SellerVoucherDiscount && e.Amount != 0m));
+        // Sổ nhà vườn y như khi không có voucher.
+        Assert.Equal(subtotal - Commission(subtotal),
+            entries.Where(e => e.Account == LedgerAccount.GardenStore).Sum(e => e.Amount));
+        Assert.Equal(order.GetProperty("totalAmount").GetDecimal(), entries.Sum(e => e.Amount));
+    }
+
+    [Fact(DisplayName = "VOUCHER-18 [Normal] Store statistics stay consistent with the ledger after a discounted order")]
+    public async Task Statistics_AfterSellerDiscount_MatchLedger()
+    {
+        var (client, data) = await CustomerWithStoresAsync();
+        var code = await CreateTypedVoucherAsync(VoucherType.SellerDiscount, maxDiscount: 20_000m);
+
+        var order = await CheckoutAsync(client, data.ShippingAddressId, "COD", code, (data.StoreA.ProductItemId, 4));
+        var deliveryId = order.GetProperty("deliveries")[0].GetProperty("id").GetGuid();
+        await DeliverAsync(deliveryId);
+
+        var stats = await ApiEnvelope.DataAsync(await _fixture.ClientFor(TestRole.GardenOwner)
+            .GetAsync($"/api/stores/{data.StoreA.StoreId}/statistics"));
+
+        // Màn thống kê đọc "có thể chi / đang chờ" từ CHÍNH sổ cái — hai nguồn không được lệch nhau.
+        var gardenTotal = (await LedgerAsync(deliveryId))
+            .Where(e => e.Account == LedgerAccount.GardenStore).Sum(e => e.Amount);
+        Assert.Equal(gardenTotal,
+            stats.GetProperty("ledgerAvailable").GetDecimal() + stats.GetProperty("ledgerPending").GetDecimal());
     }
 }

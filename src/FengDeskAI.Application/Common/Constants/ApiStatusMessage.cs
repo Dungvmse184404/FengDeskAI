@@ -98,6 +98,13 @@ public static class ApiStatusMessages
         public const string Updated = "Cập nhật thành công.";
         public const string SetDefault = "Đã đặt làm mặc định.";
         public const string Deleted = "Đã xóa workspace profile.";
+        public const string ImageRequired = "Vui lòng chọn tệp ảnh.";
+        public const string ImageTypeInvalid = "Chỉ chấp nhận ảnh JPG, PNG, BMP hoặc GIF.";
+        public const string ImageTooLarge = "Ảnh tối đa 10MB.";
+        public const string ImagesAdded = "Đã thêm ảnh không gian.";
+        public const string ImageRemoved = "Đã xóa ảnh không gian.";
+        public const string ImageNotFound = "Không tìm thấy ảnh không gian.";
+        public const string ImageLimitReached = "Mỗi không gian tối đa 8 ảnh.";
     }
 
     public static class Category

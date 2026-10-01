@@ -15,7 +15,7 @@ Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / 
 
 ---
 
-## 📋 Bảng endpoint — **18 endpoint**
+## 📋 Bảng endpoint — **20 endpoint**
 
 ### CRUD hồ sơ
 
@@ -29,6 +29,8 @@ Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / 
 | PUT | `/api/workspace/{id}` | Authenticated | Cập nhật profile |
 | PATCH | `/api/workspace/{id}/set-default` | Authenticated | Đặt làm mặc định |
 | DELETE | `/api/workspace/{id}` | Authenticated | Xóa profile |
+| POST | `/api/workspace/{id}/images` | Authenticated | Thêm ảnh không gian (multipart `files`, một hoặc nhiều) |
+| DELETE | `/api/workspace/{id}/images/{imageId}` | Authenticated | Gỡ một ảnh không gian |
 
 ### AI intake (mô tả tự do / ảnh / giọng nói)
 
@@ -89,6 +91,9 @@ Ngoài CRUD, controller này còn ôm **luồng AI intake** (mô tả tự do / 
   "deskOrientation": "East", "roomFacingDirection": "South",
   "workPurpose": "Office", "fengShuiElement": "Moc", "deskArea": 120,
   "isDefault": true,
+  "images": [
+    { "id": "guid", "url": "https://…/Workspace_images/{userId}/{workspaceId}/{guid}.jpg", "sortOrder": 0 }
+  ],
   "completenessPercent": 75,
   "missingFieldHints": ["Thêm diện tích mặt bàn để lọc vật phẩm vừa kích thước"],
   "inputs": [{ "inputKind": "Material", "inputCode": "Wood" }],
@@ -201,7 +206,7 @@ current = normalize( Σᵢ vᵢ · wᵢ )
 | Nền phòng | `INTERIOR_PRIOR_VOTES` = 3 |
 | Mỗi tag user khai | Σ weight của code, thường 1 |
 | **Chủ nhân phòng** | `PERSON_PRESENCE_VOTES_*` = **3 / 2 / 0** theo scope |
-| Mỗi sản phẩm đã đặt | `voteWeight`, mặc định 1 |
+| Mỗi sản phẩm đã đặt | `voteWeight` của 1 món (mặc định 1) **× số lượng của dòng đơn hàng** |
 
 Chủ nhân xuất hiện thành **một dòng trong `contributions[]`** với `source: "Person"` — nên tooltip
 "Đến từ" vẫn cộng ra 100% và FE vẽ được "phần của bạn" ngay từ dữ liệu đó.
@@ -349,6 +354,20 @@ không tồn tại.
 
 ## DELETE `/api/workspace/{id}`
 Xóa profile.
+
+## POST `/api/workspace/{id}/images`
+Thêm ảnh chụp không gian — FE dùng làm nền phần tổng quan, nhiều ảnh thì trình chiếu tự chuyển.
+`multipart/form-data`, field `files` (lặp lại cho nhiều ảnh).
+
+- Tối đa **8 ảnh/phòng** tính cả ảnh đã có (`400` nếu vượt).
+- Định dạng JPG / PNG / BMP / GIF (`422` nếu khác), mỗi ảnh ≤ 10MB (`400`). FE chuẩn hoá sang JPEG ≤1024px trước khi gửi.
+- Lưu ở storage `Workspace_images/{userId}/{workspaceId}/{guid}{ext}`, bảng `workspace_profile_images`; ảnh mới nối vào cuối (`sortOrder` tăng dần).
+- `data` = `WorkspaceProfileResponse` với `images` đã cập nhật.
+
+> Ảnh user gửi cho AI intake (`POST /api/workspace/images`) được FE điền sẵn làm ảnh không gian ở form tạo phòng: FE tải lại file từ URL storage rồi gọi endpoint này — BE không nhận URL ngoài.
+
+## DELETE `/api/workspace/{id}/images/{imageId}`
+Gỡ một ảnh: xoá mềm dòng `workspace_profile_images` rồi xoá file trên storage (best-effort). `404` nếu ảnh không thuộc phòng. `data` = `WorkspaceProfileResponse`.
 
 > Enum chi tiết: xem [Appendix](./99-appendix-models.md).
 

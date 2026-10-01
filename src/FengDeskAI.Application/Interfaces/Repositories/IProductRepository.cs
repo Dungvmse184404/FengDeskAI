@@ -57,6 +57,12 @@ public interface IProductRepository : IGenericRepository<Product>
         Aspiration? aspiration = null,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Sản phẩm chấm được (đang bán + có ngũ hành) trong đúng danh sách id — một query, kèm Elements/Vibes.
+    /// Id không thỏa điều kiện thì vắng mặt trong kết quả.
+    /// </summary>
+    Task<List<Product>> GetScorableByIdsAsync(IReadOnlyCollection<Guid> ids, CancellationToken ct = default);
+
     // Quản lý product item (SKU) — sub-resource
 
     /// <summary>

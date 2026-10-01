@@ -12,6 +12,12 @@ namespace FengDeskAI.Domain.Entities.Workspace;
 public class WorkspaceType : BaseEntity
 {
     public string Name { get; set; } = null!;
+
+    /// <summary>
+    /// Tên tiếng Việt để hiển thị (vd "Bếp"). <see cref="Name"/> giữ tiếng Anh vì là khoá seed + từ vựng
+    /// của AI intake. Null (loại user tự tạo) → hiển thị <see cref="Name"/>.
+    /// </summary>
+    public string? NameVi { get; set; }
     public string? Description { get; set; }
 
     /// <summary>

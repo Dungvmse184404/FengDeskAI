@@ -20,6 +20,23 @@ POST /api/workspace-profiles/parse-description  { description }
 POST /api/workspace-profiles  (endpoint create SẴN CÓ — parse không bao giờ tự lưu)
 ```
 
+> **Cập nhật 01/10/2026 — hai thay đổi:**
+>
+> **1. Trần tag mỗi nhóm** (`ElementInputLimits`): Color **3**, Material/Shape/DecorItem **5**. Mỗi tag là
+> một "phiếu" dựng `current`; càng nhiều tag thì `current` càng phẳng, mà phẳng thì phủ tốt với mọi
+> `adjustedIdeal` ⇒ gap teo lại và điểm mọi sản phẩm xích về giữa. `TAG_VOTES_CAP` đã chặn TỔNG phiếu tag
+> nhưng không chặn chuyện một nhóm nuốt trọn hạn mức bằng 20 tag vụn.
+> Ba chốt chặn, **cả ba cắt im lặng, không chốt nào ném lỗi**: prompt xin đúng số → `Normalize` cắt phần dư
+> AI trả → `WorkspaceProfileService.ResolveValidInputsAsync` cắt lần cuối lúc lưu (chốt thật, vì FE sửa được).
+> Phần bị cắt KHÔNG vào `unrecognized` — AI nhận ra đúng, chỉ là hết chỗ. Test `ElementInputLimitsTests`.
+>
+> **2. Job intake chết lặng** (`WorkspaceIntakeWorker`): `ParseAsync` bắt mọi exception **trừ**
+> `OperationCanceledException` (`catch ... when (ex is not OperationCanceledException)`), mà
+> `TaskCanceledException` của `HttpClient` timeout lại kế thừa chính nó. Khi đó exception xuyên qua
+> `RunJobAsync` lên worker — worker chỉ `LogError` rồi nuốt, **không ghi cache, không bắn realtime**. Job
+> đứng nguyên ở `pending` tới hết TTL 30': FE poll 5s/lần đọc `pending`, spinner quay vô tận, không toast,
+> form không được điền. Thêm `IWorkspaceIntakeService.FailJobAsync` và gọi nó trong khối catch của worker.
+
 **2 nguyên tắc cứng:**
 1. **Parse endpoint stateless** — chỉ trả draft, không ghi DB. Lưu vẫn đi qua create/update hiện có (validation 1 nơi duy nhất).
 2. **AI không được bịa** — AI chỉ map text → code; BE normalize lại từng giá trị bằng code deterministic (Enum.TryParse / so với DB). Giá trị lạ hoặc AI không chắc → `null`, FE hiển thị là "chưa xác định" cho user tự chọn. Nhất quán triết lý engine: AI diễn giải, không quyết định.

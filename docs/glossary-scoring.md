@@ -1,13 +1,72 @@
-/# Từ vựng chấm điểm ngũ hành — nói tên là hiểu
+# Từ vựng chấm điểm ngũ hành — nói tên là hiểu
 
 > Mục đích: gọi tên **đúng một** đại lượng. Cùng một câu tiếng Việt ("mệnh workspace + user") đang
 > trỏ tới **ba** đại lượng khác nhau trong code, và chọn sai thì kết luận sai chứ không chỉ lệch số.
-> Công thức đầy đủ + lý lẽ: [`docs/adr/score-explainability-v3.2.md`](adr/score-explainability-v3.2.md).
-> Phiên bản công thức hiện tại: **`ScoringFormulaVersions.Current = "3.6"`** (3.4 = N3 nghề nghiệp là trục thứ ba; 3.5 = trần phiếu tag trong `current`; 3.6 = Carry đo "phủ − kỵ" thay tích trong).
+> Công thức đầy đủ + lý lẽ: [`docs/adr/score-explainability-v3.2.md`](adr/score-explainability-v3.2.md)
+> (nền v3.2) + [`workspace-gap-cover-v3.7.md`](adr/workspace-gap-cover-v3.7.md) (phép đo hiện hành).
+> Phiên bản công thức hiện tại: **`ScoringFormulaVersions.Current = "3.7"`** (3.4 = N3 nghề nghiệp là trục
+> thứ ba; 3.5 = trần phiếu tag trong `current`; 3.6 = Carry đo "phủ − kỵ" thay tích trong; 3.7 = trục phòng
+> và trục nghề cũng đo "phủ − dư" thay tích trong).
 
-Ký hiệu dùng xuyên suốt: `Σ=1` = vector chuẩn hoá tổng 1 · `|v|₁` = Σ|vᵢ| · 5 trục theo thứ tự enum
-**Kim, Mộc, Thuỷ, Hoả, Thổ** (còn `ElementVector` là record struct khai theo thứ tự
-`Tho, Kim, Thuy, Moc, Hoa` — đừng khai theo vị trí, luôn dùng tham số có tên).
+---
+
+## 0. Bảng ký hiệu — đọc cái này trước mọi công thức
+
+### 0.1 Quy ước viết
+
+| Viết | Đọc là | Ghi chú |
+|---|---|---|
+| `x̂` (mũ) | "đã chuẩn hoá" | `ĝ` là `gap` đã chuẩn hoá, `n̂` là vector dụng thần đã chuẩn hoá, `ô` là `δ` nghề đã chuẩn hoá. Dùng nhất quán: **có mũ = đã chia cho một chuẩn**, không mũ = số thô. |
+| `Σ=1` | tổng 5 trục bằng 1 | luôn đi kèm "không âm" trừ khi nói rõ khác |
+| `Σ=0` | tổng 5 trục bằng 0 | dạng của mọi vector **hiệu** (`gap`, `δ`) — có phần dương và phần âm cân nhau |
+| `\|v\|₁` | chuẩn L1 | `Σ_e \|v[e]\|` |
+| `v⁺` · `v⁻` | phần dương · phần âm | `v⁺[e] = max(v[e], 0)`, `v⁻[e] = max(−v[e], 0)`. **Cả hai đều KHÔNG âm** — `v⁻` là độ lớn của phần âm, đã bỏ dấu. Hai phần **khác giá đỡ** (không hành nào vừa dương vừa âm). |
+| `a · b` | tích trong | `Σ_e a[e]·b[e]` — engine **chỉ còn dùng cho trục bản mệnh** `r·p` (xem §5) |
+| `Σ min(a, b)` | phần phủ nhau | phép đo chính của engine từ v3.6/v3.7 — "a cần bao nhiêu, b cấp được bao nhiêu, lấy phần nhỏ hơn" |
+| `e` | một hành | chạy qua 5 hành |
+| 5 trục | **Kim · Mộc · Thủy · Hỏa · Thổ** | Chính tả lấy từ `ElementSemantics.ElementName` ("Thủy", "Hỏa" — không phải "Thuỷ"/"Hoả"). `ElementVector` là record struct khai theo thứ tự `Tho, Kim, Thuy, Moc, Hoa` — **đừng khai theo vị trí**, luôn dùng tham số có tên |
+
+### 0.2 Các vector
+
+| Ký hiệu | Tên trong code | Là gì | Ràng buộc | Dựng ở |
+|---|---|---|---|---|
+| `p` | `productVector` · `ProductFacts.Vector` | ngũ hành của **một sản phẩm** | Σ=1, không âm | `ProductVectorProvider.Build` |
+| `ideal` | `ideal` | mức lý tưởng của **loại phòng** | Σ=1, không âm | `WorkspaceVectorBuilder.BuildIdeal` ← bảng `workspace_type_elements` |
+| `adjustedIdeal` | `adjustedIdeal` | `ideal` đã bẻ theo mục đích làm việc | Σ=1, không âm | `WorkspaceVectorBuilder.ApplyIntent` ← bảng `work_purpose_element_modifiers` |
+| `current` | `current` | phòng **đang** thế nào (nội thất + tag + chủ nhân + hàng đã giao) | Σ=1, không âm | `WorkspaceVectorBuilder.BuildCurrentBreakdown` |
+| `gap` | `gap` | phòng **thiếu / thừa** hành nào | **Σ=0** | `adjustedIdeal − current` |
+| **`ĝ`** | `normalizedGap` | `gap` đã chuẩn hoá nửa-L1 | **Σĝ⁺ = 1** và **Σĝ⁻ = 1** *(gap = 0 ⇒ ĝ = 0)* | `ElementDirection.ForWorkspaceGap` |
+| **`n̂`** | `personalNeedVector` | **dụng thần** — người đang cần bồi hành nào | Σ=1, **không âm** | `PersonalTargetBuilder` (Tứ Trụ, fallback Nạp Âm) |
+| *(kỵ thần)* | `PersonalTarget.Avoid` | hành người **nên tránh** | là một **TẬP**, không phải vector | `BaTuCalculator` (v3.6) |
+| `personalVector` | `personalVector` | vector **bản mệnh** (self .6 / hành sinh mệnh .3 / hành mệnh sinh .1) | Σ=1, không âm | `DestinyCalculator` |
+| **`r`** | `ruleScoreVector` | hành `e` **hợp/khắc bản mệnh** bao nhiêu | mỗi trục ∈ [−1, +1], **KHÔNG** có ràng buộc tổng | bảng `feng_shui_rules` qua `ScoringContext.RuleScoreOf` |
+| `o` | `OccupationProfile` | hồ sơ ngũ hành của **một nghề** | Σ=1, không âm | bảng `occupation_element_profiles` |
+| `δ` | *(trung gian)* | `o − 0.2` — nghề lệch bao nhiêu so với mức đều | **Σ=0** | `OccupationAxis.Build` |
+| **`ô`** | `occupationDirection` | nghề **cần / nên tránh** hành nào | `Σô⁺ = 1` **trước** clamp; sau `ClampAgainstDestiny` thì `Σô⁺ ≤ 1` | `OccupationAxis.Build` |
+| `ô` thô | `occupationRawDirection` | `ô` **chưa** chặn hành khắc mệnh | dùng cho mặt A (trang sản phẩm, chưa biết mệnh người xem) | `OccupationAxis.RawDirection` |
+| **`d`** | `combinedDirection` | `(1−Wp−Wo)·ĝ + Wp·r + Wo·ô` | mỗi trục ∈ [−1, +1] | `ElementDirection` |
+| `T` | `personalTarget` | `(1−Wp)·adjustedIdeal + Wp·personalVector` | Σ=1 — **chỉ để hiển thị**, đã bỏ khỏi radar | `ElementDirection.PersonalTargetOf` |
+| `priorityVector` | `priorityVector` | `normalize(max(d, 0))` — "đang ưu tiên bù hành nào" | Σ=1, không âm | `ElementDirection.PriorityVector` |
+
+> ⚠️ **`d` KHÔNG còn dựng lại được điểm.** Từ v3.7 số hạng phòng và số hạng nghề không phải tích trong
+> nữa, nên `p·d ≠ blended`. `d` vẫn là **vector radar** đúng ("hệ thống đang ưu tiên bù hành nào"),
+> nhưng muốn ra lại con số thì cộng `components[].contribution`, đừng nhân lại radar.
+
+### 0.3 Các số vô hướng
+
+| Ký hiệu | Tên trong code | Là gì | Miền |
+|---|---|---|---|
+| `Wp` | `personalWeight` · `PERSONAL_WEIGHT_<scope>` | trục bản mệnh nặng bao nhiêu | [0, 1]; prod: Private 0.30 · Shared 0.20 · Public 0 |
+| `Wo` | `OccupationWeight` · `OCCUPATION_WEIGHT` | trục nghề nặng bao nhiêu | [0, 1]; prod **0.20**, một giá trị cho mọi scope và cả hai luồng |
+| `Wg` | *(không có biến riêng)* | trục phòng — luôn là **phần còn lại** `1 − Wp − Wo`, không có tham số riêng | prod: Private **0.50** · Shared 0.60 · Public 0.80 |
+| `gapCover` · `gapOver` | `GapCover` · `GapOverfill` | `Σ min(ĝ⁺,p)` · `Σ min(ĝ⁻,p)` | [0, 1] mỗi cái |
+| `needCover` · `avoidHit` | `PersonalNeedCover` · `PersonalAvoidHit` | `Σ min(n̂,p)` · `Σ_{e∈kỵ} p` — nhánh Carry | [0, 1] mỗi cái |
+| `occupationCover` · `occupationOver` | `OccupationCover` · `OccupationOverfill` | `Σ min(ô⁺,p)` · `Σ min(ô⁻,p)` | [0, 1] mỗi cái |
+| `blended` | `Blended` | tổng 3 số hạng CỘNG, **trước** khi trừ penalty | [−1, +1] |
+| `score` | `Score` | `round(clamp(blended − penalties), 3)` | [−1, +1] |
+| `displayPercent` | `DisplayPercent` | `(score + 1) / 2 × 100` | [0, 100] |
+| `compatibilityPercent` | `compatibilityPercent` | `(1 − \|adjustedIdeal − current\|₁ / 2) × 100` — **của phòng**, không liên quan sản phẩm | [0, 100] |
+| `α` | `EVIDENCE_SATURATION_ALPHA` | nén tương phản khi dựng `current` | seed 0.60 |
 
 ---
 
@@ -161,16 +220,27 @@ Kim ⇒ phiếu của chủ nhân **đẩy `current` xa `adjustedIdeal` hơn** �
 ## 5. Điểm của MỘT sản phẩm
 
 ```
-score          = round( clamp( d·p − penalties, −1, +1 ), 3 )
+blended        = Wg·gapScore + Wp·(r·p) + Wo·occupationScore        Wg = 1 − Wp − Wo
+score          = round( clamp( blended − penalties, −1, +1 ), 3 )
 displayPercent = (score + 1) / 2 · 100
+
+gapScore        = Σ min(ĝ⁺,p) − Σ min(ĝ⁻,p)        "phủ được bao nhiêu phần phòng thiếu, trừ phần đổ vào chỗ đã thừa"
+occupationScore = Σ min(ô⁺,p) − Σ min(ô⁻,p)        cùng phép đo, cùng hàm code
+r·p                                                 CÒN là tích trong — xem ghi chú dưới
 ```
 
-`p` = vector sản phẩm (Σ=1). `d·p` là tích trong — cùng dấu nghĩa là sản phẩm bù đúng hướng.
+⚠️ **Chỉ trục bản mệnh còn là tích trong.** `r[e]` là *điểm quan hệ* từng hành với bản mệnh, không phải một
+ngân sách Σ=1 bị chia nhỏ: hai hành cùng tỷ hoà thì cả hai đều `+1.0`, nên sản phẩm trải đều trên chúng vẫn
+được `+1.0`. Không có trần nào để gỡ, và "trung bình độ hợp mệnh của các hành trong vật" đúng là điều cần đo.
+Hai trục kia thì `Σ ĝ⁺ = Σ ô⁺ = 1` nên tích trong **là** một phép trung bình ⇒ trần rơi về `max p[e]` ⇒ đã đổi
+ở v3.7 (ADR [`workspace-gap-cover-v3.7.md`](adr/workspace-gap-cover-v3.7.md)).
 
 ⚠️ `p` **không nên thuần một hành** (`1.000`). Ngũ hành gán hành cho vật qua nhiều kênh (chất liệu, màu,
 hình, công năng) nên vật thật luôn có hành chủ + hành phụ; `p` thuần chỉ ra khi khai thiếu kênh, và khi đó
-`d·p = d[e]` chạm biên ±1 ⇒ điểm 100 % / 0 % — engine nói quá lời. Seeder demo cảnh báo
+điểm chạm biên ±1 ⇒ 100 % / 0 % — engine nói quá lời. Seeder demo cảnh báo
 (`DemoProductFengShuiSync.Audit`); sản phẩm tạo tay thì khai thêm chất liệu đế/chậu/dây, màu, hình.
+*(Từ v3.7 sản phẩm khai đủ hành **không còn bị phạt** so với sản phẩm khai thuần — nhưng khai thuần vẫn
+sai về mặt mô tả, và vẫn là đường ngắn nhất tới hai con số cực đoan.)*
 
 | Trừ điểm | Tham số | Khi nào |
 |---|---|---|
@@ -189,16 +259,17 @@ trong** (ADR [`personal-need-v3.6.md`](adr/personal-need-v3.6.md)):
 needCover = Σ_e min(n̂[e], p[e])      phần nhu cầu được phủ — cùng phép đo với compatibilityPercent (1 − |a−b|₁/2)
 avoidHit  = Σ_{e ∈ kỵ} p[e]          phần sản phẩm rơi vào kỵ thần
 personal  = needCover − avoidHit      ∈ [−1, 1]; khớp hoàn hảo = 1 (100 %), toàn kỵ = −1 (0 %)
-blended   = (1 − Wo)·personal + Wo·(ô·p)
+blended   = (1 − Wo)·personal + Wo·occupationScore
 ```
 
 Lý do đổi: `n̂·p` với hai vector Σ=1 không âm kẹt trần `max(n̂) = 0.6` — vật khớp hoàn hảo chỉ 76 %, không bao
 giờ "Rất hợp"; và vật toàn kỵ thần vẫn "trung tính". `MINOR_CLASH_PENALTY` giữ nhưng bỏ qua hành đã nằm trong
 kỵ (không trừ hai lần). Waterfall có hai dòng: `PERSONAL_NEED_SCORE` (+phủ) và `PERSONAL_AVOID_SCORE` (−kỵ).
 
-**"Sản phẩm này hợp nghề X bao nhiêu %"** (trang sản phẩm, không cần đăng nhập) = `ô · p` với `ô` thô
-(không có mệnh để chặn), qua cùng `displayPercent` — chính là `value` của dòng `OCCUPATION_SCORE` trong
-waterfall. Endpoint `GET /api/products/{id}/occupation-fit`. Luật theo `ProductPlacement` nằm trong **bảng** `PlacementPolicy`
+**"Sản phẩm này hợp nghề X bao nhiêu %"** (trang sản phẩm, không cần đăng nhập) =
+`Σ min(ô⁺,p) − Σ min(ô⁻,p)` với `ô` **thô** (không có mệnh để chặn), qua cùng `displayPercent` — chính là
+`value` của dòng `OCCUPATION_SCORE` trong waterfall. Hai chỗ phải đổi công thức cùng lúc
+(`OccupationService.ToFitRow` và `RecommendationScorer`), nếu không chip và waterfall nói hai số khác nhau. Endpoint `GET /api/products/{id}/occupation-fit`. Luật theo `ProductPlacement` nằm trong **bảng** `PlacementPolicy`
 (`ScoringModels.cs`) — thêm luật là thêm một dòng bảng, không rải `switch`.
 
 ---
@@ -226,7 +297,9 @@ waterfall. Endpoint `GET /api/products/{id}/occupation-fit`. Luật theo `Produc
 | điểm sản phẩm | `score` ∈ [−1,+1] · `displayPercent` ∈ [0,100] |
 | nghề tôi cần hành gì | `ô` = `occupationDirection` (có dấu, đã chặn khắc mệnh) · hồ sơ gốc Σ=1 ở `occupation_element_profiles` |
 | trọng số nghề | `Wo` = `OCCUPATION_WEIGHT` |
-| sản phẩm hợp nghề bao nhiêu | `OCCUPATION_SCORE` = `ô · p` · trang sản phẩm: `GET /products/{id}/occupation-fit` |
+| sản phẩm hợp nghề bao nhiêu | `OCCUPATION_SCORE` = `Σ min(ô⁺,p) − Σ min(ô⁻,p)` · trang sản phẩm: `GET /products/{id}/occupation-fit` |
+| sản phẩm phủ được bao nhiêu phần nhu cầu | `gapCover` (phòng) · `needCover` (dụng thần) · `occupationCover` (nghề) |
+| sản phẩm đổ vào chỗ đã dư bao nhiêu | `gapOverfill` (phòng) · `avoidHit` (kỵ thần) · `occupationOverfill` (nghề) |
 | phiếu của một tag | `Σ weight` code đó trong `element_input_map` (`CurrentContribution.Votes`) |
 | phiếu của sản phẩm đặt trong phòng | `PlacedProductVector.VoteWeight` = `Σ weight` code `DecorItem`, mặc định `1.0` — **chưa có tham số riêng** |
 | nén tương phản | `α` = `EVIDENCE_SATURATION_ALPHA` |
@@ -289,12 +362,12 @@ không phòng — `ElementDirection.ForPersonalNeed`.
 | 7 | `ĝ` = `normalizedGap` | `ElementDirection.ForWorkspaceGap` | — | `breakdown.vectors.normalizedGap` | `ElementBars` biến thể fit — nhãn "Bù tốt"/"Thêm thừa" do `ProductFitPanel` gán theo dấu `gap[e]` và `GAP_THRESHOLD` |
 | 8 | `r` = `ruleScoreVector` | `ScoringContext.RuleScoreOf` → `FengShuiRuleSeeder` (25 luật) | admin sửa `feng_shui_rules` | `breakdown.vectors.ruleScore` | `PersonalFitPanel` / `ProductFitPanel` thanh có dấu "hợp/khắc mệnh" |
 | 9 | `ô` = `occupationDirection` (đã chặn) / `occupationRawDirection` | `OccupationAxis.Build` | `OCCUPATION_WEIGHT` + bảng `occupation_element_profiles` | `breakdown.vectors.occupationDirection`, `breakdown.occupation{code,nameVi,weight}` | `OccupationDirectionPanel` (thanh có dấu, nhãn đỏ "khắc mệnh" khi bị chặn) |
-| 10 | `ô·p` **không** mệnh, **không** phòng (mặt A) | `OccupationService.GetProductFitAsync` | — (hồ sơ nghề) | `GET /products/{id}/occupation-fit` → `fits[]` | `OccupationFitChips` (top 3, fill = %) + `OccupationFitList` |
+| 10 | `Σmin(ô⁺,p) − Σmin(ô⁻,p)` trên `ô` **thô** — **không** mệnh, **không** phòng (mặt A) | `OccupationService.GetProductFitAsync` | — (hồ sơ nghề) | `GET /products/{id}/occupation-fit` → `fits[]` | `OccupationFitChips` (top 3, fill = %) + `OccupationFitList` |
 | 11 | `p` = vector sản phẩm | `ProductVectorProvider.Build` (override → DecorItem → Material/Color → primary/secondary) | `MATERIAL_SHARE`, `COLOR_SHARE`, `FALLBACK_PRIMARY/SECONDARY` | `ProductFitResponse.productVector`, `product.elements` | `ElementBars` "Sản phẩm"; popover `OccupationFitChips` cột "Sản phẩm" |
 | 12 | `ideal`, `adjustedIdeal` | `WorkspaceVectorBuilder.BuildIdeal` / `ApplyIntent` | bảng `workspace_type_elements` (Ideal), `work_purpose_element_modifiers` | `gap[].ideal`, `.adjustedIdeal`; `WorkspaceElementAnalysisResponse` | Radar lớp **"Mức lý tưởng"** (`ElementRadarChart`) |
 | 13 | `current` | `WorkspaceVectorBuilder.BuildCurrentBreakdown` (một hàm cho radar phòng, engine xếp hạng, trang fit) | `INTERIOR_PRIOR_VOTES`, `PERSON_PRESENCE_VOTES_<scope>`, `EVIDENCE_SATURATION_ALPHA`, **`TAG_VOTES_CAP`**, `SELF/SUPPORT/CHILD_SHARE` | `gap[].current`; `contributions[]`, `evidenceCount`, `confidence` | Radar lớp **"Hiện tại"**; tooltip từng trục = `contributions` chia theo `ShareOf`; **"Phần của bạn"** = phần chủ nhân **bên trong** "Hiện tại" |
 | 14 | phiếu tag | `BuildCurrentBreakdown` bước 2 — `Σ weight` code trong `element_input_map` | `weightScale` **lúc seed** + admin `PUT /admin/scoring/element-input-tags/{kind}/{code}` | `contributions[].votes` | tooltip radar (`%` theo nguồn); admin `ElementInputTagRow` |
-| 15 | phiếu sản phẩm đã đặt | `PlacedProductVectorBuilder.Build` — `Σ weight DecorItem`, **mặc định `1.0` cứng** | **không có** | `contributions[]` (`source = Product`), `placements[]` | tooltip radar; `WorkspacePlacementSection` |
+| 15 | phiếu sản phẩm đã đặt | `PlacedProductVectorBuilder.Build` — `UnitVoteWeight` (`Σ weight DecorItem`, **mặc định `1.0` cứng**) **× số lượng dòng đơn hàng** | **không có** | `contributions[]` (`source = Product`), `placements[]` | tooltip radar; `WorkspacePlacementSection` |
 | 16 | `previewCurrent` / `previewGap` | `RecommendationService.GetProductFitAsync` — `BuildCurrentBreakdown(placed ∪ {sản phẩm đang xem, voteWeight})`; phòng: `previewCurrent` = tính cả hàng **đang giao** | như #13, #15 | `gap[].previewCurrent`, `WorkspaceElementAnalysisResponse.previewCurrent` | Radar nét đứt **"Xem trước"** (trang sản phẩm: "nếu thêm sản phẩm này"; trang phòng: "hàng đang giao") |
 | 17 | `compatibilityPercent` | `WorkspaceProfileService.GetElementAnalysisAsync` — `100·(1 − |gap|₁/2)` | — | `compatibilityPercent`, `previewCompatibilityPercent` | `CompatibilityRing` cạnh tên phòng (`ProfileWorkspace`) |
 | 18 | insight lời khuyên | `SpaceInsightBuilder` từ `gap` + `contributions` | `GAP_THRESHOLD` (FE) | `insights[]` | `SpaceInsightList` |
@@ -393,7 +466,7 @@ Phép thử nhanh khi nghi "đi ngược": mở `ScoreWaterfall` — nếu dòng
 | `score`: tích, penalty, thành phần waterfall, facts tiếng Việt | `…/Engine/RecommendationScorer.cs` | `ScoreOne`, `BuildComponents`, `DescribePersonalAffinity`, `DescribeOccupationAffinity` |
 | luật theo `ProductPlacement` (xét hướng? xét phòng? xung đột mệnh?) | `…/Engine/ScoringModels.cs` | **bảng** `PlacementPolicy` — thêm dòng, không rải `switch` |
 | dụng thần (Carry) | `…/Engine/PersonalTargetBuilder.cs`, `BaTuCalculator.cs`, `LunarCalendarConverter.cs` | |
-| phiếu của sản phẩm đã đặt / đang xem trước | `…/Engine/PlacedProductVectorBuilder.cs` **và** `…/Services/RecommendationService.cs` (`GetProductFitAsync`, đoạn `voteWeight`) — hai chỗ, phải sửa cả hai | |
+| phiếu của sản phẩm đã đặt / đang xem trước | `PlacedProductVectorBuilder.UnitVoteWeight` — một chỗ duy nhất, dùng chung cho sản phẩm đã đặt, `GET /fit` và `POST /fit/bundle` | |
 | `compatibilityPercent` | `src/FengDeskAI.Application/Features/Workspace/Services/WorkspaceProfileService.cs` | `GetElementAnalysisAsync` |
 | "sản phẩm hợp nghề X bao nhiêu %" (mặt A) | `…/Services/OccupationService.cs` | `GetProductFitAsync` |
 | câu insight / diễn giải hành | `…/Engine/SpaceInsightBuilder.cs`, `…/Engine/ElementSemantics.cs` | |

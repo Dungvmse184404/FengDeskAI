@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using FengDeskAI.Infrastructure.Persistence.Contexts;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -12,9 +13,11 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FengDeskAI.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260930232452_AddWorkspaceImagesAndTypeNameVi")]
+    partial class AddWorkspaceImagesAndTypeNameVi
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -3361,24 +3364,10 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("payout_credited_at");
 
-                    b.Property<decimal>("PlatformItemDiscount")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("platform_item_discount");
-
                     b.Property<string>("ProviderOrderId")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("provider_order_id");
-
-                    b.Property<decimal>("SellerItemDiscount")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("seller_item_discount");
 
                     b.Property<DateTime?>("ShippedAt")
                         .HasColumnType("timestamp with time zone")
@@ -3484,20 +3473,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(30)")
                         .HasDefaultValue("PayOS")
                         .HasColumnName("payment_method");
-
-                    b.Property<decimal>("PlatformItemDiscount")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("platform_item_discount");
-
-                    b.Property<decimal>("SellerItemDiscount")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("seller_item_discount");
 
                     b.Property<Guid>("ShippingAddressId")
                         .HasColumnType("uuid")
@@ -3733,20 +3708,6 @@ namespace FengDeskAI.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("OrderId")
                         .HasColumnType("uuid")
                         .HasColumnName("order_id");
-
-                    b.Property<decimal>("PlatformItemDiscount")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("platform_item_discount");
-
-                    b.Property<decimal>("SellerItemDiscount")
-                        .ValueGeneratedOnAdd()
-                        .HasPrecision(12, 2)
-                        .HasColumnType("numeric(12,2)")
-                        .HasDefaultValue(0m)
-                        .HasColumnName("seller_item_discount");
 
                     b.Property<decimal>("ShippingDiscount")
                         .HasPrecision(12, 2)

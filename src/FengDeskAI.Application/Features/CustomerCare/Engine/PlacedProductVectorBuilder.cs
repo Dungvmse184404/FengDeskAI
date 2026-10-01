@@ -9,9 +9,8 @@ namespace FengDeskAI.Application.Features.CustomerCare.Engine;
 /// Một sản phẩm user đã mua và đặt vào phòng, đã quy ra đại lượng engine hiểu.
 /// </summary>
 /// <param name="VoteWeight">
-/// Σ weight các mã <see cref="ElementInputKind.DecorItem"/> của sản phẩm trong
-/// <c>element_input_map</c> — đồng bộ tuyệt đối với tag hiện trạng cùng tên. Không gắn
-/// <c>DecorItem</c> nào thì mặc định 1 phiếu, ngang một tag.
+/// Phiếu của MỘT món (<see cref="PlacedProductVectorBuilder.UnitVoteWeight"/>) × số lượng của dòng đơn
+/// hàng — đặt một dòng ×3 vào phòng là đặt 3 món, không phải 1.
 /// </param>
 /// <param name="IsDelivered">
 /// Đã giao tới tay user chưa. <b>Chỉ hàng ĐÃ GIAO mới là hiện trạng thật của phòng</b>; hàng đang
@@ -69,11 +68,10 @@ public static class PlacedProductVectorBuilder
             // thay vì đưa vào với vector 0 (sẽ ngốn một suất phiếu mà không nói gì).
             if (vector.L1() <= 0m) continue;
 
-            var decorCodes = inputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
-            decimal voteWeight = decorCodes.Count > 0
-                ? decorCodes.Sum(c => resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
-                : 1.0m;
-            if (voteWeight < 0m) voteWeight = 0m; // admin cố tình cho weight 0 → sản phẩm không ảnh hưởng
+            // Placement gắn với cả dòng đơn hàng nên mọi món của dòng đều nằm trong phòng. Max(1): dữ liệu
+            // cũ/thiếu số lượng vẫn tính như 1 món thay vì biến mất khỏi phòng.
+            int units = Math.Max(1, placement.OrderItem.Quantity);
+            decimal voteWeight = UnitVoteWeight(inputs, resolver) * units;
 
             rows.Add(new PlacedProductVector(
                 placement.Id,
@@ -87,6 +85,22 @@ public static class PlacedProductVectorBuilder
         }
 
         return rows;
+    }
+
+    /// <summary>
+    /// Số phiếu của MỘT món = Σ weight các mã <see cref="ElementInputKind.DecorItem"/> của sản phẩm trong
+    /// <c>element_input_map</c> — đồng bộ tuyệt đối với tag hiện trạng cùng tên. Không gắn
+    /// <c>DecorItem</c> nào thì mặc định 1 phiếu, ngang một tag. Âm (admin cố tình) → 0 = không ảnh hưởng.
+    /// Dùng chung cho sản phẩm đã đặt và mọi luồng "xem trước" để hai bên cùng thang.
+    /// </summary>
+    public static decimal UnitVoteWeight(
+        IEnumerable<ProductElementInput> inputs, ElementInputResolver resolver)
+    {
+        var decorCodes = inputs.Where(i => i.InputKind == ElementInputKind.DecorItem).ToList();
+        decimal weight = decorCodes.Count > 0
+            ? decorCodes.Sum(c => resolver.Resolve(c.InputKind, c.InputCode).Sum(kv => kv.Value))
+            : 1.0m;
+        return Math.Max(0m, weight);
     }
 
     /// <summary>
