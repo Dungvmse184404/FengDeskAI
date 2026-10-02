@@ -115,7 +115,8 @@ internal sealed class OllamaTransport : IAiChatTransport
 
         // Bị cắt vì chạm num_predict: nguyên nhân thầm lặng hay gặp nhất khi bật think —
         // model tiêu hết trần vào khối suy luận rồi không kịp viết câu trả lời.
-        if (string.Equals(body.DoneReason, "length", StringComparison.OrdinalIgnoreCase))
+        var truncated = string.Equals(body.DoneReason, "length", StringComparison.OrdinalIgnoreCase);
+        if (truncated)
         {
             _logger.LogWarning(
                 "[Ollama] Phản hồi BỊ CẮT do chạm trần num_predict (num_predict={NumPredict}, think={Think}). " +
@@ -124,6 +125,7 @@ internal sealed class OllamaTransport : IAiChatTransport
         }
 
         var content = body.Message.Content;
+        var contentFromThinking = false;
         if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content)
             && !string.IsNullOrWhiteSpace(body.Message.Thinking))
         {
@@ -131,13 +133,15 @@ internal sealed class OllamaTransport : IAiChatTransport
                 "[Ollama] Content rỗng nhưng thinking có nội dung — dùng thinking làm câu trả lời. " +
                 "Với tác vụ cần JSON, caller phải tự bóc JSON trong đó (hoặc chạy lại không-think).");
             content = body.Message.Thinking;
+            contentFromThinking = true;
         }
 
         if ((toolCalls is null || toolCalls.Count == 0) && string.IsNullOrEmpty(content))
             throw new InvalidOperationException("Ollama trả về tin rỗng (không content, không tool call).");
 
         return new AiChatCompletion(content ?? string.Empty, body.Model ?? model,
-            toolCalls is { Count: > 0 } ? toolCalls : null);
+            toolCalls is { Count: > 0 } ? toolCalls : null,
+            Truncated: truncated, ContentFromThinking: contentFromThinking);
     }
 
     /// <summary>Gộp stream NDJSON của Ollama thành 1 response (giữ traffic sống qua tunnel; caller vẫn nhận đủ 1 lần).</summary>
@@ -148,6 +152,7 @@ internal sealed class OllamaTransport : IAiChatTransport
         using var reader = new StreamReader(stream);
 
         string? modelName = null;
+        string? doneReason = null;
         string? role = null;
         var content = new StringBuilder();
         var thinking = new StringBuilder();
@@ -165,6 +170,10 @@ internal sealed class OllamaTransport : IAiChatTransport
             sawAnyLine = true;
 
             modelName ??= chunk.Model;
+            // Chunk cuối mới mang done_reason. Bản trước dựng lại response mà BỎ QUÊN trường này ⇒ ở
+            // chế độ stream (intake đang dùng) cảnh báo "chạm trần num_predict" không bao giờ chạy,
+            // và việc bị cắt giữa chừng trở nên hoàn toàn vô hình.
+            if (!string.IsNullOrEmpty(chunk.DoneReason)) doneReason = chunk.DoneReason;
             if (chunk.Message is not null)
             {
                 role ??= chunk.Message.Role;
@@ -189,6 +198,7 @@ internal sealed class OllamaTransport : IAiChatTransport
         {
             Model = modelName,
             Done = done,
+            DoneReason = doneReason,
             Message = new OllamaMessage
             {
                 Role = role ?? "assistant",

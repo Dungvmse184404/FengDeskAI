@@ -21,7 +21,21 @@ public sealed record AiChatMessage(
     string? ToolName = null);
 
 /// <summary>Kết quả 1 lượt hoàn thành từ LLM. <see cref="ToolCalls"/> khác rỗng → cần chạy tool rồi gọi lại.</summary>
-public sealed record AiChatCompletion(string Content, string Model, IReadOnlyList<AiToolCall>? ToolCalls = null);
+/// <param name="Truncated">
+/// Model bị CẮT giữa chừng vì chạm trần token (Ollama <c>done_reason = "length"</c>). Nội dung trả về
+/// là một câu dở — caller phải coi đây là THẤT BẠI, không phải một câu trả lời ngắn.
+/// </param>
+/// <param name="ContentFromThinking">
+/// <c>Content</c> KHÔNG phải câu trả lời thật: model tiêu hết trần vào khối suy luận nên transport
+/// đành lấy chính khối đó làm nội dung. Với tác vụ cần JSON thì đây là rác — caller nên chạy lại
+/// không-think thay vì cố bóc JSON trong văn xuôi suy luận.
+/// </param>
+public sealed record AiChatCompletion(
+    string Content,
+    string Model,
+    IReadOnlyList<AiToolCall>? ToolCalls = null,
+    bool Truncated = false,
+    bool ContentFromThinking = false);
 
 /// <summary>
 /// Tinh chỉnh một lượt gọi cụ thể — dùng cho tác vụ trích xuất có cấu trúc (vd workspace intake) cần

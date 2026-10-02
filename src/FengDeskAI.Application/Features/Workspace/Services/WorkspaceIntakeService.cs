@@ -1,6 +1,7 @@
 ﻿using System.Globalization;
 using System.Text;
 using System.Text.Json;
+using FengDeskAI.Application.Common.Ai;
 using FengDeskAI.Application.Common.Constants;
 using FengDeskAI.Application.Common.Media;
 using FengDeskAI.Application.Common.Results;
@@ -238,19 +239,32 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
                     MaxOutputTokens: maxOutputTokens, NumCtx: numCtx),
                 onDelta: onDelta, ct: ct);
 
+            // Lượt think HỎNG theo hai kiểu KHÔNG ném exception, nên trước đây lọt thẳng xuống parse:
+            //   · Truncated          — model chạm trần num_predict, câu trả lời bị cắt giữa chừng;
+            //   · ContentFromThinking — model tiêu hết trần vào suy luận, transport đành lấy chính khối
+            //     suy luận làm "nội dung". Bóc JSON trong văn xuôi đó thì vớ phải bản nháp model viết
+            //     giữa lúc nghĩ: nó parse SẠCH, không exception, và user nhận draft rỗng confidence=0.
+            // Đo trên qwen3.5:latest với prompt intake thật: think=true dùng hết 3000 token
+            // (done_reason=length), content rỗng, thinking 11.697 ký tự mà vẫn chưa nghĩ xong.
+            // Nới trần không giải quyết được — tắt think mới giải quyết, nên coi thẳng đây là thất bại.
+            var thinkTurnFailed = think == true && (completion.Truncated || completion.ContentFromThinking);
+
             RawDraft raw;
             try
             {
+                if (thinkTurnFailed)
+                    throw new JsonException("Lượt think bị cắt hoặc không có content thật.");
+
                 raw = ParseRaw(completion.Content);
             }
             catch (JsonException) when (think == true)
             {
-                // Bật "suy nghĩ kỹ" mà model tiêu hết trần token vào khối suy luận → không kịp viết
-                // JSON. Chạy lại NGAY một lượt không-think: nhanh, ổn định, và user vẫn có draft
-                // thay vì nhận thông báo lỗi rồi phải điền tay toàn bộ.
+                // Chạy lại NGAY một lượt không-think: nhanh, ổn định, và user vẫn có draft thay vì
+                // nhận thông báo lỗi rồi phải điền tay toàn bộ.
                 _logger.LogWarning(
-                    "[WorkspaceIntake] Lượt think không ra JSON (nhiều khả năng chạm trần {Max} token) — chạy lại không-think.",
-                    maxOutputTokens);
+                    "[WorkspaceIntake] Lượt think hỏng (truncated={Truncated}, contentFromThinking={FromThinking}, "
+                    + "trần {Max} token) — chạy lại không-think.",
+                    completion.Truncated, completion.ContentFromThinking, maxOutputTokens);
 
                 completion = await _client.CompleteAsync(
                     model, messages, tools: null,
@@ -429,7 +443,8 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
 
     private static RawDraft ParseRaw(string content)
     {
-        var json = ExtractJsonObject(StripCodeFence(content))
+        // Lấy object CÓ NỘI DUNG gần cuối nhất, không phải object đầu tiên — xem AiJsonExtractor.
+        var json = AiJsonExtractor.SelectBestJsonObject(content, HasAnyField)
             ?? throw new JsonException("Không tìm thấy object JSON nào trong phản hồi của AI.");
 
         return JsonSerializer.Deserialize<RawDraft>(json, RawJsonOptions)
@@ -437,49 +452,27 @@ public sealed class WorkspaceIntakeService : IWorkspaceIntakeService
     }
 
     /// <summary>
-    /// Bóc object JSON đầu tiên nằm trong text. KHÔNG giả định cả chuỗi là JSON — model hay kèm chữ
-    /// quanh nó, và khi bật think mà content rỗng thì transport đưa thẳng khối suy luận sang đây
-    /// (JSON thật thường nằm ở cuối khối đó).
-    /// Đếm ngoặc có nhận biết chuỗi + escape, nếu không thì một dấu { nằm trong chuỗi là lệch hết.
+    /// Ứng viên JSON này có nói được điều gì không? Dùng để bỏ qua bản nháp toàn <c>null</c> mà model
+    /// viết ra giữa khối suy luận. Parse hỏng = không đáng tin, bỏ luôn (không ném — còn ứng viên khác).
     /// </summary>
-    private static string? ExtractJsonObject(string text)
+    private static bool HasAnyField(string json)
     {
-        var start = text.IndexOf('{');
-        while (start >= 0)
+        try
         {
-            int depth = 0;
-            bool inString = false, escaped = false;
+            var d = JsonSerializer.Deserialize<RawDraft>(json, RawJsonOptions);
+            if (d is null) return false;
 
-            for (var i = start; i < text.Length; i++)
-            {
-                var c = text[i];
-
-                if (escaped) { escaped = false; continue; }
-                if (inString && c == '\\') { escaped = true; continue; }
-                if (c == '"') { inString = !inString; continue; }
-                if (inString) continue;
-
-                if (c == '{') depth++;
-                else if (c == '}' && --depth == 0) return text[start..(i + 1)];
-            }
-
-            // Object mở ra mà không đóng (bị cắt giữa chừng) → thử object kế tiếp nếu còn.
-            start = text.IndexOf('{', start + 1);
+            return d.Name is not null || d.LocationType is not null || d.WorkspaceType is not null
+                || d.StyleCode is not null || d.Lighting is not null || d.HasDesk is not null
+                || d.DeskType is not null || d.DeskOrientation is not null
+                || d.RoomFacingDirection is not null || d.WorkPurpose is not null
+                || d.DeskArea is not null
+                || d.Inputs is { Count: > 0 } || d.MentionedFields is { Count: > 0 };
         }
-        return null;
-    }
-
-    private static string StripCodeFence(string content)
-    {
-        var trimmed = content.Trim();
-        if (!trimmed.StartsWith("```", StringComparison.Ordinal)) return trimmed;
-
-        var firstNewline = trimmed.IndexOf('\n');
-        if (firstNewline < 0) return trimmed;
-        trimmed = trimmed[(firstNewline + 1)..];
-
-        var fenceEnd = trimmed.LastIndexOf("```", StringComparison.Ordinal);
-        return (fenceEnd >= 0 ? trimmed[..fenceEnd] : trimmed).Trim();
+        catch (JsonException)
+        {
+            return false;
+        }
     }
 
     // ── Normalize (chốt chặn thật — deterministic) ────────────────────────────
