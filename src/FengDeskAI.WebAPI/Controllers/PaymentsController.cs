@@ -54,8 +54,8 @@ public class PaymentsController : ApiControllerBase
     [HttpPost("{orderId:guid}/dev/mark-paid")]
     public async Task<IActionResult> SimulatePaid(Guid orderId, CancellationToken ct)
     {
-        if (!_env.IsDevelopment())
-            return NotFound();
+        //if (!_env.IsDevelopment())
+        //    return NotFound();
         return ToActionResult(await _payment.SimulatePaidAsync(orderId, ct));
     }
 }

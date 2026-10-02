@@ -1,3 +1,4 @@
+using System.Linq;
 namespace FengDeskAI.Application.Features.CustomerCare;
 
 /// <summary>
@@ -19,6 +20,14 @@ public sealed class AiChatOptions
 
     /// <summary>Danh sách model được phép đổi. Rỗng → chấp nhận mọi model client gửi.</summary>
     public List<string> AllowedModels { get; set; } = new();
+
+    /// <summary>
+    /// <see cref="AllowedModels"/> đã bỏ phần tử rỗng. Cần vì .NET gộp mảng từ biến môi trường
+    /// theo TỪNG CHỈ SỐ chứ không thay cả mảng: muốn env rút ngắn danh sách thì phải đặt các chỉ số
+    /// thừa thành chuỗi rỗng, và những ô rỗng đó không được lọt vào danh sách kiểm tra hay câu báo lỗi.
+    /// </summary>
+    public IReadOnlyList<string> EffectiveAllowedModels =>
+        AllowedModels.Where(m => !string.IsNullOrWhiteSpace(m)).ToList();
 
     /// <summary>Số lượt (user+assistant) gần nhất được nhớ. Mặc định 5.</summary>
     public int MaxHistoryTurns { get; set; } = 5;
